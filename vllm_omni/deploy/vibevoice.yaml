@@ -1,0 +1,69 @@
+# VibeVoice deploy: single-stage AR TTS with in-loop CFG diffusion and
+# stateful acoustic/semantic feedback.
+#
+# Unlike codec-based TTS pipelines, VibeVoice cannot split waveform decoding
+# into a second Code2Wav stage: every generated audio token is diffused,
+# decoded to waveform, semantically re-encoded, and fed back to the next Qwen2
+# decode step. The model therefore owns all per-request side state in stage 0.
+#
+# These are conservative first-version defaults for the Microsoft 1.5B
+# checkpoint. Diffusion and convolutional side-path allocations are outside
+# vLLM's paged-KV accounting, so the KV cache is capped instead of consuming
+# all memory allowed by gpu_memory_utilization.
+async_chunk: false
+trust_remote_code: false
+# When --tokenizer is omitted, Omni reads
+# preprocessor_config.json.language_model_pretrained_name. Offline deployments
+# must pre-cache that tokenizer or pass a local --tokenizer path.
+dtype: bfloat16
+enable_prefix_caching: false
+enable_chunked_prefill: true
+
+stages:
+  - stage_id: 0
+    devices: "0"
+    max_num_seqs: 8
+    gpu_memory_utilization: 0.9
+    # The processor and scheduler contract permits up to eight ordered
+    # reference audios (for example, an eight-speaker prompt). At 60 seconds
+    # each this is 8 * 450 = 3600 MM placeholder tokens, plus text. Both the
+    # 65,536-token model limit and the 8,192-token per-iteration chunked-prefill
+    # budget can admit that worst-case reference prefill.
+    limit_mm_per_prompt:
+      audio: 8
+
+    # The 1.5B Qwen2 backbone uses only two KV heads. Six GiB leaves room for
+    # long-form requests while reserving VRAM for the positive/negative CFG
+    # branches, Diffusion Head, Acoustic Decoder, and Semantic Encoder.
+    kv_cache_memory_bytes: 6442450944  # 6 GiB
+
+    # The official backbone supports 64k positions and generation_config.json
+    # defaults to 40,500 new tokens. Chunked prefill bounds each scheduler
+    # iteration without reducing the accepted prompt/context length.
+    max_model_len: 65536
+    max_num_batched_tokens: 8192
+
+    # First-version correctness setting. Stateful diffusion and causal Conv1d
+    # padding caches are not safe to place under the generic vLLM CUDA graph
+    # path until dedicated capture/replay support is implemented.
+    enforce_eager: true
+    async_scheduling: true
+    # The pinned v1 profiler first runs the dummy placeholder text without MM
+    # data, which intentionally trips VibeVoice's symmetric placeholder check.
+    # KV memory is fixed above and the real 8x60s encoder upper bound has a
+    # dedicated GPU test, so skip that incompatible generic profiling pass.
+    skip_mm_profiling: true
+
+    default_sampling_params:
+      # VibeVoice's token gate is deterministic: the model constrains logits
+      # to audio BOS/audio/audio EOS/EOS and selects with argmax.
+      temperature: 0.0
+      top_p: 1.0
+      top_k: -1
+      repetition_penalty: 1.0
+      seed: 42
+      max_tokens: 40500
+      extra_args:
+        # Match the official Transformers generation_config.json.
+        guidance_scale: 1.3
+        num_diffusion_steps: 10

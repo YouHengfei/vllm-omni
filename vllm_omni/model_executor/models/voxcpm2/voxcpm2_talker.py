@@ -3267,7 +3267,7 @@ class VoxCPM2TalkerForConditionalGeneration(nn.Module):
 
     # -------------------- weight loading --------------------
 
-    hf_to_vllm_mapper = WeightsMapper(orig_to_new_prefix={"base_lm.": "model."})
+    hf_to_vllm_mapper = WeightsMapper(orig_to_new_prefix={"base_lm.": "model."}) # vllm/model_executor/models/utils.py
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         def _base_lm_only(ws):

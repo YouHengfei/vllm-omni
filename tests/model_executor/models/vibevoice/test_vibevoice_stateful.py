@@ -1,0 +1,408 @@
+# SPDX-License-Identifier: Apache-2.0
+"""CPU contracts for VibeVoice M4c request-local state transitions."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+import torch
+from torch import nn
+
+from vllm_omni.model_executor.models.vibevoice.audio_decode import (
+    VibeVoiceAudioTokenDecodeOutput,
+)
+from vllm_omni.model_executor.models.vibevoice.stateful import (
+    VibeVoiceStatefulInference,
+)
+from vllm_omni.model_executor.models.vibevoice.vibevoice import (
+    VibeVoiceForConditionalGeneration,
+)
+
+pytestmark = [pytest.mark.core_model, pytest.mark.cpu]
+
+_AUDIO_BOS = 10
+_AUDIO_EOS = 11
+_AUDIO = 12
+_EOS = 13
+
+
+class _FakeKernel:
+    def __init__(self) -> None:
+        self.sample_calls: list[dict[str, Any]] = []
+        self.decode_calls: list[dict[str, Any]] = []
+
+    def sample_audio_latent(
+        self,
+        positive_condition: torch.Tensor,
+        negative_condition: torch.Tensor,
+        noise: torch.Tensor,
+        *,
+        guidance_scale: float,
+        num_inference_steps: int | None = None,
+    ) -> torch.Tensor:
+        self.sample_calls.append(
+            {
+                "positive": positive_condition.clone(),
+                "negative": negative_condition.clone(),
+                "noise": noise.clone(),
+                "guidance_scale": guidance_scale,
+                "num_inference_steps": num_inference_steps,
+            }
+        )
+        value = positive_condition[:, :2] - negative_condition[:, :2]
+        return value.unsqueeze(1)
+
+    def decode_audio_token(
+        self,
+        audio_latent: torch.Tensor,
+        *,
+        acoustic_cache: Any = None,
+        semantic_cache: Any = None,
+    ) -> VibeVoiceAudioTokenDecodeOutput:
+        self.decode_calls.append(
+            {
+                "latent": audio_latent.clone(),
+                "acoustic_cache": acoustic_cache,
+                "semantic_cache": semantic_cache,
+            }
+        )
+        next_acoustic_cache = acoustic_cache or object()
+        next_semantic_cache = semantic_cache or object()
+        value = float(len(self.decode_calls))
+        return VibeVoiceAudioTokenDecodeOutput(
+            audio=torch.full((1, 1, 4), value),
+            semantic_latent=torch.full((1, 1, 3), value),
+            next_embedding=torch.full((1, 1, 4), value + 10),
+            acoustic_cache=next_acoustic_cache,
+            semantic_cache=next_semantic_cache,
+        )
+
+
+class _FakeNegativeBranch:
+    def __init__(self) -> None:
+        self.reset_ids: list[str] = []
+        self.forward_calls: list[tuple[list[str], list[torch.Tensor]]] = []
+        self.finished: list[set[str]] = []
+
+    def reset_audio_segment(self, request_id: str) -> None:
+        self.reset_ids.append(request_id)
+
+    def forward_step(
+        self,
+        request_ids: list[str],
+        input_embeddings: list[torch.Tensor],
+    ) -> list[torch.Tensor]:
+        self.forward_calls.append(
+            (list(request_ids), [embedding.clone() for embedding in input_embeddings])
+        )
+        return [embedding.clone() for embedding in input_embeddings]
+
+    def on_requests_finished(self, request_ids: set[str] | list[str]) -> None:
+        self.finished.append(set(request_ids))
+
+
+class _FakeWrapperKernel(nn.Module, _FakeKernel):
+    def __init__(self) -> None:
+        nn.Module.__init__(self)
+        _FakeKernel.__init__(self)
+        self.forward_inputs: torch.Tensor | None = None
+
+    def forward(
+        self,
+        input_ids: torch.Tensor | None,
+        positions: torch.Tensor,
+        intermediate_tensors: Any = None,
+        inputs_embeds: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        assert inputs_embeds is not None
+        self.forward_inputs = inputs_embeds.clone()
+        return inputs_embeds.clone()
+
+
+def _stateful() -> VibeVoiceStatefulInference:
+    return VibeVoiceStatefulInference(
+        audio_bos_token_id=_AUDIO_BOS,
+        audio_eos_token_id=_AUDIO_EOS,
+        audio_token_id=_AUDIO,
+        eos_token_id=_EOS,
+        latent_size=2,
+        condition_size=4,
+        default_guidance_scale=1.3,
+        default_num_diffusion_steps=10,
+    )
+
+
+def test_audio_transition_runs_m4a_m4b_and_threads_per_request_caches() -> None:
+    stateful = _stateful()
+    kernel = _FakeKernel()
+    negative_branch = _FakeNegativeBranch()
+    token_embedding = torch.zeros(1, 4)
+
+    bos_embedding, audio = stateful.process_sampled_token(
+        request_id="request-a",
+        token_id=_AUDIO_BOS,
+        token_embedding=token_embedding,
+        kernel=kernel,
+        negative_kv_branch=negative_branch,
+    )
+    assert torch.equal(bos_embedding, token_embedding)
+    assert audio is None
+    assert negative_branch.reset_ids == ["request-a"]
+
+    stateful.set_runtime_controls(
+        "request-a",
+        {"guidance_scale": 1.7, "num_diffusion_steps": 7},
+    )
+    stateful.record_positive_condition(
+        "request-a",
+        torch.tensor([[4.0, 6.0, 8.0, 10.0]]),
+    )
+    stateful.record_negative_condition(
+        "request-a",
+        torch.tensor([[1.0, 2.0, 3.0, 4.0]]),
+    )
+
+    torch.manual_seed(123)
+    next_embedding, first_audio = stateful.process_sampled_token(
+        request_id="request-a",
+        token_id=_AUDIO,
+        token_embedding=token_embedding,
+        kernel=kernel,
+        negative_kv_branch=negative_branch,
+    )
+    assert torch.equal(next_embedding, torch.full((1, 4), 11.0))
+    assert torch.equal(first_audio, torch.ones(1, 1, 4))
+    assert kernel.sample_calls[0]["positive"].shape == (1, 4)
+    assert kernel.sample_calls[0]["negative"].shape == (1, 4)
+    assert kernel.sample_calls[0]["noise"].shape == (2, 2)
+    assert kernel.sample_calls[0]["guidance_scale"] == 1.7
+    assert kernel.sample_calls[0]["num_inference_steps"] == 7
+
+    state = stateful.get("request-a")
+    assert state is not None
+    first_acoustic_cache = state.acoustic_cache
+    first_semantic_cache = state.semantic_cache
+    assert first_acoustic_cache is not first_semantic_cache
+    assert state.audio_token_count == 1
+    assert len(state.waveform_chunks_cpu) == 1
+    assert state.waveform_chunks_cpu[0].dtype == torch.float32
+    assert state.positive_condition is None
+    assert state.negative_condition is None
+
+    stateful.record_positive_condition("request-a", torch.full((1, 4), 3.0))
+    stateful.record_negative_condition("request-a", torch.full((1, 4), 1.0))
+    stateful.process_sampled_token(
+        request_id="request-a",
+        token_id=_AUDIO,
+        token_embedding=token_embedding,
+        kernel=kernel,
+        negative_kv_branch=negative_branch,
+    )
+    assert kernel.decode_calls[1]["acoustic_cache"] is first_acoustic_cache
+    assert kernel.decode_calls[1]["semantic_cache"] is first_semantic_cache
+    assert state.audio_token_count == 2
+    assert len(state.waveform_chunks_cpu) == 2
+
+
+def test_active_subset_uses_one_batched_official_rng_draw() -> None:
+    stateful = _stateful()
+    kernel = _FakeKernel()
+    for index, request_id in enumerate(("request-a", "request-b"), start=1):
+        stateful.start_audio_segment(request_id)
+        stateful.record_positive_condition(
+            request_id,
+            torch.full((1, 4), float(index + 2)),
+        )
+        stateful.record_negative_condition(
+            request_id,
+            torch.full((1, 4), float(index)),
+        )
+
+    next_embeddings, audio_chunks = stateful.process_audio_tokens_batch(
+        request_ids=["request-a", "request-b"],
+        token_embeddings=[torch.zeros(1, 4), torch.zeros(1, 4)],
+        kernel=kernel,
+    )
+    assert len(kernel.sample_calls) == 1
+    assert kernel.sample_calls[0]["positive"].shape == (2, 4)
+    assert kernel.sample_calls[0]["negative"].shape == (2, 4)
+    assert kernel.sample_calls[0]["noise"].shape == (4, 2)
+    assert len(kernel.decode_calls) == 2
+    assert len(next_embeddings) == 2
+    assert len(audio_chunks) == 2
+    assert stateful.get("request-a").audio_token_count == 1
+    assert stateful.get("request-b").audio_token_count == 1
+
+
+def test_model_forward_batches_negative_branch_and_writes_feedback_rows() -> None:
+    wrapper = object.__new__(VibeVoiceForConditionalGeneration)
+    nn.Module.__init__(wrapper)
+    wrapper._stateful = _stateful()
+    wrapper._negative_kv_branch = _FakeNegativeBranch()
+    wrapper._pending_request_ids = ["request-a", "request-b"]
+    wrapper._pending_request_spans = [
+        ("request-a", 0, 1),
+        ("request-b", 1, 2),
+    ]
+    wrapper._pending_audio_transitions = [
+        ("request-a", 0),
+        ("request-b", 1),
+    ]
+    wrapper._pending_num_input_rows = 2
+    wrapper.model = _FakeWrapperKernel()
+
+    for index, request_id in enumerate(("request-a", "request-b"), start=1):
+        wrapper._stateful.start_audio_segment(request_id)
+        wrapper._stateful.record_positive_condition(
+            request_id,
+            torch.full((1, 4), float(index + 3)),
+        )
+        wrapper._stateful.record_negative_input_embedding(
+            request_id,
+            torch.full((1, 4), float(index)),
+        )
+
+    output = VibeVoiceForConditionalGeneration.forward(
+        wrapper,
+        input_ids=torch.tensor([_AUDIO, _AUDIO]),
+        positions=torch.tensor([1, 1]),
+        inputs_embeds=torch.zeros(2, 4),
+        sampling_extra_args=[
+            {"guidance_scale": 1.3, "num_diffusion_steps": 10},
+            {"guidance_scale": 1.3, "num_diffusion_steps": 10},
+        ],
+    )
+
+    assert wrapper._negative_kv_branch.forward_calls[0][0] == [
+        "request-a",
+        "request-b",
+    ]
+    assert len(wrapper.model.sample_calls) == 1
+    assert wrapper.model.sample_calls[0]["noise"].shape == (4, 2)
+    assert torch.equal(output[0], torch.full((4,), 11.0))
+    assert torch.equal(output[1], torch.full((4,), 12.0))
+    assert torch.equal(
+        wrapper._stateful.get("request-a").negative_input_embedding,
+        torch.full((1, 4), 11.0),
+    )
+    assert torch.equal(
+        wrapper._stateful.get("request-b").negative_input_embedding,
+        torch.full((1, 4), 12.0),
+    )
+    assert not wrapper._pending_request_ids
+    assert not wrapper._pending_request_spans
+    assert not wrapper._pending_audio_transitions
+
+
+def test_audio_transition_refuses_unguided_fallback_without_negative_paged_kv() -> None:
+    stateful = _stateful()
+    kernel = _FakeKernel()
+    stateful.start_audio_segment("request-a")
+    stateful.record_positive_condition("request-a", torch.ones(1, 4))
+
+    with pytest.raises(
+        RuntimeError,
+        match="independent negative Qwen PagedAttention branch",
+    ):
+        stateful.process_sampled_token(
+            request_id="request-a",
+            token_id=_AUDIO,
+            token_embedding=torch.zeros(1, 4),
+            kernel=kernel,
+        )
+    assert not kernel.sample_calls
+    assert not kernel.decode_calls
+
+
+def test_audio_token_requires_bos_and_fresh_one_step_conditions() -> None:
+    stateful = _stateful()
+    kernel = _FakeKernel()
+    with pytest.raises(RuntimeError, match="outside an audio segment"):
+        stateful.process_sampled_token(
+            request_id="request-a",
+            token_id=_AUDIO,
+            token_embedding=torch.zeros(1, 4),
+            kernel=kernel,
+        )
+
+    stateful.start_audio_segment("request-a")
+    stateful.record_positive_condition("request-a", torch.ones(1, 4))
+    stateful.record_negative_condition("request-a", torch.zeros(1, 4))
+    stateful.process_sampled_token(
+        request_id="request-a",
+        token_id=_AUDIO,
+        token_embedding=torch.zeros(1, 4),
+        kernel=kernel,
+    )
+    with pytest.raises(RuntimeError, match="no positive Qwen condition"):
+        stateful.process_sampled_token(
+            request_id="request-a",
+            token_id=_AUDIO,
+            token_embedding=torch.zeros(1, 4),
+            kernel=kernel,
+        )
+
+
+def test_audio_eos_is_a_state_transition_but_model_eos_is_separate() -> None:
+    stateful = _stateful()
+    kernel = _FakeKernel()
+    embedding = torch.arange(4, dtype=torch.float32).reshape(1, 4)
+    stateful.start_audio_segment("request-a")
+
+    output, audio = stateful.process_sampled_token(
+        request_id="request-a",
+        token_id=_AUDIO_EOS,
+        token_embedding=embedding,
+        kernel=kernel,
+    )
+    assert torch.equal(output, embedding)
+    assert audio is None
+    state = stateful.get("request-a")
+    assert state is not None and not state.in_audio_segment
+
+    output, audio = stateful.process_sampled_token(
+        request_id="request-a",
+        token_id=_EOS,
+        token_embedding=embedding,
+        kernel=kernel,
+    )
+    assert torch.equal(output, embedding)
+    assert audio is None
+    assert not kernel.sample_calls
+
+
+def test_request_cleanup_is_deferred_around_the_final_scheduled_forward() -> None:
+    stateful = _stateful()
+    stateful.get_or_create("finished")
+    stateful.get_or_create("active")
+    stateful.on_requests_finished({"finished"})
+
+    # A different request entering preprocess is a safe point for an aborted
+    # request that had no final postprocess callback.
+    stateful.flush_deferred_cleanup(exclude_request_ids={"active"})
+    assert stateful.get("finished") is None
+    assert stateful.get("active") is not None
+
+    # If the finished request is still scheduled, preserve it until its own
+    # postprocess has consumed the final hidden row.
+    stateful.on_requests_finished({"active"})
+    stateful.flush_deferred_cleanup(exclude_request_ids={"active"})
+    assert stateful.get("active") is not None
+    stateful.finish_postprocess("active")
+    assert stateful.get("active") is None
+    assert not stateful.deferred_cleanup_ids
+
+
+@pytest.mark.parametrize(
+    ("extra_args", "message"),
+    [
+        ({"guidance_scale": float("nan")}, "guidance_scale must be finite"),
+        ({"guidance_scale": "bad"}, "guidance_scale must be finite"),
+        ({"num_diffusion_steps": 0}, "must be a positive integer"),
+        ({"num_diffusion_steps": True}, "must be a positive integer"),
+    ],
+)
+def test_runtime_controls_fail_fast(extra_args: dict[str, Any], message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        _stateful().set_runtime_controls("request-a", extra_args)

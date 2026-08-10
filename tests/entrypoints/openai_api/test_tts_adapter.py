@@ -35,6 +35,7 @@ EXPECTED_MODEL_TYPES = {
     "higgs_audio_v3",
     "glm_tts",
     "step_audio2",
+    "vibevoice",
 }
 
 

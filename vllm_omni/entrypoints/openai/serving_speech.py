@@ -91,6 +91,7 @@ _COSYVOICE3_PROMPT_PREFIX = f"You are a helpful assistant.{_COSYVOICE3_PROMPT_DE
 _OMNIVOICE_TTS_MODEL_STAGES = {"omnivoice_generator"}
 _COVO_AUDIO_MODEL_STAGES = {"fused_thinker_talker"}
 _VOXCPM2_TTS_MODEL_STAGES = {"latent_generator"}
+_VIBEVOICE_TTS_MODEL_STAGES = {"vibevoice"}
 _MING_TTS_MODEL_STAGES = {"ming_tts"}
 _MOSS_TTS_MODEL_STAGES = {"moss_tts_nano"}
 _MOSS_TTS_FULL_MODEL_STAGES = {"moss_tts", "moss_tts_codec"}
@@ -114,6 +115,7 @@ _TTS_MODEL_STAGES: set[str] = (
     | _HIGGS_V3_TTS_MODEL_STAGES
     | _COVO_AUDIO_MODEL_STAGES
     | _VOXCPM2_TTS_MODEL_STAGES
+    | _VIBEVOICE_TTS_MODEL_STAGES
     | _MING_TTS_MODEL_STAGES
     | _MOSS_TTS_MODEL_STAGES
     | _MOSS_TTS_FULL_MODEL_STAGES
@@ -130,6 +132,7 @@ _SAMPLING_MAX_TOKENS_TTS_MODEL_TYPES = {
     "voxtral_tts",
     "cosyvoice3",
     "voxcpm2",
+    "vibevoice",
     "higgs_audio_v2",
     "higgs_audio_v3",
     "indextts2",
@@ -730,6 +733,8 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
                 return "covo_audio"
         if model_stage in _VOXCPM2_TTS_MODEL_STAGES:
             return "voxcpm2"
+        if model_stage in _VIBEVOICE_TTS_MODEL_STAGES:
+            return "vibevoice"
         if model_stage in _MING_TTS_MODEL_STAGES:
             return "ming_flash_omni_tts"
         if model_arch in _MING_TTS_MODEL_ARCHS:
@@ -3245,6 +3250,7 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
         # in place. The builders need to know whether the caller supplied audio
         # inline vs. via an uploaded voice.
         model_type: str | None = None
+        active_adapter = None
         has_inline_ref_audio = (request.ref_audio is not None) if has_inline_ref_audio is None else has_inline_ref_audio
         if self._tts_model_type == "ming_flash_omni_tts":
             # ming_flash_omni is intentionally NOT migrated onto the adapter
@@ -3257,11 +3263,22 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
             prompt = self._build_ming_flash_omni_prompt(request)
             tts_params = {}
             qwen3_ref_audio_warmup_artifact_key = None
-        elif (adapter := self._get_tts_adapter()) is not None:
-            validation_error = adapter.validate(request)
+        elif (active_adapter := self._get_tts_adapter()) is not None:
+            validation_error = active_adapter.validate(request)
             if validation_error:
                 raise ValueError(validation_error)
-            prepared = await adapter.build(request, sampling_params_list, has_inline_ref_audio)
+            prepared = await active_adapter.build(request, sampling_params_list, has_inline_ref_audio)
+            # VibeVoice alone needs request-scoped MM UUIDs after the final
+            # serving request ID is known. Keep this workaround explicitly
+            # gated instead of adding a lifecycle hook for every TTS adapter.
+            if (
+                self._tts_model_type == "vibevoice"
+                and getattr(active_adapter, "name", None) == "vibevoice"
+            ):
+                prepared = active_adapter.finalize_prepared_request(
+                    prepared,
+                    request_id,
+                )
             prompt = prepared.prompt
             tts_params = prepared.tts_params
             model_type = prepared.model_type
@@ -3374,6 +3391,19 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
                 sampling_params_list[0].extra_args = {}
             sampling_params_list[0].extra_args.update(request.extra_params)
             logger.info("Applied extra_params: %s", request.extra_params)
+
+        # VibeVoice's four-token gate and EOS-only stop semantics are hard
+        # correctness constraints. Re-apply them after user extra_params, but
+        # do not introduce a sampling hook into any other model's path.
+        if (
+            self._tts_model_type == "vibevoice"
+            and active_adapter is not None
+            and getattr(active_adapter, "name", None) == "vibevoice"
+        ):
+            sampling_params_list = active_adapter.apply_sampling_overrides(
+                sampling_params_list,
+                request,
+            )
 
         # Audex CFG: turn an adapter-validated cfg_scale into the engine-side
         # pair contract. This must run here (not in the adapter) because the
