@@ -1111,7 +1111,13 @@ capability（参考 AR-Diffusion ownership，但复用 Qwen2 causal PagedAttenti
 #### M4c negative KV branch 定稿设计（决策已锁定，待实施）
 
 本小节是该能力的唯一事实源。vLLM 本体零改动；共享 runner 仅纯增量且默认关闭
-（模型不声明能力则零行为变化）。最终 ownership：
+（模型不声明能力则零行为变化）。
+
+修订记录：v2 吸收开发侧 review 修正——D3 拆为 C1/C2/C3 三层容量约束并增加
+microbatch 与 arena 启动预分配（原“arena >= 池即可行”论证不成立）；正池防护拆为
+过滤队列 scheduler + 入口拒绝 + 静态地板三件套（布尔 hook 单独不足）；D1 改走
+`VllmConfig.additional_config`；新增 bind 期显存 pre-flight；守卫清单扩充 DCP/PCP、
+ubatching、sleep mode、spec decode。最终 ownership：
 
 ```text
 positive Qwen KV      -> 现有 GPUARModelRunner / Omni scheduler
@@ -1122,51 +1128,78 @@ negative hidden       -> `VibeVoiceNegativeKVBranch.forward_step()` 仅发布 on
 
 四项决策：
 
-**D1 配置通道（模型私有，框架零感知）**：负池预算走 `engine_extras.hf_overrides`
-（VoxCPM2 十五个 knob 的既有路径），不动框架 schema：
+**D1 配置通道（模型私有，框架零感知）**：负池预算走 `engine_extras.additional_config`
+（`EngineArgs.additional_config` -> `VllmConfig.additional_config` 通用通道），不动框架
+schema，也不写入 HF Config（遵守“Config 层不承载部署参数”边界，且无需为 @strict 的
+`VibeVoiceConfig` 增加声明字段）：
 
 ```text
 deploy/vibevoice.yaml:
-  stages[0].engine_extras.hf_overrides.vibevoice_runtime_config:
+  stages[0].engine_extras.additional_config.vibevoice_runtime_config:
     negative_kv_cache_memory_bytes: 2147483648   # 2 GiB，缺省同值
 ```
 
 解析侧新增 `models/vibevoice/runtime_config.py`（类型化 dataclass，仿
-`voxcpm2/runtime_config.py`：默认值、coerce、未知键 warning、下限校验）。
-`VibeVoiceConfig` 需显式声明 `vibevoice_runtime_config: dict | None = None` 字段，给
-hf_overrides 提供 @strict 兼容的落点。容量公式（TP=1）：28 层 x 2(K,V) x 2 kv heads
-x 128 x 2 B ≈ 28.7 KB/token；2 GiB ≈ 71.5k negative tokens。swap arena 预算按同值
-派生（arena >= 池规则，见 D3）。deploy 契约对用户不感知：框架内置 yaml 经
-`default_deploy_config_name` 按 model_type 自动命中，高级用户可自带 deploy 覆盖。
+`voxcpm2/runtime_config.py`：默认值、coerce、未知键 warning、下限校验），读取
+`vllm_config.additional_config["vibevoice_runtime_config"]`。容量公式（TP=1）：
+28 层 x 2(K,V) x 2 kv heads x 128 x 2 B = 28,672 B/token；2 GiB ≈ 74.9k negative
+tokens。swap arena 预算按 C3 公式派生（见 D3）。deploy 契约对用户不感知：框架内置
+yaml 经 `default_deploy_config_name` 按 model_type 自动命中，高级用户可自带 deploy
+覆盖。
 
 **D2 构造位置**：runner 只构造 model-neutral 的 store，不 import 任何模型代码；模型在
 `bind_named_kv_branch(store)` 内自行包装 executor。import 方向保持模型 ->
 `vllm_omni.worker`（先例：`voxcpm2_talker.py` import
 `vllm_omni.worker.runner_assisted_metadata`）。
 
-**D3 耗尽语义（两次修正后的终版）**：负池耗尽**永不导致请求或引擎失败**。候选
+**D3 耗尽语义（三轮修正后的终版）**：负池耗尽**永不导致请求或引擎失败**。候选
 "耗尽抛错"在 v1 是 engine 级失败（forward 异常的标准处理），不可接受；候选"保留
-embedding 历史 + 批量重算"要求热路径为罕发事件永久交 D2H 税，且重算材料无精确
-版本（waveform 无法反推 diffusion 采样出的 latent）。终版采用**块级换出**：
+embedding 历史 + 批量重算"要求热路径为罕发事件永久交 D2H 税（精确材料其实存在——
+生成时保留 feedback embedding 即可——但作为常驻成本不合格；作为 opt-in 灾难恢复
+机制列入演进路线）。终版采用**块级换出**。注意"arena >= 池 => 换出必然可行"的
+朴素论证不成立（8 x 40.5k = 324k token 总需求 > GPU+CPU 约 149.8k），容量语义必须
+拆为三层约束：
+
+```text
+C1 单分支可容（启动守卫）：
+     GPU pool >= 单请求负序列上界 = max_tokens x 28,672 B
+     当前配置 74.9k >= 40.5k ✓（余量仅 1.85x）
+     请求级 max_tokens 超池 -> 准入期干净拒绝（与正池超额同一通道）
+C2 工作集约束（运行时 microbatch）：
+     active subset 按原序打包为 microbatch，每个 microbatch 的 Σ lengths <= pool
+     由 C1 保证单请求可容 => microbatch 恒可构造；无压力时退化为单批
+     语义安全：负分支逐请求独立、内部无 RNG；M4a 的 [2B,64] 单次抽取发生在
+     全部 condition 收齐之后，拆批只影响 forward 分组，不影响官方 RNG 语义
+C3 总逻辑容量（启动期静态核算 + 预分配）：
+     pool + arena >= Σ 已准入请求负需求上界
+     arena >= max_num_seqs x per_request_cap x 28,672 B - pool
+     当前配置：8 x 40.5k x 28.7KB - 2 GiB ≈ 7.3 GB host（严格版按总上界全额）
+     启动时按公式预分配并 touch 校验，host 不足 => 启动期报错而非运行时失败
+```
+
+换出/换回流程：
 
 ```text
 allocator 分配失败
-  -> 选 victim（不在本批 active subset、当前长度最短 = 换出/换回最便宜）
-  -> victim 块按层切片拷入 CPU arena（pageable，按需分配）-> 释放块，标记 swapped
+  -> 选 victim（不在当前及后续 microbatch 中、长度最短 = 换出/换回最便宜）
+  -> victim 块按层切片拷入 CPU arena -> 释放块，标记 swapped
   -> 本次分配继续
 victim 下次活跃（forward_step）-> alloc 新块 -> H2D 拷回 -> bit-exact 继续
 ```
 
-arena >= 负池大小 => 换出必然可行，无残余失败路径。热路径零成本（正常路径不保留
-额外历史、不做额外拷贝）。bind 时守卫池下限（`num_blocks >= max_num_seqs x 2`，否则
-拒绝启动）；利用率 >80% 水位告警。池大小是纯性能 knob：小了只是换出更频繁，不会错。
+热路径零成本（正常路径不保留额外历史、不做额外拷贝）。利用率 >80% 水位告警。
+池大小是纯性能 knob：小了只是换出更频繁，不会错。
 
 **D4 Protocol 收敛**：`VibeVoiceNegativeKVBranch` 收敛为 `reset_audio_segment` /
 `forward_step` / `free` 三方法；`on_requests_finished` 从直接调用路径撤下。runner 在
 当前 forward 之前调用 `on_requests_finished`（gpu_ar_model_runner.py），finished 请求可能
 仍有最后一次调度；free 必须挂在 stateful 的 deferred 清理汇聚点 `cleanup_request`
 （`flush_deferred_cleanup` / `finish_postprocess` 两条路径汇聚），模型 bind 时把 branch
-引用交给 stateful。
+引用交给 stateful。另注：abort 后若再无新请求（真 idle），deferred cleanup 会延迟到
+下一请求的 preprocess 或进程退出才释放——占用有界（<= max_num_seqs 份），不影响
+正确性。不能改为 step 末无条件 flush：async scheduling 下 finish 判定晚一拍，step 末
+无法知道该请求是否已被下一步调度，提前 free 会破坏 finished-and-scheduled 的最后
+一次 forward；next-preprocess flush（带 exclude）是当前已知信息下最早的安全点。
 
 **机制事实**（pinned vLLM 源码核实，方案的事实基础）：
 
@@ -1188,26 +1221,40 @@ arena >= 负池大小 => 换出必然可行，无残余失败路径。热路径�
    backend/版本变化（当前 FA 为 K/V 打包在末维），天然继承 TP 分片；各 rank 决策
    确定性一致，无需 TP 专属代码。
 
+**显存核算（独立校验，v1 不做预算合并）**：deploy 固定 `kv_cache_memory_bytes` 后
+vLLM 跳过自动 KV sizing，负池不在其预算内。bind 发生在权重 + 正池分配之后，
+`torch.cuda.mem_get_info().free` 即真实剩余，bind 时校验：
+
+```text
+require: free_vram >= negative_pool_bytes + activation_margin（文档给估算式）
+fail:    启动报错，含 权重/正池/负池/余量 四件套公式
+```
+
+演进项：`kv_cache_memory_bytes` 未固定时在 determine_available_memory 阶段先扣负池
+预算再算正池（预算合并核算），待第二个 capability 用户出现时再做。
+
 **组件与文件**：
 
 ```text
-vllm_omni/worker/named_kv_branch.py（新增 ~300 行）
+vllm_omni/worker/named_kv_branch.py（新增 ~350 行）
   NamedKVBranchRequest（frozen dataclass：name/memory_bytes/layer_group）
   NamedCausalKVBranch：负池 tensor + free-list allocator + 独立 builder
     + reset/free/append_and_enter（换属性 + 嵌套 context 的上下文管理器）
-    + 块级换出/换回 + bind 冒烟（1 请求 metadata 构造校验）
+    + active-subset 保序 microbatch 打包 + 块级换出/换回
+    + swap arena 启动预分配/touch 校验 + bind 期显存 pre-flight
+    + bind 冒烟（1 请求 metadata 构造校验）
 vllm_omni/worker/gpu_model_runner.py（+~40 行）
   initialize_kv_cache 覆写：super() 后 _maybe_bind_named_kv_branches()
   （getattr(model, "named_kv_branch_request", None) 为 None -> 零行为变化；
   is_profiling 跳过；逐项守卫校验）
-models/vibevoice/negative_branch.py（新增 ~120 行）
-  VibeVoiceNegativeBranch：Protocol 实现，含 swapped 分支懒换回
-models/vibevoice/runtime_config.py（新增 ~60 行，D1）
+models/vibevoice/negative_branch.py（新增 ~150 行）
+  VibeVoiceNegativeBranch：Protocol 实现，含 microbatch 保序拼接与 swapped 懒换回
+models/vibevoice/runtime_config.py（新增 ~60 行，D1，读 vllm_config.additional_config）
 models/vibevoice/vibevoice.py（+~30 行）
   named_kv_branch_request 属性、bind_named_kv_branch、删 on_requests_finished 转发
 models/vibevoice/stateful.py（+~20 行）
   Protocol 收敛、bind_negative_branch、cleanup_request 调 branch.free
-models/vibevoice/scheduler.py（新增 ~100 行，见"正池抢占防护"）
+models/vibevoice/scheduler.py（新增 ~120 行，见"正池抢占防护"）
 deploy/vibevoice.yaml（+engine_extras 配置块；scheduler 经 pipeline.scheduler_cls 挂载）
 ```
 
@@ -1228,14 +1275,29 @@ embedding 消费（同一 E 流，wall-clock 差一步），两侧 hidden 按"�
 **正池抢占防护（风险终解，纳入 PR-3）**：v1 RECOMPUTE 抢占对 VibeVoice 不可恢复
 （E 历史未保留、conv cache 丢失、重放 audio 位退化为 token embedding、encoder 重编码
 RNG 分叉），且恢复后下一 audio_token 的 fail-fast 会升级为引擎级失败，或以 eos 收场
-产出静默截断音频。因此必须让抢占**构造性不可达**：新增
-`VibeVoiceOmniARAsyncScheduler`（模型私有，仿 VoxCPM2 `scheduler_cls` 管道，经
-pipeline.py 挂载），覆写 `_should_defer_waiting_admission()` 为容量感知——Σ_running
-最坏增长 + 新请求最坏需求 > 正池容量时暂缓准入（请求排队，标准背压）。最坏需求
-超过整池的请求在**准入时刻**干净拒绝（请求级错误，引擎无恙）。deploy 注明
-max_tokens 与池容量的换算。准入（reservation）与换出（paging）的分工原则：准入用于
-"状态不可恢复 + 驱逐决策权不在我 + 最坏情况可接受"（正池）；驱逐用于"资源自有 +
-恢复廉价精确 + 极端消耗罕发"（负池）。完整 checkpoint/restore 支持列为长期 backlog；
+产出静默截断音频。因此必须让抢占**构造性不可达**。注意 omni 既有的
+`_should_defer_waiting_admission()` 布尔 hook 单独不足：每 tick 只调一次、整体隐藏
+waiting 队列、无法在 upstream 逐个 admit 时更新 reservation、也无法单独拒绝超额请求。
+防护拆为三件套：
+
+1. **过滤队列 scheduler**：模型私有 `VibeVoiceOmniARAsyncScheduler`（仿 VoxCPM2
+   `scheduler_cls` 管道，经 pipeline.py 挂载）直接覆写 `schedule()`——调用
+   `super().schedule()` 前用保守数学算出可准入前缀（Σ_running 最坏剩余增长 +
+   队列中逐个候选的最坏需求 <= 正池容量），将 waiting 替换为过滤后的队列，
+   返回后按原序并回被暂缓请求。upstream 只会从子集中再少取（受自身 token
+   budget 限制），保守性由单方保证，无需 hook 进 upstream 的 admit 循环；
+   `skipped_waiting` 双队列同样处理（Audex patch 的教训）。所有输入均在
+   scheduler 侧（running 请求的 max_tokens/num_computed、池块数），无跨进程状态。
+2. **入口校验拒绝**：worst-case 超池的请求在 input processing 阶段以请求级错误
+   拒绝（与超 max_model_len 的既有拒绝同层），引擎无恙；defer 路径永远不会
+   饿死请求。
+3. **静态地板**：启动时由池容量与 max_tokens 计算 safe_max_num_seqs，配置明显
+   错误（safe < 配置 max_num_seqs）时启动告警/拒绝；同时作为过滤队列失效时的
+   fallback 文档。
+
+准入（reservation）与换出（paging）的分工原则：准入用于"状态不可恢复 +
+驱逐决策权不在我 + 最坏情况可接受"（正池）；驱逐用于"资源自有 + 恢复廉价
+精确 + 极端消耗罕发"（负池）。完整 checkpoint/restore 支持列为长期 backlog；
 scheduler_cls 被覆盖为非 VibeVoice 变体时启动警告。
 
 **守卫条件**（bind 时逐项检查，不满足明确报错）：
@@ -1243,18 +1305,24 @@ scheduler_cls 被覆盖为非 VibeVoice 变体时启动警告。
 ```text
 is_profiling=False；目标 group 为 FullAttentionSpec（非 sliding window/MLA）；
 kv_cache_dtype 非量化；无 KV transfer connector（正负共享层名，connector 会把负分支
-写入误记为正向层事件）；enforce_eager / 无 full CUDA graph；PP=1；负池 >= 最小容量
+写入误记为正向层事件）；PP=1；DCP=1 且 PCP=1（手工 metadata 不含
+dcp_local_seq_lens 语义）；use_ubatching=False（ubatch wrapper 会
+override_forward_context(None) 且多线程 capture，与嵌套 context 冲突）；
+enable_sleep_mode=False（负池 tensor 未注册进 sleep/wake 生命周期）；
+speculative_config 为空（fabricated metadata 不含 spec 路径）；
+负池 >= 单请求负序列上界（C1）；bind 期显存 pre-flight 通过
 ```
 
 **测试矩阵**：
 
 ```text
-CPU   allocator append/reset/free/换出/换回/victim 选择；slot 数学；deferred free 时序
+CPU   allocator append/reset/free/换出/换回/victim 选择；slot 数学；deferred free 时序；
+      microbatch 打包（保序、无压力退化为单批）；C1/C3 启动守卫与 arena 预分配校验
 冒烟  真实 builder 1 请求 metadata 构造（版本漂移第一闸）
 GPU   负分支逐次 append vs Transformers Qwen2 同权重朴素 forward，hidden 逐行 bf16 close
       positive/negative condition 对齐；换出/换回后 hidden bit-exact
-      刻意小池压力测试：无失败、吞吐退化有界
-      准入 scheduler：最坏情况排队、超额请求准入期拒绝、抢占不可达
+      microbatch 与单批路径结果一致；刻意小池压力测试：无失败、吞吐退化有界
+      准入 scheduler：最坏情况排队、超额请求入口拒绝、skipped_waiting 双队列、抢占不可达
 E2E   单/双请求 TTS 出音频；finished-and-scheduled 边界无泄漏；TP=2 stateful
       Microsoft 官方实现 golden 对拍（M4 既有 gate）
 ```
@@ -1263,7 +1331,8 @@ E2E   单/双请求 TTS 出音频；finished-and-scheduled 边界无泄漏；TP=
 负池 tensor 直接 capture；VoxCPM2 unified decode graph 与 runner-assisted metadata hook 为
 先例；门槛为 profiling 证明负分支 eager 开销 > 音频步长 5%）；scheduler 侧负池水位
 软准入（需 EngineCore/executor 状态管道）；异步换出（side stream + bounce buffer 消除
-触发步停顿）。
+触发步停顿）；负池并入 vLLM 内存核算（预算合并）；opt-in embedding replay 灾难恢复
+（保留精确 feedback embedding，与正池完整 checkpoint/restore 合并立项）。
 
 **让本方案不再最优的条件**（定期复评）：vLLM 上游提供原生 side-channel KV 支持 ->
 迁移；metadata fabrication 成为实测瓶颈 -> 增量缓存优化；第二个模型需要旁支 KV ->
@@ -1285,9 +1354,11 @@ E2E   单/双请求 TTS 出音频；finished-and-scheduled 边界无泄漏；TP=
 | Converted HF shard 缺失 | 不阻塞；M4 使用官方实现作为 golden | M4 |
 | 通用 MM profiler 与对称 placeholder 校验冲突 | 固定 KV bytes + `skip_mm_profiling=true`；独立真实上界测试兜底 | 完成 |
 | Stateful CFG 需要第二套 PagedAttention KV | 决策已定稿（§12.8）：runner-owned NamedCausalKVBranch，kv_cache 交换 + 嵌套 context + 手工 metadata | PR-1/2 |
-| 父请求正 KV 被 scheduler 抢占 | 状态不可恢复，且会升级为引擎失败或静默截断音频；VibeVoice 私有 scheduler 最坏情况准入使抢占构造性不可达，超额请求准入期干净拒绝 | PR-3 |
-| 负池耗尽 | 块级换出到 CPU arena（arena >= 池），victim 懒换回，bit-exact；热路径零成本；水位告警；启动容量守卫 | PR-1 |
+| 父请求正 KV 被 scheduler 抢占 | 状态不可恢复，且会升级为引擎失败或静默截断音频；三件套：过滤队列 scheduler（覆写 schedule()，含 skipped_waiting 双队列）+ 入口超额拒绝 + 静态 max_num_seqs 地板，抢占构造性不可达 | PR-3 |
+| 负池耗尽 | C1 单分支启动守卫 + C2 active-subset 保序 microbatch + C3 arena 静态核算与启动预分配；victim 换出懒换回 bit-exact；热路径零成本；水位告警 | PR-1 |
+| 负池显存未纳入 vLLM 核算（固定 kv_cache_memory_bytes 跳过自动 sizing） | bind 期 pre-flight 校验（free VRAM >= 负池 + activation 余量），明确报错；预算合并核算列为演进 | PR-1 |
 | 持续超卖下换出抖动 | 容量公式 + 水位告警；只慢不错 | 部署侧 |
+| idle abort 后 side state 延迟释放 | 有界（<= max_num_seqs 份），下一请求 preprocess 或进程退出时释放；step 末 flush 在 async scheduling 下不安全，不为此改代码 | 已登记 |
 | 负分支依赖 4 处 vLLM 私有接触面（kv_cache 属性 / override_forward_context / CommonAttentionMetadata / builder 签名） | 收口 named_kv_branch.py 单文件 + bind 冒烟 + conformance 测试 | 升级门槛 |
 | 负分支无 CUDA graph | 继承 enforce_eager 现状，开销非首要（正 decode > M4a > 负分支）；VoxCPM2 decode-graph 路径可复用，profiling 门槛 | Perf backlog |
 | Diffusion steps 配置来源不同 | stateful hook 已消费 request/deploy `extra_args.num_diffusion_steps`；缺失时回退 model config | 已接线 |
