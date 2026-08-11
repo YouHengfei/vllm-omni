@@ -761,7 +761,7 @@ reference-audio prefill，以及最终的非流式 waveform 输出。ASR、双�
 | M3b serving adapter | 完成（prompt-level） | 请求解析、prompt 渲染、有序 MM payload、request-scoped UUID、model-specific sampling 收口 |
 | M4a diffusion numerical kernel | 完成（model-local，未接 runtime） | 显式 positive/negative condition 和 noise、fresh DPM solver、CFG、64 维 acoustic latent |
 | M4b decode/feedback kernel | 完成（model-local，未接 runtime） | Acoustic Decoder/Semantic Encoder causal cache、3200-sample chunk、下一步 embedding |
-| M4c stateful AR integration | 进行中（phase 1 model-local 完成） | per-request state/hooks/cleanup/M4a→M4b 已接；negative Qwen Paged KV 与 waveform 输出待完成 |
+| M4c stateful AR integration | 进行中（phase 1 model-local 完成；negative KV branch 设计已定稿，见 §12.8） | per-request state/hooks/cleanup/M4a→M4b 已接；negative Qwen Paged KV 与 waveform 输出待 PR-1/2/3 完成 |
 
 ### 12.2 M1 Processor 契约和 upstream 缺口
 
@@ -1102,20 +1102,172 @@ context 重置为单 token；之后只在 `audio_token` 上消费与 positive �
 feedback embedding。Audex 的“相同绝对 progress + 相同 sampled token”同步假设不成立，
 简单 padding 会被 causal attention 看见，也不等价。
 
-因此当前 ownership 决策是：
+在“不修改 runtime”约束下，现有 Omni LLM_AR 没有可正确表达该 shorter/resettable branch
+的 public hook；不能用 Audex companion 或 model-global contiguous KV 伪装完成。设计评审
+已完成，结论：增加一个通用、model-neutral 的 runner-owned named causal KV branch
+capability（参考 AR-Diffusion ownership，但复用 Qwen2 causal PagedAttention）。决策锁定
+前 M4c phase 1 保持 fail-fast，shared runtime 不变。
+
+#### M4c negative KV branch 定稿设计（决策已锁定，待实施）
+
+本小节是该能力的唯一事实源。vLLM 本体零改动；共享 runner 仅纯增量且默认关闭
+（模型不声明能力则零行为变化）。最终 ownership：
 
 ```text
 positive Qwen KV      -> 现有 GPUARModelRunner / Omni scheduler
 acoustic/semantic     -> VibeVoice per-request state（已实现）
-negative Qwen KV      -> 必须是独立、runner-owned paged branch
+negative Qwen KV      -> runner-owned NamedCausalKVBranch（本小节）
 negative hidden       -> `VibeVoiceNegativeKVBranch.forward_step()` 仅发布 one-step condition
 ```
 
-在“不修改 runtime”约束下，现有 Omni LLM_AR 没有可正确表达该 shorter/resettable branch
-的 public hook；不能用 Audex companion 或 model-global contiguous KV 伪装完成。下一步需
-决定是否允许增加一个通用、model-neutral 的 runner-owned named causal KV branch capability
-（参考 AR-Diffusion ownership，但复用 Qwen2 causal PagedAttention）。在决策前，M4c phase 1
-保持 fail-fast，shared runtime 不变。
+四项决策：
+
+**D1 配置通道（模型私有，框架零感知）**：负池预算走 `engine_extras.hf_overrides`
+（VoxCPM2 十五个 knob 的既有路径），不动框架 schema：
+
+```text
+deploy/vibevoice.yaml:
+  stages[0].engine_extras.hf_overrides.vibevoice_runtime_config:
+    negative_kv_cache_memory_bytes: 2147483648   # 2 GiB，缺省同值
+```
+
+解析侧新增 `models/vibevoice/runtime_config.py`（类型化 dataclass，仿
+`voxcpm2/runtime_config.py`：默认值、coerce、未知键 warning、下限校验）。
+`VibeVoiceConfig` 需显式声明 `vibevoice_runtime_config: dict | None = None` 字段，给
+hf_overrides 提供 @strict 兼容的落点。容量公式（TP=1）：28 层 x 2(K,V) x 2 kv heads
+x 128 x 2 B ≈ 28.7 KB/token；2 GiB ≈ 71.5k negative tokens。swap arena 预算按同值
+派生（arena >= 池规则，见 D3）。deploy 契约对用户不感知：框架内置 yaml 经
+`default_deploy_config_name` 按 model_type 自动命中，高级用户可自带 deploy 覆盖。
+
+**D2 构造位置**：runner 只构造 model-neutral 的 store，不 import 任何模型代码；模型在
+`bind_named_kv_branch(store)` 内自行包装 executor。import 方向保持模型 ->
+`vllm_omni.worker`（先例：`voxcpm2_talker.py` import
+`vllm_omni.worker.runner_assisted_metadata`）。
+
+**D3 耗尽语义（两次修正后的终版）**：负池耗尽**永不导致请求或引擎失败**。候选
+"耗尽抛错"在 v1 是 engine 级失败（forward 异常的标准处理），不可接受；候选"保留
+embedding 历史 + 批量重算"要求热路径为罕发事件永久交 D2H 税，且重算材料无精确
+版本（waveform 无法反推 diffusion 采样出的 latent）。终版采用**块级换出**：
+
+```text
+allocator 分配失败
+  -> 选 victim（不在本批 active subset、当前长度最短 = 换出/换回最便宜）
+  -> victim 块按层切片拷入 CPU arena（pageable，按需分配）-> 释放块，标记 swapped
+  -> 本次分配继续
+victim 下次活跃（forward_step）-> alloc 新块 -> H2D 拷回 -> bit-exact 继续
+```
+
+arena >= 负池大小 => 换出必然可行，无残余失败路径。热路径零成本（正常路径不保留
+额外历史、不做额外拷贝）。bind 时守卫池下限（`num_blocks >= max_num_seqs x 2`，否则
+拒绝启动）；利用率 >80% 水位告警。池大小是纯性能 knob：小了只是换出更频繁，不会错。
+
+**D4 Protocol 收敛**：`VibeVoiceNegativeKVBranch` 收敛为 `reset_audio_segment` /
+`forward_step` / `free` 三方法；`on_requests_finished` 从直接调用路径撤下。runner 在
+当前 forward 之前调用 `on_requests_finished`（gpu_ar_model_runner.py），finished 请求可能
+仍有最后一次调度；free 必须挂在 stateful 的 deferred 清理汇聚点 `cleanup_request`
+（`flush_deferred_cleanup` / `finish_postprocess` 两条路径汇聚），模型 bind 时把 branch
+引用交给 stateful。
+
+**机制事实**（pinned vLLM 源码核实，方案的事实基础）：
+
+1. `get_attention_context`（model_executor/layers/attention/attention.py）按 layer_name 取
+   四元组：`forward_context.attn_metadata[name]`、`no_compile_layers[name]`（即
+   `compilation_config.static_forward_context`）、`attn_layer.kv_cache`（**layer 属性**，
+   `bind_kv_cache` 一次性绑定）、`forward_context.slot_mapping[name]`。四者中仅
+   kv_cache 不来自 context——"换 store = 临时换属性 + 嵌套 context"由此成立。
+2. `override_forward_context`（forward_context.py）保存/恢复全局 context，可嵌套；
+   vLLM 自身在 ubatch capture 中使用同一机制。
+3. `Qwen2Model.forward(input_ids=None, positions, inputs_embeds)` 在 PP=1 时可独立调用，
+   除 attention 层读 context 外无 runner 依赖。
+4. `FlashAttentionMetadataBuilder(kv_cache_spec, layer_names, vllm_config, device)` 的
+   `build(common_prefix_len, CommonAttentionMetadata)` 只消费 query_start_loc / seq_lens /
+   block_table_tensor / slot_mapping / num_reqs / max_query_len / max_seq_len / causal。
+   negative batch 是退化形态（每请求 1 query token、无 prefix cache / cascade / spec
+   decode），可手工构造。必须使用**独立 builder 实例**（不与 runner 共享内部缓冲区）。
+5. 负池 tensor 以 runner `self.kv_caches[i]` 为形状模板（只改 block 维度）——布局随
+   backend/版本变化（当前 FA 为 K/V 打包在末维），天然继承 TP 分片；各 rank 决策
+   确定性一致，无需 TP 专属代码。
+
+**组件与文件**：
+
+```text
+vllm_omni/worker/named_kv_branch.py（新增 ~300 行）
+  NamedKVBranchRequest（frozen dataclass：name/memory_bytes/layer_group）
+  NamedCausalKVBranch：负池 tensor + free-list allocator + 独立 builder
+    + reset/free/append_and_enter（换属性 + 嵌套 context 的上下文管理器）
+    + 块级换出/换回 + bind 冒烟（1 请求 metadata 构造校验）
+vllm_omni/worker/gpu_model_runner.py（+~40 行）
+  initialize_kv_cache 覆写：super() 后 _maybe_bind_named_kv_branches()
+  （getattr(model, "named_kv_branch_request", None) 为 None -> 零行为变化；
+  is_profiling 跳过；逐项守卫校验）
+models/vibevoice/negative_branch.py（新增 ~120 行）
+  VibeVoiceNegativeBranch：Protocol 实现，含 swapped 分支懒换回
+models/vibevoice/runtime_config.py（新增 ~60 行，D1）
+models/vibevoice/vibevoice.py（+~30 行）
+  named_kv_branch_request 属性、bind_named_kv_branch、删 on_requests_finished 转发
+models/vibevoice/stateful.py（+~20 行）
+  Protocol 收敛、bind_negative_branch、cleanup_request 调 branch.free
+models/vibevoice/scheduler.py（新增 ~100 行，见"正池抢占防护"）
+deploy/vibevoice.yaml（+engine_extras 配置块；scheduler 经 pipeline.scheduler_cls 挂载）
+```
+
+**执行时序**（一次 audio-token step 的 model.forward 内）：
+
+```text
+negative forward_step: append 1 slot/请求 -> 手工 CommonAttentionMetadata
+  -> 独立 builder.build -> 交换 28 层 kv_cache -> override_forward_context
+  -> Qwen2Model(inputs_embeds=负序列末条 embedding) -> 取末行 hidden
+  -> finally 恢复 28 层属性（context 自动恢复）
+-> record_negative_condition -> M4a CFG -> M4b 逐请求 decode
+-> 反馈 embedding index_copy_ 写回 -> positive forward
+```
+
+negative 序列 = [BOS_embedding, E0, E1, ...]，RoPE 位置 = 序列内下标；比 positive 晚一个
+embedding 消费（同一 E 流，wall-clock 差一步），两侧 hidden 按"消费同一 embedding"配对。
+
+**正池抢占防护（风险终解，纳入 PR-3）**：v1 RECOMPUTE 抢占对 VibeVoice 不可恢复
+（E 历史未保留、conv cache 丢失、重放 audio 位退化为 token embedding、encoder 重编码
+RNG 分叉），且恢复后下一 audio_token 的 fail-fast 会升级为引擎级失败，或以 eos 收场
+产出静默截断音频。因此必须让抢占**构造性不可达**：新增
+`VibeVoiceOmniARAsyncScheduler`（模型私有，仿 VoxCPM2 `scheduler_cls` 管道，经
+pipeline.py 挂载），覆写 `_should_defer_waiting_admission()` 为容量感知——Σ_running
+最坏增长 + 新请求最坏需求 > 正池容量时暂缓准入（请求排队，标准背压）。最坏需求
+超过整池的请求在**准入时刻**干净拒绝（请求级错误，引擎无恙）。deploy 注明
+max_tokens 与池容量的换算。准入（reservation）与换出（paging）的分工原则：准入用于
+"状态不可恢复 + 驱逐决策权不在我 + 最坏情况可接受"（正池）；驱逐用于"资源自有 +
+恢复廉价精确 + 极端消耗罕发"（负池）。完整 checkpoint/restore 支持列为长期 backlog；
+scheduler_cls 被覆盖为非 VibeVoice 变体时启动警告。
+
+**守卫条件**（bind 时逐项检查，不满足明确报错）：
+
+```text
+is_profiling=False；目标 group 为 FullAttentionSpec（非 sliding window/MLA）；
+kv_cache_dtype 非量化；无 KV transfer connector（正负共享层名，connector 会把负分支
+写入误记为正向层事件）；enforce_eager / 无 full CUDA graph；PP=1；负池 >= 最小容量
+```
+
+**测试矩阵**：
+
+```text
+CPU   allocator append/reset/free/换出/换回/victim 选择；slot 数学；deferred free 时序
+冒烟  真实 builder 1 请求 metadata 构造（版本漂移第一闸）
+GPU   负分支逐次 append vs Transformers Qwen2 同权重朴素 forward，hidden 逐行 bf16 close
+      positive/negative condition 对齐；换出/换回后 hidden bit-exact
+      刻意小池压力测试：无失败、吞吐退化有界
+      准入 scheduler：最坏情况排队、超额请求准入期拒绝、抢占不可达
+E2E   单/双请求 TTS 出音频；finished-and-scheduled 边界无泄漏；TP=2 stateful
+      Microsoft 官方实现 golden 对拍（M4 既有 gate）
+```
+
+**演进路线（非 v1 范围）**：负分支 CUDA graph（持久 metadata buffer + bucket padding +
+负池 tensor 直接 capture；VoxCPM2 unified decode graph 与 runner-assisted metadata hook 为
+先例；门槛为 profiling 证明负分支 eager 开销 > 音频步长 5%）；scheduler 侧负池水位
+软准入（需 EngineCore/executor 状态管道）；异步换出（side stream + bounce buffer 消除
+触发步停顿）。
+
+**让本方案不再最优的条件**（定期复评）：vLLM 上游提供原生 side-channel KV 支持 ->
+迁移；metadata fabrication 成为实测瓶颈 -> 增量缓存优化；第二个模型需要旁支 KV ->
+泛化 NamedCausalKVBranch 并将 knob 提升为框架统一键。
 
 ### 12.9 风险登记表
 
@@ -1132,7 +1284,12 @@ negative hidden       -> `VibeVoiceNegativeKVBranch.forward_step()` 仅发布 on
 | TP/小卡覆盖 | TP=2 已完成；最低显存仍待定义 | Pre-M4 |
 | Converted HF shard 缺失 | 不阻塞；M4 使用官方实现作为 golden | M4 |
 | 通用 MM profiler 与对称 placeholder 校验冲突 | 固定 KV bytes + `skip_mm_profiling=true`；独立真实上界测试兜底 | 完成 |
-| Stateful CFG 需要第二套 PagedAttention KV | Audex pair 不满足 shorter/resettable branch；phase 1 fail-fast，目标是 runner-owned named causal KV branch | M4 决策 |
+| Stateful CFG 需要第二套 PagedAttention KV | 决策已定稿（§12.8）：runner-owned NamedCausalKVBranch，kv_cache 交换 + 嵌套 context + 手工 metadata | PR-1/2 |
+| 父请求正 KV 被 scheduler 抢占 | 状态不可恢复，且会升级为引擎失败或静默截断音频；VibeVoice 私有 scheduler 最坏情况准入使抢占构造性不可达，超额请求准入期干净拒绝 | PR-3 |
+| 负池耗尽 | 块级换出到 CPU arena（arena >= 池），victim 懒换回，bit-exact；热路径零成本；水位告警；启动容量守卫 | PR-1 |
+| 持续超卖下换出抖动 | 容量公式 + 水位告警；只慢不错 | 部署侧 |
+| 负分支依赖 4 处 vLLM 私有接触面（kv_cache 属性 / override_forward_context / CommonAttentionMetadata / builder 签名） | 收口 named_kv_branch.py 单文件 + bind 冒烟 + conformance 测试 | 升级门槛 |
+| 负分支无 CUDA graph | 继承 enforce_eager 现状，开销非首要（正 decode > M4a > 负分支）；VoxCPM2 decode-graph 路径可复用，profiling 门槛 | Perf backlog |
 | Diffusion steps 配置来源不同 | stateful hook 已消费 request/deploy `extra_args.num_diffusion_steps`；缺失时回退 model config | 已接线 |
 | Diffusion noise/RNG ownership | 同 control active subset 使用官方一次 global device RNG `[2B,64]`；不同 control 分组及动态 batch ordering 仍会影响随机流 | M4 golden |
 | DPM scheduler NumPy 2 warning | Microsoft 和 diffusers 都有 `np.array(torch_tensor)` deprecation，当前十步结果逐值一致 | Upstream |
@@ -1176,8 +1333,12 @@ M4c phase 1 request-local state machine + has_preprocess/has_postprocess + defer
 待执行顺序：
 
 ```text
+PR-1  NamedCausalKVBranch + runner 覆写 + runtime_config 通道（默认关闭，零行为变化）
+      allocator/换出/换回 CPU 单测 + bind 冒烟 + 未声明能力模型回归
+PR-2  negative_branch.py + vibevoice.py/stateful.py 接线（Protocol 收敛、deferred free）
+      GPU 数值对拍 + condition 对齐 + 换出/换回 + 生命周期测试
+PR-3  移除 audio_token fail-fast、deploy 配置、VibeVoice 私有 scheduler（正池准入防护）
+      E2E TTS、TP=2 stateful、Microsoft golden 对拍
 Pre-M4 最低显存/profiling 门槛
-M4c    决定并实现 runner-owned negative Qwen named causal Paged KV branch；之后完成
-       active-subset routing、waveform payload、完整 E2E golden 和 TP=2 stateful 验证
 Post-E2E 由 VibeVoice adapter 强制恢复 temperature=0.0，并移除对应 strict xfail
 ```
