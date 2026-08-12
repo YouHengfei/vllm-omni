@@ -315,7 +315,8 @@ class NamedCausalKVBranch:
 
     def reset(self, request_id: str) -> None:
         self._ensure_open()
-        self.free(request_id)
+        self._ensure_not_entered("reset")
+        self._free_unchecked(request_id)
         self._states[request_id] = _NamedKVRequestState(
             max_blocks=self.max_blocks_per_request,
             device=self.device,
@@ -324,9 +325,29 @@ class NamedCausalKVBranch:
     def free(self, request_id: str) -> None:
         if self._closed:
             return
+        self._ensure_not_entered("free")
+        self._free_unchecked(request_id)
+
+    def _free_unchecked(self, request_id: str) -> None:
+        """Release one request from internal cleanup paths.
+
+        Public reset/free operations are rejected while the branch attention
+        context is active. Fault cleanup intentionally bypasses that guard so
+        a partial layer write can still invalidate and release the request.
+        """
         state = self._states.pop(request_id, None)
         if state is not None:
             self._allocator.free(state.block_ids)
+
+    def _cleanup_after_fault(self, request_id: str) -> None:
+        """Best-effort cleanup that never masks the active forward exception."""
+        try:
+            self._free_unchecked(request_id)
+        except Exception:
+            logger.exception(
+                "Failed to release named-KV request %r after a branch fault.",
+                request_id,
+            )
 
     def get_sequence_length(self, request_id: str) -> int:
         state = self._states.get(request_id)
@@ -402,7 +423,7 @@ class NamedCausalKVBranch:
                 skip_compiled=True,
             )
         except Exception:
-            self.free(request_id)
+            self._cleanup_after_fault(request_id)
             raise
 
         positive_caches = {
@@ -419,8 +440,9 @@ class NamedCausalKVBranch:
                 )
         except Exception:
             # A partial layer write cannot be rolled back safely. Drop the
-            # entire request branch so stale KV is never reused.
-            self.free(request_id)
+            # entire request branch so stale KV is never reused. This internal
+            # path must remain legal while the forward context is entered.
+            self._cleanup_after_fault(request_id)
             raise
         finally:
             for name, layer in self.layers.items():
@@ -441,6 +463,13 @@ class NamedCausalKVBranch:
     def _ensure_open(self) -> None:
         if self._closed:
             raise RuntimeError(f"Named causal KV branch {self.name!r} is closed.")
+
+    def _ensure_not_entered(self, operation: str) -> None:
+        if self._entered:
+            raise RuntimeError(
+                f"Cannot {operation} named causal KV branch {self.name!r} "
+                "while its forward context is active."
+            )
 
 
 __all__ = [

@@ -307,6 +307,72 @@ def test_vibevoice_nonstreaming_serving_serializes_published_waveform() -> None:
     assert len(audio_bytes) > 44
 
 
+@pytest.mark.parametrize(
+    ("model_type", "finish_reason", "token_ids", "expect_warning"),
+    [
+        ("vibevoice", "length", [151654], True),
+        ("vibevoice", "length", [151653], False),
+        ("vibevoice", "stop", [151654, 151643], False),
+        ("qwen3_tts", "length", [151654], False),
+    ],
+)
+def test_vibevoice_nonstreaming_warns_only_for_undrained_terminal_audio_token(
+    monkeypatch: pytest.MonkeyPatch,
+    model_type: str,
+    finish_reason: str,
+    token_ids: list[int],
+    expect_warning: bool,
+) -> None:
+    serving = object.__new__(OmniOpenAIServingSpeech)
+    serving._tts_model_type = model_type
+    serving._request_ref_audio_artifact_keys = {}
+    serving._ref_audio_model_artifact_ready = set()
+    serving._ref_audio_resolve_cache = {}
+    waveform = torch.linspace(-0.25, 0.25, 3_200, dtype=torch.float32)
+    final = SimpleNamespace(
+        multimodal_output={
+            "audio": waveform,
+            "sr": torch.tensor(24_000, dtype=torch.int32),
+        },
+        request_output=SimpleNamespace(
+            outputs=[
+                SimpleNamespace(
+                    finish_reason=finish_reason,
+                    token_ids=token_ids,
+                )
+            ]
+        ),
+        outputs=[],
+    )
+
+    async def generator():
+        yield final
+
+    async def prepare(*_args, **_kwargs):
+        return "vibevoice-terminal", generator(), {}
+
+    warnings: list[tuple[object, ...]] = []
+    serving._prepare_speech_generation = prepare
+    monkeypatch.setattr(
+        "vllm_omni.entrypoints.openai.serving_speech.logger.warning",
+        lambda *args, **_kwargs: warnings.append(args),
+    )
+    request = OpenAICreateSpeechRequest(
+        input="hello",
+        ref_audio="ref",
+        response_format="wav",
+    )
+
+    audio_bytes, media_type = asyncio.run(serving._generate_audio_bytes(request))
+
+    assert media_type == "audio/wav"
+    assert isinstance(audio_bytes, bytes)
+    assert audio_bytes[:4] == b"RIFF"
+    assert bool(warnings) is expect_warning
+    if expect_warning:
+        assert warnings[0][1:] == ("vibevoice-terminal", 151654)
+
+
 def test_vibevoice_sampling_constraints_replace_dict_and_are_idempotent() -> None:
     adapter = _adapter()
     request = OpenAICreateSpeechRequest(input="hello", ref_audio="ref")

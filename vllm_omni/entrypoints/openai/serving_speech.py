@@ -92,6 +92,7 @@ _OMNIVOICE_TTS_MODEL_STAGES = {"omnivoice_generator"}
 _COVO_AUDIO_MODEL_STAGES = {"fused_thinker_talker"}
 _VOXCPM2_TTS_MODEL_STAGES = {"latent_generator"}
 _VIBEVOICE_TTS_MODEL_STAGES = {"vibevoice"}
+_VIBEVOICE_AUDIO_TOKEN_ID = 151654
 _MING_TTS_MODEL_STAGES = {"ming_tts"}
 _MOSS_TTS_MODEL_STAGES = {"moss_tts_nano"}
 _MOSS_TTS_FULL_MODEL_STAGES = {"moss_tts", "moss_tts_codec"}
@@ -3510,6 +3511,22 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
         finally:
             self._discard_ref_audio_artifact_warmup(request_id)
 
+    @staticmethod
+    def _is_vibevoice_terminal_audio_length(output: Any) -> bool:
+        """Return whether a hard length cutoff left an audio token undrained."""
+        request_output = getattr(output, "request_output", None)
+        completions = getattr(request_output, "outputs", None)
+        if not completions:
+            return False
+        completion = completions[0]
+        token_ids = getattr(completion, "token_ids", None)
+        return bool(
+            getattr(completion, "finish_reason", None) == "length"
+            and token_ids is not None
+            and len(token_ids) > 0
+            and int(token_ids[-1]) == _VIBEVOICE_AUDIO_TOKEN_ID
+        )
+
     async def _generate_audio_bytes(
         self,
         request: OpenAICreateSpeechRequest,
@@ -3563,6 +3580,18 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
 
             if final_output is None:
                 raise ValueError("No output generated from the model.")
+
+            if (
+                self._tts_model_type == "vibevoice"
+                and self._is_vibevoice_terminal_audio_length(final_output)
+            ):
+                logger.warning(
+                    "VibeVoice request %s reached its token limit on audio token "
+                    "%d; the final 3200-sample waveform chunk could not be "
+                    "decoded because no subsequent model forward was scheduled.",
+                    request_id,
+                    _VIBEVOICE_AUDIO_TOKEN_ID,
+                )
 
             audio_output, audio_key = self._extract_audio_output(final_output)
             if audio_key is None:

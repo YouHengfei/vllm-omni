@@ -20,6 +20,7 @@ import torch
 import torch.nn as nn
 from transformers import AutoModel
 from vllm.config import VllmConfig
+from vllm.logger import init_logger
 from vllm.model_executor.layers.logits_processor import LogitsProcessor
 from vllm.model_executor.models.interfaces import SupportsMultiModal
 from vllm.model_executor.models.qwen2 import Qwen2Model
@@ -52,10 +53,10 @@ from .processing_vibevoice import (
     AUDIO_EOS_TOKEN,
     AUDIO_HOP_LENGTH,
     AUDIO_TOKEN,
+    SAMPLE_RATE,
     VibeVoiceDummyInputsBuilder,
     VibeVoiceMultiModalProcessor,
     VibeVoiceProcessingInfo,
-    SAMPLE_RATE,
 )
 from .runtime_config import VibeVoiceRuntimeConfig
 from .stateful import (
@@ -63,6 +64,8 @@ from .stateful import (
     VibeVoiceStatefulInference,
 )
 from .vllm_compat import merge_multimodal_embeddings
+
+logger = init_logger(__name__)
 
 
 def _num_tokenizer_stages(config: Any, child_config_name: str) -> int:
@@ -623,6 +626,25 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
     def on_requests_finished(self, finished_req_ids: set[str] | list[str]) -> None:
         self._stateful.on_requests_finished(finished_req_ids)
 
+    def _warn_if_named_kv_capability_unavailable(self) -> None:
+        if (
+            not bool(
+                getattr(
+                    self,
+                    "named_kv_branch_capability_acknowledged",
+                    False,
+                )
+            )
+            and self._negative_kv_branch is None
+        ):
+            logger.warning_once(
+                "VibeVoice waveform generation requires the vLLM-Omni named-KV "
+                "runner capability. This runner did not acknowledge or bind "
+                "that capability; stock vllm.LLM may emit tokens but cannot "
+                "execute the complete VibeVoice waveform path. Use "
+                "AsyncOmni with GPUARModelRunner."
+            )
+
     def make_omni_output(
         self,
         model_outputs: torch.Tensor | OmniOutput,
@@ -686,6 +708,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         sampling_extra_args: list[dict[str, Any]] | None = None,
         **_: Any,
     ) -> torch.Tensor | IntermediateTensors:
+        self._warn_if_named_kv_capability_unavailable()
         pending_request_ids = self._pending_request_ids
         pending_request_spans = self._pending_request_spans
         pending_audio_transitions = self._pending_audio_transitions

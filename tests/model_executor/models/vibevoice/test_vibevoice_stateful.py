@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -251,6 +252,32 @@ def test_active_subset_uses_one_batched_official_rng_draw() -> None:
     assert len(audio_chunks) == 2
     assert stateful.get("request-a").audio_token_count == 1
     assert stateful.get("request-b").audio_token_count == 1
+
+
+def test_named_kv_capability_warning_distinguishes_runner_ack_and_binding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    wrapper = object.__new__(VibeVoiceForConditionalGeneration)
+    nn.Module.__init__(wrapper)
+    wrapper._negative_kv_branch = None
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        "vllm_omni.model_executor.models.vibevoice.vibevoice.logger.warning_once",
+        lambda message, *_args, **_kwargs: warnings.append(message),
+    )
+
+    wrapper._warn_if_named_kv_capability_unavailable()
+    assert len(warnings) == 1
+    assert "named-KV runner capability" in warnings[0]
+
+    wrapper.named_kv_branch_capability_acknowledged = True
+    wrapper._warn_if_named_kv_capability_unavailable()
+    assert len(warnings) == 1
+
+    del wrapper.named_kv_branch_capability_acknowledged
+    wrapper._negative_kv_branch = SimpleNamespace()
+    wrapper._warn_if_named_kv_capability_unavailable()
+    assert len(warnings) == 1
 
 
 def test_model_forward_batches_negative_branch_and_writes_feedback_rows() -> None:

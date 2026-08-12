@@ -231,6 +231,12 @@ class OmniGPUModelRunner(GPUModelRunner):
     def load_model(self, *args, **kwargs) -> None:
         super().load_model(*args, **kwargs)
         model = getattr(self, "model", None)
+        # Acknowledge runner support immediately after model loading, before
+        # EngineCore can issue profiling or dummy forwards. Binding still waits
+        # for the real KV cache configuration in initialize_kv_cache(). Models
+        # without a named-KV declaration receive no attribute or behavior.
+        if getattr(model, "named_kv_branch_request", None) is not None:
+            model.named_kv_branch_capability_acknowledged = True
         override_fn = None
         if bool(getattr(model, "supports_sampled_token_ids_cpu_override", False)):
             candidate = getattr(model, "consume_sampled_token_ids_cpu_override", None)

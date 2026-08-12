@@ -365,6 +365,27 @@ def _negative_kv_conformance_worker(port: int, queue: Any) -> None:
             branch.free("request")
             all_blocks_freed = branch.num_free_blocks == branch.num_blocks
 
+            branch.reset("active-guard")
+            with branch.append_and_enter("active-guard"):
+                active_length = branch.get_sequence_length("active-guard")
+                active_num_free_blocks = branch.num_free_blocks
+                for operation in (branch.reset, branch.free):
+                    try:
+                        operation("active-guard")
+                    except RuntimeError as exc:
+                        assert "forward context is active" in str(exc)
+                    else:
+                        raise AssertionError(
+                            "External named-KV mutation was accepted in context"
+                        )
+                assert branch.get_sequence_length("active-guard") == active_length
+                assert branch.num_free_blocks == active_num_free_blocks
+            branch.free("active-guard")
+            active_context_guard = (
+                branch.get_sequence_length("active-guard") == 0
+                and branch.num_free_blocks == branch.num_blocks
+            )
+
             branch.reset("fault")
             try:
                 with branch.append_and_enter("fault"):
@@ -388,6 +409,7 @@ def _negative_kv_conformance_worker(port: int, queue: Any) -> None:
                     "store_max_abs_diff": store_max_abs_diff,
                     "restored_after_every_step": restored_after_every_step,
                     "all_blocks_freed": all_blocks_freed,
+                    "active_context_guard": active_context_guard,
                     "fault_cleanup": fault_cleanup,
                 }
             )
@@ -437,4 +459,5 @@ def test_manual_negative_paged_kv_matches_transformers_cached_qwen() -> None:
     assert result["store_max_abs_diff"] <= 0.04
     assert result["restored_after_every_step"] is True
     assert result["all_blocks_freed"] is True
+    assert result["active_context_guard"] is True
     assert result["fault_cleanup"] is True

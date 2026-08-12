@@ -12,6 +12,7 @@ from vllm_omni.model_executor.models.vibevoice.runtime_config import (
 )
 from vllm_omni.worker.gpu_model_runner import OmniGPUModelRunner
 from vllm_omni.worker.named_kv_branch import (
+    NamedCausalKVBranch,
     NamedKVBranchRequest,
     _FixedBlockAllocator,
 )
@@ -63,6 +64,73 @@ def test_fixed_block_allocator_is_deterministic_and_rejects_corruption() -> None
     ]
     with pytest.raises(ValueError, match="Cannot free unallocated"):
         allocator.free([99])
+
+
+def test_named_kv_public_reset_and_free_reject_active_context() -> None:
+    branch = object.__new__(NamedCausalKVBranch)
+    branch.name = "negative"
+    branch.device = "cpu"
+    branch.max_blocks_per_request = 1
+    branch._entered = True
+    branch._closed = False
+    branch._allocator = _FixedBlockAllocator(1)
+    block_id = branch._allocator.allocate()
+    state = SimpleNamespace(block_ids=[block_id])
+    branch._states = {"request": state}
+
+    with pytest.raises(RuntimeError, match="Cannot reset.*forward context"):
+        branch.reset("request")
+    with pytest.raises(RuntimeError, match="Cannot free.*forward context"):
+        branch.free("request")
+
+    assert branch._states == {"request": state}
+    assert branch.num_free_blocks == 0
+
+
+def test_named_kv_internal_fault_cleanup_remains_legal_in_context() -> None:
+    branch = object.__new__(NamedCausalKVBranch)
+    branch.name = "negative"
+    branch._entered = True
+    branch._closed = False
+    branch._allocator = _FixedBlockAllocator(1)
+    block_id = branch._allocator.allocate()
+    branch._states = {
+        "request": SimpleNamespace(block_ids=[block_id]),
+    }
+
+    branch._free_unchecked("request")
+
+    assert branch._states == {}
+    assert branch.num_free_blocks == 1
+
+
+def test_named_kv_fault_cleanup_does_not_mask_original_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    branch = object.__new__(NamedCausalKVBranch)
+    branch.name = "negative"
+    errors: list[tuple[object, ...]] = []
+    monkeypatch.setattr(
+        branch,
+        "_free_unchecked",
+        lambda _request_id: (_ for _ in ()).throw(
+            RuntimeError("secondary cleanup failure")
+        ),
+    )
+    monkeypatch.setattr(
+        "vllm_omni.worker.named_kv_branch.logger.exception",
+        lambda *args, **_kwargs: errors.append(args),
+    )
+
+    try:
+        raise ValueError("original forward failure")
+    except ValueError:
+        branch._cleanup_after_fault("request")
+        with pytest.raises(ValueError, match="original forward failure"):
+            raise
+
+    assert len(errors) == 1
+    assert errors[0][1] == "request"
 
 
 def test_runtime_config_uses_additional_config_without_touching_hf_config() -> None:
@@ -122,6 +190,75 @@ def test_runtime_config_rejects_invalid_capacity_values(
     )
     with pytest.raises(ValueError, match=message):
         VibeVoiceRuntimeConfig.from_vllm_config(config)
+
+
+def test_runner_acknowledges_named_kv_capability_after_model_load(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = object.__new__(OmniGPUModelRunner)
+    model = SimpleNamespace(
+        named_kv_branch_request=NamedKVBranchRequest(
+            name="negative",
+            memory_bytes=1,
+        )
+    )
+    events: list[str] = []
+
+    def load_model(_runner, *_args, **_kwargs) -> None:
+        events.append("loaded")
+        runner.model = model
+
+    monkeypatch.setattr(
+        "vllm_omni.worker.gpu_model_runner.GPUModelRunner.load_model",
+        load_model,
+    )
+    for method_name in (
+        "_maybe_enable_output_token_ids_for_model_sampler",
+        "_init_talker_mtp",
+        "_prewarm_attention_capture_workspaces",
+    ):
+        monkeypatch.setattr(
+            runner,
+            method_name,
+            lambda method_name=method_name: events.append(
+                f"{method_name}:{getattr(model, 'named_kv_branch_capability_acknowledged', False)}"
+            ),
+        )
+
+    OmniGPUModelRunner.load_model(runner)
+
+    assert model.named_kv_branch_capability_acknowledged is True
+    assert events == [
+        "loaded",
+        "_maybe_enable_output_token_ids_for_model_sampler:True",
+        "_init_talker_mtp:True",
+        "_prewarm_attention_capture_workspaces:True",
+    ]
+
+
+def test_runner_does_not_modify_undeclared_model_during_load(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = object.__new__(OmniGPUModelRunner)
+    model = SimpleNamespace()
+
+    def load_model(_runner, *_args, **_kwargs) -> None:
+        runner.model = model
+
+    monkeypatch.setattr(
+        "vllm_omni.worker.gpu_model_runner.GPUModelRunner.load_model",
+        load_model,
+    )
+    for method_name in (
+        "_maybe_enable_output_token_ids_for_model_sampler",
+        "_init_talker_mtp",
+        "_prewarm_attention_capture_workspaces",
+    ):
+        monkeypatch.setattr(runner, method_name, lambda: None)
+
+    OmniGPUModelRunner.load_model(runner)
+
+    assert not hasattr(model, "named_kv_branch_capability_acknowledged")
 
 
 def test_undeclared_model_keeps_named_kv_runner_path_disabled() -> None:
