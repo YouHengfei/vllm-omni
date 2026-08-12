@@ -260,7 +260,14 @@ def _gpu_processing_worker(
                 device="cuda",
                 dtype=torch.long,
             )
-            runner.input_batch = SimpleNamespace(req_ids=["runner-request"])
+            runner.input_batch = SimpleNamespace(
+                req_ids=["runner-request"],
+                num_computed_tokens_cpu=np.array([0], dtype=np.int32),
+            )
+            runner.query_start_loc = SimpleNamespace(
+                cpu=np.array([0, prompt_ids.numel()], dtype=np.int32)
+            )
+            runner.requests = {}
             runner.model_intermediate_buffer = {}
 
             @contextmanager
@@ -303,7 +310,8 @@ def _gpu_processing_worker(
                 scheduler_output,
                 num_input_tokens=prompt_ids.numel(),
             )
-            assert runner_ids is None
+            assert runner_ids is not None
+            torch.testing.assert_close(runner_ids, prompt_ids, rtol=0, atol=0)
             assert [item.shape[0] for item in runner_embeddings] == [2, 3]
             torch.testing.assert_close(
                 runner_merged[is_multimodal],

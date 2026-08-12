@@ -32,6 +32,10 @@ from vllm.multimodal import MULTIMODAL_REGISTRY
 from vllm.sequence import IntermediateTensors
 
 from vllm_omni.model_executor.models.output_templates import OmniOutput
+from vllm_omni.worker.named_kv_branch import (
+    NamedCausalKVBranch,
+    NamedKVBranchRequest,
+)
 
 from .audio_decode import (
     VibeVoiceAudioTokenDecodeOutput,
@@ -42,6 +46,7 @@ from .diffusion import (
     VibeVoiceDiffusionSampler,
     VibeVoiceRMSNorm,
 )
+from .negative_branch import VibeVoiceNegativeBranch
 from .processing_vibevoice import (
     AUDIO_BOS_TOKEN,
     AUDIO_EOS_TOKEN,
@@ -50,7 +55,9 @@ from .processing_vibevoice import (
     VibeVoiceDummyInputsBuilder,
     VibeVoiceMultiModalProcessor,
     VibeVoiceProcessingInfo,
+    SAMPLE_RATE,
 )
+from .runtime_config import VibeVoiceRuntimeConfig
 from .stateful import (
     VibeVoiceNegativeKVBranch,
     VibeVoiceStatefulInference,
@@ -323,6 +330,10 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         super().__init__()
         self.has_preprocess = True
         self.has_postprocess = True
+        self.have_multimodal_outputs = True
+        # VibeVoice serves decoded waveform only. Hidden rows remain internal
+        # positive conditions and must never be exposed as audio payloads.
+        self.omni_pooler_payload_include_hidden = False
         # Only the final scheduled row is needed as the positive diffusion
         # condition; never reconstruct a full prefix-cache hidden span.
         self.requires_full_prefix_cached_hidden_states = False
@@ -352,6 +363,14 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
             ),
         )
         self._negative_kv_branch: VibeVoiceNegativeKVBranch | None = None
+        runtime_config = VibeVoiceRuntimeConfig.from_vllm_config(vllm_config)
+        self.named_kv_branch_request = NamedKVBranchRequest(
+            name="negative",
+            memory_bytes=runtime_config.negative_kv_cache_memory_bytes,
+            activation_margin_bytes=(
+                runtime_config.negative_kv_activation_margin_bytes
+            ),
+        )
         self._pending_request_ids: list[str] = []
         self._pending_request_spans: list[tuple[str, int, int]] = []
         self._pending_audio_transitions: list[tuple[str, int]] = []
@@ -504,11 +523,19 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
             is_multimodal,
         )
 
-    def bind_negative_kv_branch(
+    def bind_named_kv_branch(
         self,
-        branch: VibeVoiceNegativeKVBranch,
+        store: NamedCausalKVBranch,
     ) -> None:
-        """Bind the future independent negative-Qwen PagedAttention owner."""
+        """Wrap and bind the runner-owned negative-Qwen PagedAttention store."""
+        if self._negative_kv_branch is not None:
+            raise RuntimeError("VibeVoice negative KV branch was bound twice.")
+        branch = VibeVoiceNegativeBranch(
+            store=store,
+            language_model=self.model.language_model,
+            hidden_size=int(self.config.text_config.hidden_size),
+        )
+        self._stateful.bind_negative_branch(branch)
         self._negative_kv_branch = branch
 
     def record_negative_condition(
@@ -553,10 +580,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
                 and input_ids.numel() > 0
                 and int(input_ids[-1].item()) == self._stateful.audio_bos_token_id
             ):
-                self._stateful.start_audio_segment(
-                    state.request_id,
-                    self._negative_kv_branch,
-                )
+                self._stateful.start_audio_segment(state.request_id)
         elif input_ids.numel() == 1:
             token_id = int(input_ids.reshape(-1)[0].item())
             if token_id == self._stateful.audio_token_id:
@@ -571,7 +595,6 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
                     token_id=token_id,
                     token_embedding=input_embeds.reshape(1, -1),
                     kernel=self.model,
-                    negative_kv_branch=self._negative_kv_branch,
                 )
                 input_embeds = next_embedding
 
@@ -599,8 +622,60 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
 
     def on_requests_finished(self, finished_req_ids: set[str] | list[str]) -> None:
         self._stateful.on_requests_finished(finished_req_ids)
-        if self._negative_kv_branch is not None:
-            self._negative_kv_branch.on_requests_finished(finished_req_ids)
+
+    def make_omni_output(
+        self,
+        model_outputs: torch.Tensor | OmniOutput,
+        **kwargs: Any,
+    ) -> OmniOutput:
+        """Publish each newly decoded mono 24 kHz waveform chunk once."""
+        if isinstance(model_outputs, OmniOutput):
+            return model_outputs
+
+        runtime_info = kwargs.get("model_intermediate_buffer")
+        if runtime_info is None:
+            runtime_info = kwargs.get("runtime_additional_information") or []
+        if not isinstance(runtime_info, list):
+            raise TypeError(
+                "VibeVoice make_omni_output requires request-aligned runtime information."
+            )
+
+        ready_request_ids: list[str] = []
+        audio_chunks: list[torch.Tensor] = []
+        for info in runtime_info:
+            if not isinstance(info, dict):
+                continue
+            request_id = info.get("request_id")
+            if not isinstance(request_id, str) or not request_id:
+                continue
+            waveform = self._stateful.drain_waveform_chunks(request_id)
+            if waveform is None:
+                continue
+            if waveform.ndim != 1 or not waveform.is_floating_point():
+                raise ValueError(
+                    "VibeVoice published waveform must be a one-dimensional "
+                    "floating-point tensor."
+                )
+            ready_request_ids.append(request_id)
+            audio_chunks.append(
+                waveform.detach().to(device="cpu", dtype=torch.float32).contiguous()
+            )
+
+        multimodal_outputs: dict[str, Any] = {}
+        if audio_chunks:
+            sample_rate = torch.tensor(SAMPLE_RATE, dtype=torch.int32)
+            multimodal_outputs = {
+                "audio": audio_chunks,
+                "sr": [sample_rate for _ in audio_chunks],
+                "meta": {
+                    "req_id": ready_request_ids,
+                    "sparse_audio": ["1"],
+                },
+            }
+        return OmniOutput(
+            text_hidden_states=model_outputs,
+            multimodal_outputs=multimodal_outputs,
+        )
 
     def forward(
         self,
@@ -709,7 +784,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
                 )
 
         # Save the exact embedding consumed by the current positive Qwen step.
-        # If that step samples audio_token, the future negative branch advances
+        # If that step samples audio_token, the bound negative branch advances
         # this embedding before M4a on the next runner iteration.
         if inputs_embeds is not None:
             for request_id, span_start, span_end in pending_request_spans:
@@ -747,6 +822,7 @@ __all__ = [
     "VibeVoiceForConditionalGeneration",
     "VibeVoiceModel",
     "VibeVoiceMultiModalProjector",
+    "VibeVoiceNegativeBranch",
     "VibeVoiceRMSNorm",
     "_build_vibevoice_weights_mapper",
 ]

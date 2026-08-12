@@ -7,7 +7,10 @@
 # decode step. The model therefore owns all per-request side state in stage 0.
 #
 # These are conservative first-version defaults for the Microsoft 1.5B
-# checkpoint. Diffusion and convolutional side-path allocations are outside
+# checkpoint. Two-way TP shards Qwen and duplicates the side modules; a
+# single-GPU override remains possible only when the card can satisfy the same
+# fixed positive/negative KV and activation-memory guards. Diffusion and
+# convolutional side-path allocations are outside
 # vLLM's paged-KV accounting, so the KV cache is capped instead of consuming
 # all memory allowed by gpu_memory_utilization.
 async_chunk: false
@@ -21,8 +24,11 @@ enable_chunked_prefill: true
 
 stages:
   - stage_id: 0
-    devices: "0"
-    max_num_seqs: 8
+    devices: "0,1"
+    # Correctness-first M4c v1: one complete positive and negative sequence
+    # must remain resident, so KV-pressure preemption is unreachable.
+    tensor_parallel_size: 2
+    max_num_seqs: 1
     gpu_memory_utilization: 0.9
     # The processor and scheduler contract permits up to eight ordered
     # reference audios (for example, an eight-speaker prompt). At 60 seconds
@@ -36,6 +42,11 @@ stages:
     # long-form requests while reserving VRAM for the positive/negative CFG
     # branches, Diffusion Head, Acoustic Decoder, and Semantic Encoder.
     kv_cache_memory_bytes: 6442450944  # 6 GiB
+    engine_extras:
+      additional_config:
+        vibevoice_runtime_config:
+          negative_kv_cache_memory_bytes: 2147483648  # 2 GiB
+          negative_kv_activation_margin_bytes: 536870912  # 512 MiB
 
     # The official backbone supports 64k positions and generation_config.json
     # defaults to 40,500 new tokens. Chunked prefill bounds each scheduler

@@ -85,6 +85,58 @@ class OmniGPUModelRunner(GPUModelRunner):
         self.omni_prefix_cache = None
         self._sampled_token_ids_cpu_override = None
         self._omni_query_start_loc_model_kwarg = False
+        self.named_kv_branches: dict[str, Any] = {}
+
+    def initialize_kv_cache(self, kv_cache_config, is_profiling: bool = False):
+        super().initialize_kv_cache(
+            kv_cache_config,
+            is_profiling=is_profiling,
+        )
+        if not is_profiling:
+            self._maybe_bind_named_kv_branch()
+
+    def _maybe_bind_named_kv_branch(self) -> None:
+        request = getattr(self.model, "named_kv_branch_request", None)
+        if request is None:
+            return
+
+        from vllm_omni.worker.named_kv_branch import (
+            NamedCausalKVBranch,
+            NamedKVBranchRequest,
+        )
+
+        if not isinstance(request, NamedKVBranchRequest):
+            raise TypeError(
+                "model.named_kv_branch_request must be a "
+                f"NamedKVBranchRequest, got {type(request).__name__}."
+            )
+        if request.name in self.named_kv_branches:
+            raise RuntimeError(
+                f"Named KV branch {request.name!r} was initialized twice."
+            )
+        bind = getattr(self.model, "bind_named_kv_branch", None)
+        if not callable(bind):
+            raise TypeError(
+                "A model declaring named_kv_branch_request must implement "
+                "bind_named_kv_branch(store)."
+            )
+
+        branch = NamedCausalKVBranch(runner=self, request=request)
+        try:
+            bind(branch)
+        except Exception:
+            branch.close()
+            raise
+        self.named_kv_branches[request.name] = branch
+
+    def shutdown(self) -> None:
+        for branch in self.named_kv_branches.values():
+            try:
+                branch.close()
+            except Exception:
+                logger.exception("Failed to close named KV branch %r", branch.name)
+        self.named_kv_branches.clear()
+        super().shutdown()
 
     def _to_list(self, sampled_token_ids: torch.Tensor) -> list[list[int]]:
         override_fn = self._sampled_token_ids_cpu_override

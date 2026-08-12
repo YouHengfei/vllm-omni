@@ -351,10 +351,19 @@ def test_single_stage_deploy_defaults_match_vibevoice_generation_contract():
 
     stage = deploy.stages[0]
     assert stage.stage_id == 0
+    assert stage.devices == "0,1"
+    assert stage.tensor_parallel_size == 2
     assert stage.enforce_eager is True
     assert stage.async_scheduling is True
     assert stage.max_model_len == 65536
+    assert stage.max_num_seqs == 1
     assert stage.engine_extras["kv_cache_memory_bytes"] == 6 * 1024**3
+    assert stage.engine_extras["additional_config"] == {
+        "vibevoice_runtime_config": {
+            "negative_kv_cache_memory_bytes": 2 * 1024**3,
+            "negative_kv_activation_margin_bytes": 512 * 1024**2,
+        }
+    }
     assert stage.engine_extras["limit_mm_per_prompt"] == {"audio": 8}
     assert stage.skip_mm_profiling is True
     assert stage.default_sampling_params == {

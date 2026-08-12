@@ -46,18 +46,28 @@ def _tp2_worker(
         )
 
         import gc
+        from math import ceil
+        from types import SimpleNamespace
 
         import torch.distributed as dist
-        from vllm.config import set_current_vllm_config
+        from vllm.config import (
+            get_layers_from_vllm_config,
+            set_current_vllm_config,
+        )
         from vllm.distributed import (
             destroy_distributed_environment,
             destroy_model_parallel,
             init_distributed_environment,
             initialize_model_parallel,
         )
+        from vllm.model_executor.layers.attention import Attention
         from vllm.model_executor.model_loader import get_model_loader
 
         from vllm_omni.engine.arg_utils import OmniEngineArgs
+        from vllm_omni.worker.named_kv_branch import (
+            NamedCausalKVBranch,
+            NamedKVBranchRequest,
+        )
 
         torch.cuda.set_device(rank)
         args = OmniEngineArgs(
@@ -71,9 +81,11 @@ def _tp2_worker(
             load_format="safetensors",
             trust_remote_code=False,
             max_model_len=1024,
+            max_num_seqs=1,
             tensor_parallel_size=2,
             pipeline_parallel_size=1,
             enforce_eager=True,
+            enable_prefix_caching=False,
         )
         config = args.create_engine_config()
         init_distributed_environment(
@@ -162,6 +174,116 @@ def _tp2_worker(
             gathered_qwen = [torch.empty_like(qwen_digest) for _ in range(2)]
             dist.all_gather(gathered_qwen, qwen_digest)
             assert gathered_qwen[0].item() != gathered_qwen[1].item()
+
+            # PR-2: each TP rank owns its sharded negative KV tensor while the
+            # shared Qwen forward produces identical full hidden rows.
+            attention_layers = get_layers_from_vllm_config(config, Attention)
+            layer_names = list(attention_layers)
+            first_attention = attention_layers[layer_names[0]]
+            kv_spec = first_attention.get_kv_cache_spec(config)
+            assert kv_spec is not None
+            required_blocks = ceil(
+                config.model_config.max_model_len / kv_spec.block_size
+            )
+            fake_runner = SimpleNamespace(
+                vllm_config=config,
+                device=torch.device("cuda", rank),
+                kv_cache_config=SimpleNamespace(
+                    kv_cache_groups=[SimpleNamespace(kv_cache_spec=kv_spec)],
+                    num_blocks=required_blocks,
+                ),
+                attn_groups=[
+                    [
+                        SimpleNamespace(
+                            backend=first_attention.get_attn_backend(),
+                            layer_names=layer_names,
+                        )
+                    ]
+                ],
+                _kernel_block_sizes=[kv_spec.block_size],
+            )
+            negative_store = NamedCausalKVBranch(
+                runner=fake_runner,
+                request=NamedKVBranchRequest(
+                    name="negative",
+                    memory_bytes=(
+                        required_blocks
+                        * len(layer_names)
+                        * kv_spec.page_size_bytes
+                    ),
+                ),
+            )
+            model.bind_named_kv_branch(negative_store)
+            negative_request_id = "tp2-negative"
+            model._stateful.start_audio_segment(negative_request_id)
+            bos_embedding = model.embed_input_ids(
+                torch.tensor(
+                    [model._stateful.audio_bos_token_id],
+                    dtype=torch.long,
+                    device="cuda",
+                )
+            )
+            model._stateful.record_positive_condition(
+                negative_request_id,
+                torch.linspace(
+                    -0.5,
+                    0.5,
+                    1536,
+                    dtype=torch.bfloat16,
+                    device="cuda",
+                ).reshape(1, -1),
+            )
+            with torch.inference_mode():
+                negative_hidden = model._negative_kv_branch.forward_step(
+                    [negative_request_id],
+                    [bos_embedding],
+                )[0]
+                model._stateful.record_negative_condition(
+                    negative_request_id,
+                    negative_hidden,
+                )
+                torch.manual_seed(12_345)
+                next_embeddings, audio_chunks = (
+                    model._stateful.process_audio_tokens_batch(
+                        request_ids=[negative_request_id],
+                        token_embeddings=[bos_embedding],
+                        kernel=model.model,
+                    )
+                )
+            gathered_negative = [
+                torch.empty_like(negative_hidden) for _ in range(2)
+            ]
+            dist.all_gather(gathered_negative, negative_hidden)
+            torch.testing.assert_close(
+                gathered_negative[0],
+                gathered_negative[1],
+            )
+            gathered_next_embedding = [
+                torch.empty_like(next_embeddings[0]) for _ in range(2)
+            ]
+            gathered_audio = [
+                torch.empty_like(audio_chunks[0]) for _ in range(2)
+            ]
+            dist.all_gather(gathered_next_embedding, next_embeddings[0])
+            dist.all_gather(gathered_audio, audio_chunks[0])
+            torch.testing.assert_close(
+                gathered_next_embedding[0],
+                gathered_next_embedding[1],
+            )
+            torch.testing.assert_close(
+                gathered_audio[0],
+                gathered_audio[1],
+            )
+            state = model._stateful.get(negative_request_id)
+            assert state is not None
+            assert state.audio_token_count == 1
+            assert len(state.waveform_chunks_cpu) == 1
+            assert state.waveform_chunks_cpu[0].shape == (3_200,)
+            assert torch.isfinite(state.waveform_chunks_cpu[0]).all()
+            assert negative_store.get_sequence_length(negative_request_id) == 1
+            model._stateful.cleanup_request(negative_request_id)
+            assert negative_store.num_free_blocks == negative_store.num_blocks
+            negative_store.close()
 
             queue.put(
                 {

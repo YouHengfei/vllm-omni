@@ -1,9 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Opt-in Processing smoke through the real Omni AR runtime.
-
-This intentionally generates one control token only. Stateful waveform
-inference is outside this test's scope.
-"""
+"""Opt-in waveform smoke through the real Omni AR runtime."""
 
 from __future__ import annotations
 
@@ -61,19 +57,22 @@ def _omni_ar_worker(
                     "<|vision_start|><|vision_pad|><|vision_end|> "
                     "Speech output:\n<|vision_start|>"
                 )
-                prompt = {
-                    "prompt": prompt_text,
-                    "prompt_token_ids": tokenizer.encode(
-                        prompt_text,
-                        add_special_tokens=False,
-                    ),
-                    "multi_modal_data": {
-                        "audio": [(np.zeros(3_200, dtype=np.float32), 24_000)]
-                    },
-                    "multi_modal_uuids": {
-                        "audio": ["omni-ar-processing-smoke:audio:0"]
-                    },
-                }
+                def make_prompt(request_id: str) -> dict[str, Any]:
+                    return {
+                        "prompt": prompt_text,
+                        "prompt_token_ids": tokenizer.encode(
+                            prompt_text,
+                            add_special_tokens=False,
+                        ),
+                        "multi_modal_data": {
+                            "audio": [(np.zeros(3_200, dtype=np.float32), 24_000)]
+                        },
+                        "multi_modal_uuids": {
+                            "audio": [f"{request_id}:audio:0"]
+                        },
+                    }
+
+                prompt = make_prompt("omni-ar-processing-smoke")
                 params = SamplingParams(
                     max_tokens=1,
                     temperature=0.0,
@@ -95,6 +94,52 @@ def _omni_ar_worker(
                 mm_output = getattr(final, "multimodal_output", None)
                 tensors = getattr(mm_output, "tensors", {}) if mm_output is not None else {}
                 audio = tensors.get("audio") if isinstance(tensors, dict) else None
+
+                # Force two real audio-token transitions. The second one
+                # consumes the first decoded semantic feedback embedding on
+                # both positive and negative Qwen branches.
+                forced_params = SamplingParams(
+                    max_tokens=3,
+                    temperature=0.0,
+                    allowed_token_ids=[151654],
+                    stop_token_ids=[151643],
+                    detokenize=False,
+                    extra_args={
+                        "guidance_scale": 1.3,
+                        "num_diffusion_steps": 1,
+                    },
+                )
+                forced_outputs = []
+                async for output in engine.generate(
+                    prompt=make_prompt("omni-ar-negative-step-smoke"),
+                    request_id="omni-ar-negative-step-smoke",
+                    sampling_params_list=[forced_params],
+                ):
+                    forced_outputs.append(output)
+                forced_final = forced_outputs[-1]
+                forced_token_ids = list(forced_final.outputs[0].token_ids)
+                forced_mm_output = getattr(
+                    forced_final.outputs[0],
+                    "multimodal_output",
+                    None,
+                )
+                if forced_mm_output is None:
+                    forced_mm_output = getattr(
+                        forced_final,
+                        "multimodal_output",
+                        None,
+                    )
+                forced_audio = (
+                    forced_mm_output.get("audio")
+                    if forced_mm_output is not None
+                    else None
+                )
+                forced_sample_rate = (
+                    forced_mm_output.get("sr")
+                    if forced_mm_output is not None
+                    else None
+                )
+
                 return {
                     "scheduler_cls": scheduler_cls,
                     "worker_type": worker_type,
@@ -102,6 +147,28 @@ def _omni_ar_worker(
                     "finished": bool(final.finished),
                     "token_ids": token_ids,
                     "audio_shape": tuple(audio.shape) if isinstance(audio, torch.Tensor) else None,
+                    "forced_audio_token_ids": forced_token_ids,
+                    "forced_finished": bool(forced_final.finished),
+                    "forced_audio_shape": (
+                        tuple(forced_audio.shape)
+                        if isinstance(forced_audio, torch.Tensor)
+                        else None
+                    ),
+                    "forced_audio_dtype": (
+                        str(forced_audio.dtype)
+                        if isinstance(forced_audio, torch.Tensor)
+                        else None
+                    ),
+                    "forced_audio_finite": (
+                        bool(torch.isfinite(forced_audio).all())
+                        if isinstance(forced_audio, torch.Tensor)
+                        else False
+                    ),
+                    "forced_sample_rate": (
+                        int(forced_sample_rate.item())
+                        if isinstance(forced_sample_rate, torch.Tensor)
+                        else forced_sample_rate
+                    ),
                 }
             finally:
                 engine.shutdown()
@@ -164,17 +231,35 @@ def test_processing_runs_on_official_omni_ar_async_scheduler(
     assert result["finished"] is True
     assert len(result["token_ids"]) == 1
     assert result["token_ids"][0] in {151652, 151653, 151654, 151643}
+    assert result["forced_audio_token_ids"] == [151654, 151654, 151654]
+    assert result["forced_finished"] is True
+
+
+def test_runtime_publishes_decoded_mono_24khz_waveform(
+    omni_ar_processing_result: dict[str, Any],
+) -> None:
+    result = omni_ar_processing_result
+    # The first audio token is sampled from prefill. The next two scheduled
+    # steps each publish one 3200-sample chunk, accumulated by request.
+    assert result["audio_shape"] is None
+    assert result["forced_audio_shape"] == (6_400,)
+    assert result["forced_audio_dtype"] == "torch.float32"
+    assert result["forced_audio_finite"] is True
+    assert result["forced_sample_rate"] == 24_000
 
 
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "Known pre-inference boundary: final_output_type=audio currently exposes "
-        "reference encoder embeddings rather than a decoded 24 kHz waveform"
+        "The stock runner reports a sampled token only on the next scheduled "
+        "forward. If max_tokens ends on audio_token, no final forward exists "
+        "to decode that last chunk; fixing this needs a new post-sample model "
+        "hook or model-specific sampler and is outside the current runtime plan."
     ),
 )
-def test_processing_runtime_does_not_mislabel_reference_embeddings_as_waveform(
+def test_max_token_boundary_decodes_the_final_sampled_audio_token(
     omni_ar_processing_result: dict[str, Any],
 ) -> None:
-    audio_shape = omni_ar_processing_result["audio_shape"]
-    assert audio_shape is None or len(audio_shape) == 1
+    # Microsoft generate() decodes all three sampled audio tokens immediately
+    # and returns 9600 samples. The current delayed transition publishes two.
+    assert omni_ar_processing_result["forced_audio_shape"] == (9_600,)

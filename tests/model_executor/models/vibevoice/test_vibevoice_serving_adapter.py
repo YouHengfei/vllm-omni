@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+import torch
 from vllm import SamplingParams
 from vllm.multimodal.media import MediaConnector
 
@@ -217,6 +218,7 @@ def test_normal_speech_serving_path_applies_uuid_and_sampling_hooks(
     }
     assert captured["prompt"]["prompt_token_ids"]
     params = captured["sampling_params_list"][0]
+    assert params.temperature == 0.0
     assert params.allowed_token_ids == VIBEVOICE_VALID_TOKEN_IDS
     assert params.stop_token_ids == [151643]
     assert params.all_stop_token_ids == {151643}
@@ -239,7 +241,7 @@ def test_vibevoice_sampling_constraints_replace_object_without_mutating_caller()
     (resolved,) = adapter.apply_sampling_overrides([caller], request)
 
     assert resolved is not caller
-    assert resolved.temperature == 0.7
+    assert resolved.temperature == 0.0
     assert resolved.max_tokens == 123
     assert resolved.allowed_token_ids == VIBEVOICE_VALID_TOKEN_IDS
     assert resolved.stop_token_ids == [151643]
@@ -248,13 +250,6 @@ def test_vibevoice_sampling_constraints_replace_object_without_mutating_caller()
     assert caller == caller_before
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Known Processing issue: VibeVoice serving reapplies token/stop constraints "
-        "but does not yet force Microsoft's argmax token-selection semantics"
-    ),
-)
 def test_vibevoice_sampling_constraints_force_official_argmax() -> None:
     adapter = _adapter()
     request = OpenAICreateSpeechRequest(input="hello", ref_audio="ref")
@@ -273,6 +268,45 @@ def test_vibevoice_sampling_constraints_force_official_argmax() -> None:
     assert resolved.temperature == 0.0
 
 
+def test_vibevoice_nonstreaming_serving_serializes_published_waveform() -> None:
+    serving = object.__new__(OmniOpenAIServingSpeech)
+    serving._tts_model_type = "vibevoice"
+    serving._request_ref_audio_artifact_keys = {}
+    serving._ref_audio_model_artifact_ready = set()
+    serving._ref_audio_resolve_cache = {}
+    waveform = np.linspace(-0.25, 0.25, 3_200, dtype=np.float32)
+    multimodal_output = {
+        "audio": torch.from_numpy(waveform),
+        "sr": torch.tensor(24_000, dtype=torch.int32),
+    }
+    final = SimpleNamespace(
+        multimodal_output=multimodal_output,
+        request_output=None,
+        outputs=[],
+    )
+
+    async def generator():
+        yield final
+
+    async def prepare(*_args, **_kwargs):
+        return "vibevoice-serving", generator(), {}
+
+    serving._prepare_speech_generation = prepare
+    request = OpenAICreateSpeechRequest(
+        input="hello",
+        ref_audio="ref",
+        response_format="wav",
+    )
+
+    audio_bytes, media_type = asyncio.run(serving._generate_audio_bytes(request))
+
+    assert media_type == "audio/wav"
+    assert isinstance(audio_bytes, bytes)
+    assert audio_bytes[:4] == b"RIFF"
+    assert b"WAVE" in audio_bytes[:16]
+    assert len(audio_bytes) > 44
+
+
 def test_vibevoice_sampling_constraints_replace_dict_and_are_idempotent() -> None:
     adapter = _adapter()
     request = OpenAICreateSpeechRequest(input="hello", ref_audio="ref")
@@ -289,7 +323,7 @@ def test_vibevoice_sampling_constraints_replace_dict_and_are_idempotent() -> Non
 
     assert first == second
     assert first[0] == {
-        "temperature": 0.5,
+        "temperature": 0.0,
         "allowed_token_ids": VIBEVOICE_VALID_TOKEN_IDS,
         "stop_token_ids": [151643],
         "detokenize": False,

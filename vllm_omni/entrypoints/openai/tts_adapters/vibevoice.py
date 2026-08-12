@@ -204,6 +204,7 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
         if isinstance(params, dict):
             params = copy.deepcopy(params)
             params.update(
+                temperature=0.0,
                 allowed_token_ids=list(VIBEVOICE_VALID_TOKEN_IDS),
                 stop_token_ids=[151643],
                 detokenize=False,
@@ -211,6 +212,7 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
         else:
             clone = getattr(params, "clone", None)
             params = clone() if callable(clone) else copy.deepcopy(params)
+            params.temperature = 0.0
             params.allowed_token_ids = list(VIBEVOICE_VALID_TOKEN_IDS)
             params.stop_token_ids = [151643]
             params.detokenize = False

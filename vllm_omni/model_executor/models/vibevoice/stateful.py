@@ -2,11 +2,10 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Per-request state for VibeVoice's single-stage AR decode loop.
 
-This module deliberately owns no scheduler or PagedAttention storage. The
-positive branch remains runner-owned vLLM Qwen2 state. A future negative-branch
-owner must publish the corresponding hidden condition through
-:meth:`record_negative_condition`; until then an audio-token transition fails
-explicitly instead of silently running unguided diffusion.
+This module deliberately owns no scheduler or PagedAttention storage. Positive
+KV remains in the standard runner and negative KV remains in a bound runner-owned
+branch. This state machine owns only request-local conditions, convolution caches,
+and waveform chunks.
 """
 
 from __future__ import annotations
@@ -43,7 +42,7 @@ class VibeVoiceInferenceKernel(Protocol):
 
 
 class VibeVoiceNegativeKVBranch(Protocol):
-    """Required ownership boundary for the future negative Qwen branch.
+    """Ownership boundary for the bound negative Qwen branch.
 
     The implementation must own independent PagedAttention KV, advance only on
     VibeVoice audio-generation inputs, reset to a one-token audio-BOS context at
@@ -61,7 +60,7 @@ class VibeVoiceNegativeKVBranch(Protocol):
         """Advance each negative branch by one embedding and return hidden rows."""
         ...
 
-    def on_requests_finished(self, request_ids: set[str] | list[str]) -> None: ...
+    def free(self, request_id: str) -> None: ...
 
 
 @dataclass(slots=True)
@@ -95,7 +94,7 @@ class VibeVoiceRequestState:
         self.audio_token_count = 0
 
 
-class da:
+class VibeVoiceStatefulInference:
     """Request-indexed state machine around the frozen M4a/M4b kernels.
 
     Convolution caches and waveform chunks are parent-request state. Qwen KV is
@@ -139,6 +138,15 @@ class da:
         )
         self._states: dict[str, VibeVoiceRequestState] = {}
         self._deferred_cleanup_ids: set[str] = set()
+        self._negative_kv_branch: VibeVoiceNegativeKVBranch | None = None
+
+    def bind_negative_branch(
+        self,
+        branch: VibeVoiceNegativeKVBranch,
+    ) -> None:
+        if self._negative_kv_branch is not None:
+            raise RuntimeError("VibeVoice negative KV branch was bound twice.")
+        self._negative_kv_branch = branch
 
     @staticmethod
     def _validate_guidance_scale(value: Any) -> float:
@@ -268,26 +276,18 @@ class da:
         )
         state.negative_reset_pending = False
 
-    def start_audio_segment(
-        self,
-        request_id: str,
-        negative_kv_branch: VibeVoiceNegativeKVBranch | None = None,
-    ) -> None:
+    def start_audio_segment(self, request_id: str) -> None:
         state = self.get_or_create(request_id)
-        self._start_audio_segment(state, negative_kv_branch)
+        self._start_audio_segment(state)
 
-    def _start_audio_segment(
-        self,
-        state: VibeVoiceRequestState,
-        negative_kv_branch: VibeVoiceNegativeKVBranch | None,
-    ) -> None:
+    def _start_audio_segment(self, state: VibeVoiceRequestState) -> None:
         state.in_audio_segment = True
         state.positive_condition = None
         state.negative_condition = None
         state.negative_input_embedding = None
         state.negative_reset_pending = True
-        if negative_kv_branch is not None:
-            negative_kv_branch.reset_audio_segment(state.request_id)
+        if self._negative_kv_branch is not None:
+            self._negative_kv_branch.reset_audio_segment(state.request_id)
 
     def _finish_audio_segment(self, state: VibeVoiceRequestState) -> None:
         state.in_audio_segment = False
@@ -295,6 +295,8 @@ class da:
         state.negative_condition = None
         state.negative_input_embedding = None
         state.negative_reset_pending = False
+        if self._negative_kv_branch is not None:
+            self._negative_kv_branch.free(state.request_id)
 
     def process_sampled_token(
         self,
@@ -303,7 +305,6 @@ class da:
         token_id: int,
         token_embedding: torch.Tensor,
         kernel: VibeVoiceInferenceKernel,
-        negative_kv_branch: VibeVoiceNegativeKVBranch | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Apply one sampled control-token transition before the next Qwen step."""
         state = self.get_or_create(request_id)
@@ -320,7 +321,7 @@ class da:
 
         token_id = int(token_id)
         if token_id == self.audio_bos_token_id:
-            self._start_audio_segment(state, negative_kv_branch)
+            self._start_audio_segment(state)
             state.next_embedding = token_embedding
             return token_embedding, None
         if token_id == self.audio_eos_token_id:
@@ -472,6 +473,23 @@ class da:
             audio_chunks.append(decoded.audio)
         return next_embeddings, audio_chunks
 
+    def drain_waveform_chunks(self, request_id: str) -> torch.Tensor | None:
+        """Transfer unpublished CPU waveform chunks to the output channel.
+
+        The state machine owns chunks only until ``make_omni_output`` publishes
+        them. Omni's output processor then owns request-level accumulation, so
+        keeping another cumulative copy here would waste host memory for long
+        generations and could publish a chunk more than once.
+        """
+        state = self._states.get(request_id)
+        if state is None or not state.waveform_chunks_cpu:
+            return None
+        chunks = state.waveform_chunks_cpu
+        state.waveform_chunks_cpu = []
+        if len(chunks) == 1:
+            return chunks[0]
+        return torch.cat(chunks, dim=0).contiguous()
+
     def on_requests_finished(
         self,
         request_ids: set[str] | list[str],
@@ -496,6 +514,8 @@ class da:
             self.cleanup_request(request_id)
 
     def cleanup_request(self, request_id: str) -> None:
+        if self._negative_kv_branch is not None:
+            self._negative_kv_branch.free(request_id)
         state = self._states.pop(request_id, None)
         if state is not None:
             state.clear()

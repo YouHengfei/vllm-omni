@@ -51,17 +51,27 @@ def _gpu_load_worker(model_path_str: str, port: int, queue: Any) -> None:
         )
 
         import gc
+        from math import ceil
+        from types import SimpleNamespace
 
-        from vllm.config import set_current_vllm_config
+        from vllm.config import (
+            get_layers_from_vllm_config,
+            set_current_vllm_config,
+        )
         from vllm.distributed import (
             destroy_distributed_environment,
             destroy_model_parallel,
             init_distributed_environment,
             initialize_model_parallel,
         )
+        from vllm.model_executor.layers.attention import Attention
         from vllm.model_executor.model_loader import get_model_loader
 
         from vllm_omni.engine.arg_utils import OmniEngineArgs
+        from vllm_omni.worker.named_kv_branch import (
+            NamedCausalKVBranch,
+            NamedKVBranchRequest,
+        )
 
         model_path = Path(model_path_str)
         torch.cuda.set_device(0)
@@ -75,7 +85,9 @@ def _gpu_load_worker(model_path_str: str, port: int, queue: Any) -> None:
             load_format="safetensors",
             trust_remote_code=False,
             max_model_len=4096,
+            max_num_seqs=1,
             enforce_eager=True,
+            enable_prefix_caching=False,
         )
         config = args.create_engine_config()
         init_distributed_environment(world_size=1, rank=0, local_rank=0, backend="nccl")
@@ -250,6 +262,83 @@ def _gpu_load_worker(model_path_str: str, port: int, queue: Any) -> None:
             # guard while treating cached chunking as the official path.
             assert (cached_semantic - full_semantic).abs().max().item() <= 0.25
 
+            # PR-2: bind the production VibeVoice negative executor to a
+            # minimal fixed store and advance official Qwen weights twice.
+            attention_layers = get_layers_from_vllm_config(config, Attention)
+            layer_names = list(attention_layers)
+            assert len(layer_names) == 28
+            first_attention = attention_layers[layer_names[0]]
+            kv_spec = first_attention.get_kv_cache_spec(config)
+            assert kv_spec is not None
+            backend = first_attention.get_attn_backend()
+            required_blocks = ceil(
+                config.model_config.max_model_len / kv_spec.block_size
+            )
+            fake_runner = SimpleNamespace(
+                vllm_config=config,
+                device=torch.device("cuda"),
+                kv_cache_config=SimpleNamespace(
+                    kv_cache_groups=[SimpleNamespace(kv_cache_spec=kv_spec)],
+                    num_blocks=required_blocks,
+                ),
+                attn_groups=[
+                    [
+                        SimpleNamespace(
+                            backend=backend,
+                            layer_names=layer_names,
+                        )
+                    ]
+                ],
+                _kernel_block_sizes=[kv_spec.block_size],
+            )
+            negative_store = NamedCausalKVBranch(
+                runner=fake_runner,
+                request=NamedKVBranchRequest(
+                    name="negative",
+                    memory_bytes=(
+                        required_blocks
+                        * len(layer_names)
+                        * kv_spec.page_size_bytes
+                    ),
+                ),
+            )
+            model.bind_named_kv_branch(negative_store)
+            request_id = "official-negative"
+            model._stateful.start_audio_segment(request_id)
+            bos_embedding = model.embed_input_ids(
+                torch.tensor(
+                    [model._stateful.audio_bos_token_id],
+                    dtype=torch.long,
+                    device="cuda",
+                )
+            )
+            feedback_embedding = torch.linspace(
+                -0.25,
+                0.25,
+                1536,
+                dtype=torch.bfloat16,
+                device="cuda",
+            ).reshape(1, -1)
+            with torch.inference_mode():
+                first_negative = model._negative_kv_branch.forward_step(
+                    [request_id],
+                    [bos_embedding],
+                )[0]
+                second_negative = model._negative_kv_branch.forward_step(
+                    [request_id],
+                    [feedback_embedding],
+                )[0]
+            assert first_negative.shape == (1, 1536)
+            assert second_negative.shape == (1, 1536)
+            assert first_negative.dtype == torch.bfloat16
+            assert torch.isfinite(first_negative).all()
+            assert torch.isfinite(second_negative).all()
+            assert not torch.equal(first_negative, second_negative)
+            assert negative_store.get_sequence_length(request_id) == 2
+            model._stateful.cleanup_request(request_id)
+            assert negative_store.num_free_blocks == negative_store.num_blocks
+            negative_store.close()
+
             queue.put(
                 {
                     "class_name": type(model).__name__,
@@ -257,6 +346,8 @@ def _gpu_load_worker(model_path_str: str, port: int, queue: Any) -> None:
                     "parameter_bytes": sum(
                         param.numel() * param.element_size() for param in params.values()
                     ),
+                    "negative_layers": len(layer_names),
+                    "negative_steps": 2,
                 }
             )
         finally:
@@ -301,4 +392,6 @@ def test_complete_official_checkpoint_loads_on_gpu():
         "class_name": "VibeVoiceForConditionalGeneration",
         "num_parameters": 1064,
         "parameter_bytes": 5_408_043_974,
+        "negative_layers": 28,
+        "negative_steps": 2,
     }
