@@ -52,12 +52,39 @@ def _install_trace(
     semantic_encoder = model.model.semantic_tokenizer_encoder
     original_semantic_forward = semantic_encoder.forward
 
-    def traced_cfg_forward(self: Any, *args: Any, **kwargs: Any) -> Any:
-        result = original_cfg_forward(*args, **kwargs)
+    def traced_cfg_forward(
+        self: Any,
+        diffusion_idx: torch.Tensor,
+        next_tokens: torch.Tensor,
+        outputs: Any,
+        inputs_embeds: torch.Tensor | None,
+        negative_input_ids: torch.Tensor,
+        negative_model_kwargs: dict[str, Any],
+        model_forward: Any,
+    ) -> Any:
+        if inputs_embeds is None:
+            negative_input = self.get_input_embeddings()(
+                torch.tensor(
+                    [self.config.audio_bos_token_id],
+                    device=next_tokens.device,
+                )
+            )
+        else:
+            negative_input = inputs_embeds[diffusion_idx, -1, :]
+        result = original_cfg_forward(
+            diffusion_idx,
+            next_tokens,
+            outputs,
+            inputs_embeds,
+            negative_input_ids,
+            negative_model_kwargs,
+            model_forward,
+        )
         condition = result[0]
         half = condition.shape[0] // 2
         trace.append(
             {
+                "negative_input_embedding": negative_input.detach().cpu().reshape(half, -1),
                 "positive_condition": condition[:half].detach().cpu(),
                 "negative_condition": condition[half:].detach().cpu(),
             }
@@ -219,17 +246,17 @@ def main() -> None:
             dtype=torch.bool,
             device="cuda",
         ),
-        max_new_tokens=2,
+        max_new_tokens=3,
         do_sample=False,
         guidance_scale=1.3,
         num_diffusion_steps=1,
         return_dict_in_generate=True,
     )
-    token_ids = output.sequences[0, -2:].tolist()
+    token_ids = output.sequences[0, -3:].tolist()
     audio = output.audio[0]
     if audio is None:
         raise RuntimeError("Transformers VibeVoice reference produced no audio")
-    if len(trace) != 2:
+    if len(trace) != 3:
         raise RuntimeError(f"Transformers VibeVoice reference traced {len(trace)} steps")
     for step in trace:
         step["next_embedding"] = (

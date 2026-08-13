@@ -92,7 +92,6 @@ _OMNIVOICE_TTS_MODEL_STAGES = {"omnivoice_generator"}
 _COVO_AUDIO_MODEL_STAGES = {"fused_thinker_talker"}
 _VOXCPM2_TTS_MODEL_STAGES = {"latent_generator"}
 _VIBEVOICE_TTS_MODEL_STAGES = {"vibevoice"}
-_VIBEVOICE_AUDIO_TOKEN_ID = 151654
 _MING_TTS_MODEL_STAGES = {"ming_tts"}
 _MOSS_TTS_MODEL_STAGES = {"moss_tts_nano"}
 _MOSS_TTS_FULL_MODEL_STAGES = {"moss_tts", "moss_tts_codec"}
@@ -3272,10 +3271,7 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
             # VibeVoice alone needs request-scoped MM UUIDs after the final
             # serving request ID is known. Keep this workaround explicitly
             # gated instead of adding a lifecycle hook for every TTS adapter.
-            if (
-                self._tts_model_type == "vibevoice"
-                and getattr(active_adapter, "name", None) == "vibevoice"
-            ):
+            if self._tts_model_type == "vibevoice" and getattr(active_adapter, "name", None) == "vibevoice":
                 prepared = active_adapter.finalize_prepared_request(
                     prepared,
                     request_id,
@@ -3511,34 +3507,20 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
         finally:
             self._discard_ref_audio_artifact_warmup(request_id)
 
-    @staticmethod
-    def _is_vibevoice_terminal_audio_length(output: Any) -> bool:
-        """Return whether a hard length cutoff left an audio token undrained."""
-        request_output = getattr(output, "request_output", None)
-        completions = getattr(request_output, "outputs", None)
-        if not completions:
-            return False
-        completion = completions[0]
-        token_ids = getattr(completion, "token_ids", None)
-        return bool(
-            getattr(completion, "finish_reason", None) == "length"
-            and token_ids is not None
-            and len(token_ids) > 0
-            and int(token_ids[-1]) == _VIBEVOICE_AUDIO_TOKEN_ID
-        )
-
     async def _generate_audio_bytes(
         self,
         request: OpenAICreateSpeechRequest,
         base64_encode: bool = False,
         request_id: str | None = None,
         usage_out: list[SpeechTokenUsage] | None = None,
+        response_headers_out: dict[str, str] | None = None,
         has_inline_ref_audio: bool | None = None,
     ) -> tuple[bytes | str, str]:
-        # ``usage_out`` is an opt-in output channel: when a list is passed, the
-        # computed SpeechTokenUsage is appended to it. The return stays a
-        # 2-tuple so existing callers (and their test mocks) are unaffected;
-        # only the batch path, which surfaces per-item usage, opts in.
+        # ``usage_out`` and ``response_headers_out`` are opt-in output channels.
+        # The return stays a 2-tuple so existing callers and their test mocks are
+        # unaffected. Batch opts into usage; non-streaming VibeVoice opts into
+        # response headers so its otherwise opaque audio response exposes whether
+        # generation stopped naturally or reached the token limit.
         request_id, generator, bytes_tts_params = await self._prepare_speech_generation(
             request, request_id=request_id, has_inline_ref_audio=has_inline_ref_audio
         )
@@ -3580,18 +3562,6 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
 
             if final_output is None:
                 raise ValueError("No output generated from the model.")
-
-            if (
-                self._tts_model_type == "vibevoice"
-                and self._is_vibevoice_terminal_audio_length(final_output)
-            ):
-                logger.warning(
-                    "VibeVoice request %s reached its token limit on audio token "
-                    "%d; the final 3200-sample waveform chunk could not be "
-                    "decoded because no subsequent model forward was scheduled.",
-                    request_id,
-                    _VIBEVOICE_AUDIO_TOKEN_ID,
-                )
 
             audio_output, audio_key = self._extract_audio_output(final_output)
             if audio_key is None:
@@ -3658,6 +3628,12 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
                 base64_encode=base64_encode,
             )
             audio_response: AudioResponse = self.create_audio(audio_obj)
+            if response_headers_out is not None and self._tts_model_type == "vibevoice":
+                request_output = getattr(final_output, "request_output", None)
+                completions = getattr(request_output, "outputs", None) or []
+                finish_reason = getattr(completions[0], "finish_reason", None) if completions else None
+                if finish_reason:
+                    response_headers_out["X-Finish-Reason"] = str(finish_reason)
             self._mark_ref_audio_artifact_ready_for_request(request_id)
             artifact_ready = True
             if usage_out is not None:
@@ -3910,7 +3886,12 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
                     media_type="text/event-stream",
                 )
 
-            audio_bytes, media_type = await self._generate_audio_bytes(request, request_id=request_id)
+            response_headers: dict[str, str] = {}
+            audio_bytes, media_type = await self._generate_audio_bytes(
+                request,
+                request_id=request_id,
+                response_headers_out=response_headers,
+            )
             total_ms = (time.perf_counter() - request_start_s) * 1000.0
             logger.info(
                 "[SpeechE2E] request_id=%s stream=false status=ok total_ms=%.2f response_bytes=%d",
@@ -3918,7 +3899,11 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
                 total_ms,
                 len(audio_bytes) if isinstance(audio_bytes, (bytes, bytearray)) else len(str(audio_bytes)),
             )
-            return Response(content=audio_bytes, media_type=media_type)
+            return Response(
+                content=audio_bytes,
+                media_type=media_type,
+                headers=response_headers or None,
+            )
 
         except asyncio.CancelledError:
             total_ms = (time.perf_counter() - request_start_s) * 1000.0

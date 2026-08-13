@@ -94,9 +94,7 @@ class _FakeNegativeBranch:
         request_ids: list[str],
         input_embeddings: list[torch.Tensor],
     ) -> list[torch.Tensor]:
-        self.forward_calls.append(
-            (list(request_ids), [embedding.clone() for embedding in input_embeddings])
-        )
+        self.forward_calls.append((list(request_ids), [embedding.clone() for embedding in input_embeddings]))
         return [embedding.clone() for embedding in input_embeddings]
 
     def free(self, request_id: str) -> None:
@@ -132,6 +130,30 @@ def _stateful() -> VibeVoiceStatefulInference:
         default_guidance_scale=1.3,
         default_num_diffusion_steps=10,
     )
+
+
+def test_stateful_conditions_take_request_owned_copies() -> None:
+    stateful = _stateful()
+    source = torch.arange(4, dtype=torch.float32).reshape(1, 4)
+
+    stateful.record_positive_condition("request-a", source)
+    stateful.record_negative_input_embedding("request-a", source)
+    stateful.record_negative_condition("request-a", source)
+    state = stateful.get("request-a")
+    assert state is not None
+    saved = (
+        state.positive_condition,
+        state.negative_input_embedding,
+        state.negative_condition,
+    )
+    assert all(item is not None for item in saved)
+    assert all(item.data_ptr() != source.data_ptr() for item in saved if item is not None)
+
+    source.fill_(99)
+    expected = torch.arange(4, dtype=torch.float32).reshape(1, 4)
+    for item in saved:
+        assert item is not None
+        torch.testing.assert_close(item, expected)
 
 
 def test_audio_transition_runs_m4a_m4b_and_threads_per_request_caches() -> None:
@@ -381,6 +403,49 @@ def test_model_omni_output_publishes_sparse_waveform_once() -> None:
         **kwargs,
     )
     assert second.multimodal_outputs == {}
+
+
+def test_model_terminal_drain_merges_existing_sparse_waveform() -> None:
+    wrapper = object.__new__(VibeVoiceForConditionalGeneration)
+    nn.Module.__init__(wrapper)
+    wrapper._stateful = _stateful()
+    wrapper._negative_kv_branch = _FakeNegativeBranch()
+    wrapper.model = _FakeWrapperKernel()
+    wrapper.get_input_embeddings = lambda: nn.Embedding(32, 4)
+    wrapper._stateful.start_audio_segment("request-a")
+    wrapper._stateful.record_positive_condition(
+        "request-a",
+        torch.full((1, 4), 4.0),
+    )
+    wrapper._stateful.record_negative_input_embedding(
+        "request-a",
+        torch.full((1, 4), 1.0),
+    )
+    existing = {
+        "audio": [torch.tensor([8.0, 9.0])],
+        "sr": [torch.tensor(24_000, dtype=torch.int32)],
+        "meta": {"req_id": ["request-a"], "sparse_audio": ["1"]},
+    }
+
+    merged = VibeVoiceForConditionalGeneration.drain_terminal_sampled_tokens(
+        wrapper,
+        request_ids=["request-a"],
+        multimodal_outputs=existing,
+    )
+
+    assert wrapper._negative_kv_branch.forward_calls[0][0] == ["request-a"]
+    assert wrapper._negative_kv_branch.freed_ids[-1] == "request-a"
+    assert torch.equal(
+        merged["audio"][0],
+        torch.tensor([8.0, 9.0, 1.0, 1.0, 1.0, 1.0]),
+    )
+    assert merged["sr"][0].item() == 24_000
+    assert merged["meta"] == {
+        "req_id": ["request-a"],
+        "sparse_audio": ["1"],
+    }
+    assert wrapper._stateful.get("request-a").audio_token_count == 1
+    assert wrapper._stateful.drain_waveform_chunks("request-a") is None
 
 
 def test_audio_transition_refuses_unguided_fallback_without_negative_paged_kv() -> None:

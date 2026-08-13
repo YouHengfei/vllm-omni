@@ -20,7 +20,6 @@ from vllm_omni.model_executor.models.vibevoice.processing_vibevoice import (
     AUDIO_BOS_TOKEN,
     AUDIO_EOS_TOKEN,
     AUDIO_TOKEN,
-    MAX_AUDIO_ITEMS,
 )
 
 pytestmark = [pytest.mark.core_model, pytest.mark.cpu]
@@ -34,19 +33,13 @@ def _adapter() -> VibeVoiceTTSAdapter:
             allowed_media_domains=None,
         ),
     )
-    tokenizer = SimpleNamespace(
-        encode=lambda text, add_special_tokens=False: list(text.encode("utf-8"))
-    )
+    tokenizer = SimpleNamespace(encode=lambda text, add_special_tokens=False: list(text.encode("utf-8")))
     engine_client = SimpleNamespace(
         engine=SimpleNamespace(
-            input_processor=SimpleNamespace(
-                renderer=SimpleNamespace(get_tokenizer=lambda: tokenizer)
-            )
+            input_processor=SimpleNamespace(renderer=SimpleNamespace(get_tokenizer=lambda: tokenizer))
         )
     )
-    return VibeVoiceTTSAdapter(
-        SpeechServingContext(server=server, engine_client=engine_client)
-    )
+    return VibeVoiceTTSAdapter(SpeechServingContext(server=server, engine_client=engine_client))
 
 
 def test_vibevoice_adapter_is_registered_and_detected() -> None:
@@ -68,9 +61,7 @@ def test_vibevoice_adapter_rejects_mismatched_or_ambiguous_speakers() -> None:
         input="Speaker 1: hello\nSpeaker 2: world",
         ref_audio=["file:///one.wav"],
     )
-    assert adapter.validate(mismatch) == (
-        "VibeVoice found 2 speakers but received 1 reference audios"
-    )
+    assert adapter.validate(mismatch) == ("VibeVoice found 2 speakers but received 1 reference audios")
 
     mixed = OpenAICreateSpeechRequest(
         input="Speaker 1: hello\nthis line has no speaker",
@@ -78,20 +69,302 @@ def test_vibevoice_adapter_rejects_mismatched_or_ambiguous_speakers() -> None:
     )
     assert "mixed formats" in (adapter.validate(mixed) or "")
 
-    too_many = OpenAICreateSpeechRequest(
-        input="\n".join(f"Speaker {idx}: text" for idx in range(MAX_AUDIO_ITEMS + 1)),
-        ref_audio=[f"file:///{idx}.wav" for idx in range(MAX_AUDIO_ITEMS + 1)],
+    four_speakers = OpenAICreateSpeechRequest(
+        input="\n".join(f"Speaker {idx}: text" for idx in range(4)),
+        ref_audio=[f"file:///{idx}.wav" for idx in range(4)],
     )
-    assert f"at most {MAX_AUDIO_ITEMS}" in (adapter.validate(too_many) or "")
+    assert adapter.validate(four_speakers) is None
+
+    too_many = OpenAICreateSpeechRequest(
+        input="\n".join(f"Speaker {idx}: text" for idx in range(5)),
+        ref_audio=[f"file:///{idx}.wav" for idx in range(5)],
+    )
+    assert adapter.validate(too_many) == "VibeVoice-1.5B supports at most 4 speakers per request"
 
 
-def test_vibevoice_adapter_rejects_streaming() -> None:
+@pytest.mark.parametrize(
+    ("field_name", "field_value"),
+    [
+        pytest.param("voice", "alice", id="voice"),
+        pytest.param("speaker_embedding", [0.1, 0.2], id="speaker-embedding"),
+        pytest.param("instructions", "speak softly", id="instructions"),
+        pytest.param("language", "English", id="language"),
+        pytest.param("ref_text", "reference transcript", id="ref-text"),
+        pytest.param("ref_audio_2", "file:///second.wav", id="ref-audio-2"),
+        pytest.param("task_type", "Base", id="task-type"),
+        pytest.param("ambient_sound", "rain", id="ambient-sound"),
+        pytest.param("duration_seconds", 1.0, id="duration-seconds"),
+        pytest.param("x_vector_only_mode", True, id="x-vector-true"),
+        pytest.param("x_vector_only_mode", False, id="x-vector-false"),
+        pytest.param("initial_codec_chunk_frames", 4, id="initial-codec-chunk-frames"),
+        pytest.param("non_streaming_mode", True, id="non-streaming-mode-true"),
+        pytest.param("non_streaming_mode", False, id="non-streaming-mode-false"),
+        pytest.param("word_timestamps", True, id="word-timestamps"),
+    ],
+)
+def test_vibevoice_adapter_rejects_explicit_unsupported_fields(
+    field_name: str,
+    field_value: object,
+) -> None:
+    request_kwargs = {
+        "input": "hello",
+        "ref_audio": "file:///voice.wav",
+        field_name: field_value,
+    }
+    if field_name == "speaker_embedding":
+        # The shared protocol rejects a scalar ref_audio plus speaker_embedding
+        # before the model adapter runs. Omit it to exercise the VibeVoice error.
+        request_kwargs["ref_audio"] = None
+    request = OpenAICreateSpeechRequest(**request_kwargs)
+
+    assert f"does not support '{field_name}'" in (_adapter().validate(request) or "")
+
+
+def test_vibevoice_adapter_accepts_all_supported_request_fields() -> None:
+    request = OpenAICreateSpeechRequest(
+        input="hello",
+        model="microsoft/VibeVoice-1.5B",
+        ref_audio="file:///voice.wav",
+        response_format="flac",
+        speed=1.25,
+        stream=False,
+        max_new_tokens=32,
+        extra_params={
+            "guidance_scale": 1.3,
+            "num_diffusion_steps": 10,
+            "future_extension": "ignored-for-forward-compatibility",
+        },
+        word_timestamps=False,
+    )
+
+    assert _adapter().validate(request) is None
+
+
+@pytest.mark.parametrize(
+    ("stream", "stream_format"),
+    [
+        (True, None),
+        (False, "audio"),
+        (False, "sse"),
+        (True, "audio"),
+        (True, "sse"),
+    ],
+)
+def test_vibevoice_adapter_rejects_every_streaming_request_form(
+    stream: bool,
+    stream_format: str | None,
+) -> None:
     request = OpenAICreateSpeechRequest(
         input="hello",
         ref_audio="file:///voice.wav",
-        stream=True,
+        stream=stream,
+        stream_format=stream_format,
+        # Keep protocol validation from masking the adapter-specific rejection.
+        response_format="wav",
     )
+    assert request.is_streaming()
     assert "non-streaming" in (_adapter().validate(request) or "")
+
+
+@pytest.mark.parametrize(
+    ("stream", "stream_format"),
+    [
+        (True, None),
+        (False, "audio"),
+        (False, "sse"),
+        (True, "audio"),
+    ],
+)
+def test_vibevoice_serving_rejects_streaming_before_engine_generation(
+    stream: bool,
+    stream_format: str | None,
+) -> None:
+    def generate(**_kwargs):
+        raise AssertionError("VibeVoice streaming validation reached the engine")
+
+    engine_client = SimpleNamespace(
+        errored=False,
+        default_sampling_params_list=[SamplingParams(max_tokens=8)],
+        model_config=SimpleNamespace(async_chunk=False),
+        generate=generate,
+    )
+    serving = object.__new__(OmniOpenAIServingSpeech)
+    serving._diffusion_mode = False
+    serving.engine_client = engine_client
+    serving.model_config = engine_client.model_config
+    serving._tts_model_type = "vibevoice"
+    serving._is_tts = True
+    serving._adapter = VibeVoiceTTSAdapter(SpeechServingContext(server=serving, engine_client=engine_client))
+    serving._validate_ref_audio_format = lambda _: None
+
+    async def check_model(_request):
+        return None
+
+    serving._check_model = check_model
+    request = OpenAICreateSpeechRequest(
+        input="hello",
+        ref_audio="file:///voice.wav",
+        stream=stream,
+        stream_format=stream_format,
+        response_format="wav",
+    )
+
+    response = asyncio.run(serving.create_speech(request))
+
+    assert response.error.code == 400
+    assert "non-streaming" in response.error.message
+
+
+def test_vibevoice_serving_rejects_unsupported_field_before_engine_generation() -> None:
+    def generate(**_kwargs):
+        raise AssertionError("VibeVoice unsupported-field validation reached the engine")
+
+    engine_client = SimpleNamespace(
+        errored=False,
+        default_sampling_params_list=[SamplingParams(max_tokens=8)],
+        model_config=SimpleNamespace(async_chunk=False),
+        generate=generate,
+    )
+    serving = object.__new__(OmniOpenAIServingSpeech)
+    serving._diffusion_mode = False
+    serving.engine_client = engine_client
+    serving.model_config = engine_client.model_config
+    serving._tts_model_type = "vibevoice"
+    serving._is_tts = True
+    serving._adapter = VibeVoiceTTSAdapter(SpeechServingContext(server=serving, engine_client=engine_client))
+    serving._validate_ref_audio_format = lambda _: None
+
+    async def check_model(_request):
+        return None
+
+    serving._check_model = check_model
+    request = OpenAICreateSpeechRequest(
+        input="hello",
+        voice="alice",
+        ref_audio="file:///voice.wav",
+    )
+
+    response = asyncio.run(serving.create_speech(request))
+
+    assert response.error.code == 400
+    assert "does not support 'voice'" in response.error.message
+    assert "use 'ref_audio'" in response.error.message
+
+
+@pytest.mark.parametrize(
+    ("extra_params", "message"),
+    [
+        ({"guidance_scale": float("nan")}, "guidance_scale must be finite"),
+        ({"guidance_scale": "bad"}, "guidance_scale must be finite"),
+        ({"num_diffusion_steps": 0}, "must be a positive integer"),
+        ({"num_diffusion_steps": True}, "must be a positive integer"),
+    ],
+)
+def test_vibevoice_adapter_rejects_invalid_runtime_controls(
+    extra_params: dict[str, object],
+    message: str,
+) -> None:
+    request = OpenAICreateSpeechRequest(
+        input="hello",
+        ref_audio="file:///voice.wav",
+        extra_params=extra_params,
+    )
+
+    assert message in (_adapter().validate(request) or "")
+
+
+def test_vibevoice_adapter_accepts_absent_or_valid_runtime_controls() -> None:
+    adapter = _adapter()
+    absent = OpenAICreateSpeechRequest(
+        input="hello",
+        ref_audio="file:///voice.wav",
+    )
+    valid = OpenAICreateSpeechRequest(
+        input="hello",
+        ref_audio="file:///voice.wav",
+        extra_params={"guidance_scale": 1.3, "num_diffusion_steps": 10},
+    )
+
+    assert adapter.validate(absent) is None
+    assert adapter.validate(valid) is None
+
+
+def test_vibevoice_adapter_rejects_only_explicit_request_seed() -> None:
+    adapter = _adapter()
+    implicit = OpenAICreateSpeechRequest(
+        input="hello",
+        ref_audio="file:///voice.wav",
+    )
+    explicit = OpenAICreateSpeechRequest(
+        input="hello",
+        ref_audio="file:///voice.wav",
+        seed=42,
+    )
+
+    assert adapter.validate(implicit) is None
+    assert "request-level seed" in (adapter.validate(explicit) or "")
+
+
+@pytest.mark.parametrize(
+    ("extra_params", "seed", "message"),
+    [
+        ({"guidance_scale": float("inf")}, None, "guidance_scale must be finite"),
+        ({"num_diffusion_steps": 0}, None, "must be a positive integer"),
+        (None, 42, "request-level seed"),
+    ],
+)
+def test_vibevoice_serving_rejects_invalid_controls_before_engine_generation(
+    extra_params: dict[str, object] | None,
+    seed: int | None,
+    message: str,
+) -> None:
+    def generate(**_kwargs):
+        raise AssertionError("VibeVoice invalid controls reached the engine")
+
+    engine_client = SimpleNamespace(
+        errored=False,
+        default_sampling_params_list=[
+            SamplingParams(
+                max_tokens=8,
+                seed=314,
+                extra_args={
+                    "guidance_scale": 1.3,
+                    "num_diffusion_steps": 10,
+                },
+            )
+        ],
+        model_config=SimpleNamespace(async_chunk=False),
+        generate=generate,
+    )
+    serving = object.__new__(OmniOpenAIServingSpeech)
+    serving.engine_client = engine_client
+    serving.model_config = engine_client.model_config
+    serving._tts_model_type = "vibevoice"
+    serving._is_tts = True
+    serving._adapter = VibeVoiceTTSAdapter(SpeechServingContext(server=serving, engine_client=engine_client))
+    serving._validate_ref_audio_format = lambda _: None
+
+    async def resolve_reference(_source: str):
+        return np.zeros(3_200, dtype=np.float32), 24_000
+
+    serving._adapter._resolve_reference = resolve_reference
+    request = OpenAICreateSpeechRequest(
+        input="hello",
+        ref_audio="file:///voice.wav",
+        extra_params=extra_params,
+        seed=seed,
+    )
+
+    with pytest.raises(ValueError, match=message):
+        asyncio.run(serving._prepare_speech_generation(request))
+
+    # The valid deploy seed and controls remain internal defaults. Only
+    # explicitly invalid request fields are rejected before generate().
+    assert engine_client.default_sampling_params_list[0].seed == 314
+    assert engine_client.default_sampling_params_list[0].extra_args == {
+        "guidance_scale": 1.3,
+        "num_diffusion_steps": 10,
+    }
 
 
 @pytest.mark.parametrize(
@@ -165,9 +438,7 @@ def test_normal_speech_serving_path_applies_uuid_and_sampling_hooks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured = {}
-    tokenizer = SimpleNamespace(
-        encode=lambda text, add_special_tokens=False: list(text.encode("utf-8"))
-    )
+    tokenizer = SimpleNamespace(encode=lambda text, add_special_tokens=False: list(text.encode("utf-8")))
 
     def generate(**kwargs):
         captured.update(kwargs)
@@ -184,9 +455,7 @@ def test_normal_speech_serving_path_applies_uuid_and_sampling_hooks(
         ],
         model_config=SimpleNamespace(async_chunk=False),
         engine=SimpleNamespace(
-            input_processor=SimpleNamespace(
-                renderer=SimpleNamespace(get_tokenizer=lambda: tokenizer)
-            )
+            input_processor=SimpleNamespace(renderer=SimpleNamespace(get_tokenizer=lambda: tokenizer))
         ),
         generate=generate,
     )
@@ -195,9 +464,7 @@ def test_normal_speech_serving_path_applies_uuid_and_sampling_hooks(
     serving.model_config = engine_client.model_config
     serving._tts_model_type = "vibevoice"
     serving._is_tts = True
-    serving._adapter = VibeVoiceTTSAdapter(
-        SpeechServingContext(server=serving, engine_client=engine_client)
-    )
+    serving._adapter = VibeVoiceTTSAdapter(SpeechServingContext(server=serving, engine_client=engine_client))
     serving._track_ref_audio_artifact_warmup = lambda *args, **kwargs: None
     serving._validate_ref_audio_format = lambda _: None
 
@@ -207,15 +474,11 @@ def test_normal_speech_serving_path_applies_uuid_and_sampling_hooks(
     monkeypatch.setattr(serving._adapter, "_resolve_reference", resolve)
     request = OpenAICreateSpeechRequest(input="hello", ref_audio="ref-a")
 
-    request_id, generator, _ = asyncio.run(
-        serving._prepare_speech_generation(request, request_id="speech-fixed")
-    )
+    request_id, generator, _ = asyncio.run(serving._prepare_speech_generation(request, request_id="speech-fixed"))
 
     assert request_id == "speech-fixed"
     assert generator == "generator"
-    assert captured["prompt"]["multi_modal_uuids"] == {
-        "audio": ["speech-fixed:audio:0"]
-    }
+    assert captured["prompt"]["multi_modal_uuids"] == {"audio": ["speech-fixed:audio:0"]}
     assert captured["prompt"]["prompt_token_ids"]
     params = captured["sampling_params_list"][0]
     assert params.temperature == 0.0
@@ -308,39 +571,33 @@ def test_vibevoice_nonstreaming_serving_serializes_published_waveform() -> None:
 
 
 @pytest.mark.parametrize(
-    ("model_type", "finish_reason", "token_ids", "expect_warning"),
+    ("model_type", "finish_reason", "expected_header"),
     [
-        ("vibevoice", "length", [151654], True),
-        ("vibevoice", "length", [151653], False),
-        ("vibevoice", "stop", [151654, 151643], False),
-        ("qwen3_tts", "length", [151654], False),
+        pytest.param("vibevoice", "length", "length", id="vibevoice-length"),
+        pytest.param("vibevoice", "stop", "stop", id="vibevoice-stop"),
+        pytest.param("other_tts", "length", None, id="non-vibevoice"),
     ],
 )
-def test_vibevoice_nonstreaming_warns_only_for_undrained_terminal_audio_token(
-    monkeypatch: pytest.MonkeyPatch,
+def test_nonstreaming_speech_response_exposes_vibevoice_finish_reason(
     model_type: str,
     finish_reason: str,
-    token_ids: list[int],
-    expect_warning: bool,
+    expected_header: str | None,
 ) -> None:
     serving = object.__new__(OmniOpenAIServingSpeech)
+    serving._diffusion_mode = False
     serving._tts_model_type = model_type
     serving._request_ref_audio_artifact_keys = {}
     serving._ref_audio_model_artifact_ready = set()
     serving._ref_audio_resolve_cache = {}
-    waveform = torch.linspace(-0.25, 0.25, 3_200, dtype=torch.float32)
+    waveform = np.linspace(-0.25, 0.25, 3_200, dtype=np.float32)
+    multimodal_output = {
+        "audio": torch.from_numpy(waveform),
+        "sr": torch.tensor(24_000, dtype=torch.int32),
+    }
     final = SimpleNamespace(
-        multimodal_output={
-            "audio": waveform,
-            "sr": torch.tensor(24_000, dtype=torch.int32),
-        },
+        multimodal_output=multimodal_output,
         request_output=SimpleNamespace(
-            outputs=[
-                SimpleNamespace(
-                    finish_reason=finish_reason,
-                    token_ids=token_ids,
-                )
-            ]
+            outputs=[SimpleNamespace(finish_reason=finish_reason)],
         ),
         outputs=[],
     )
@@ -349,28 +606,23 @@ def test_vibevoice_nonstreaming_warns_only_for_undrained_terminal_audio_token(
         yield final
 
     async def prepare(*_args, **_kwargs):
-        return "vibevoice-terminal", generator(), {}
+        return "vibevoice-finish-reason", generator(), {}
 
-    warnings: list[tuple[object, ...]] = []
+    async def check_model(_request):
+        return None
+
     serving._prepare_speech_generation = prepare
-    monkeypatch.setattr(
-        "vllm_omni.entrypoints.openai.serving_speech.logger.warning",
-        lambda *args, **_kwargs: warnings.append(args),
-    )
+    serving._check_model = check_model
     request = OpenAICreateSpeechRequest(
         input="hello",
         ref_audio="ref",
         response_format="wav",
     )
 
-    audio_bytes, media_type = asyncio.run(serving._generate_audio_bytes(request))
+    response = asyncio.run(serving.create_speech(request))
 
-    assert media_type == "audio/wav"
-    assert isinstance(audio_bytes, bytes)
-    assert audio_bytes[:4] == b"RIFF"
-    assert bool(warnings) is expect_warning
-    if expect_warning:
-        assert warnings[0][1:] == ("vibevoice-terminal", 151654)
+    assert response.status_code == 200
+    assert response.headers.get("X-Finish-Reason") == expected_header
 
 
 def test_vibevoice_sampling_constraints_replace_dict_and_are_idempotent() -> None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import copy
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 from vllm.multimodal.media import MediaConnector
@@ -22,8 +22,11 @@ from vllm_omni.model_executor.models.vibevoice.processing_vibevoice import (
     AUDIO_BOS_TOKEN,
     AUDIO_EOS_TOKEN,
     AUDIO_TOKEN,
-    MAX_AUDIO_ITEMS,
     MAX_AUDIO_SECONDS,
+)
+from vllm_omni.model_executor.models.vibevoice.stateful import (
+    validate_guidance_scale,
+    validate_num_diffusion_steps,
 )
 from vllm_omni.model_executor.models.vibevoice.vllm_compat import (
     get_stage0_tokenizer,
@@ -38,6 +41,22 @@ _SYSTEM_PROMPT = (
 )
 _SPEAKER_LINE = re.compile(r"^Speaker\s+(\d+)\s*:\s*(.+)$", re.IGNORECASE)
 _REFERENCE_SEGMENT = f"{AUDIO_BOS_TOKEN}{AUDIO_TOKEN}{AUDIO_EOS_TOKEN}"
+_OFFICIAL_MAX_SPEAKERS = 4
+_UNSUPPORTED_VIBEVOICE_FIELDS: dict[str, str | None] = {
+    "voice": "use 'ref_audio' for VibeVoice voice cloning",
+    "speaker_embedding": "use 'ref_audio' for VibeVoice voice cloning",
+    "instructions": None,
+    "language": None,
+    "ref_text": None,
+    "ref_audio_2": None,
+    "task_type": None,
+    "ambient_sound": None,
+    "duration_seconds": None,
+    "x_vector_only_mode": None,
+    "initial_codec_chunk_frames": None,
+    "non_streaming_mode": None,
+    "word_timestamps": ("word timestamps require streaming, which VibeVoice-1.5B does not currently support"),
+}
 
 
 @register_tts_adapter
@@ -75,30 +94,46 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
         return parsed, len(speaker_map)
 
     @staticmethod
-    def _reference_sources(request: "OpenAICreateSpeechRequest") -> list[str]:
+    def _reference_sources(request: OpenAICreateSpeechRequest) -> list[str]:
         ref_audio = request.ref_audio
         if ref_audio is None:
             return []
         return list(ref_audio) if isinstance(ref_audio, list) else [ref_audio]
 
-    def validate(self, request: "OpenAICreateSpeechRequest") -> str | None:
-        if request.stream:
+    def validate(self, request: OpenAICreateSpeechRequest) -> str | None:
+        if request.is_streaming():
             return "VibeVoice currently supports non-streaming speech responses only"
+        if request.seed is not None:
+            return (
+                "VibeVoice does not support request-level seed determinism; "
+                "omit 'seed' to preserve the official global-device RNG semantics."
+            )
+        for field_name, hint in _UNSUPPORTED_VIBEVOICE_FIELDS.items():
+            value = getattr(request, field_name, None)
+            # word_timestamps has a non-None False default. Other optional bool
+            # fields use None as the default, so an explicit False is still an
+            # unsupported model-specific request and must not be ignored.
+            is_set = bool(value) if field_name == "word_timestamps" else value is not None
+            if is_set:
+                message = f"VibeVoice does not support '{field_name}'"
+                return f"{message}; {hint}" if hint else message
         try:
             _, num_speakers = self._parse_script(request.input)
+            if num_speakers > _OFFICIAL_MAX_SPEAKERS:
+                return f"VibeVoice-1.5B supports at most {_OFFICIAL_MAX_SPEAKERS} speakers per request"
+            extra_params = request.extra_params or {}
+            if "guidance_scale" in extra_params:
+                validate_guidance_scale(extra_params["guidance_scale"])
+            if "num_diffusion_steps" in extra_params:
+                validate_num_diffusion_steps(extra_params["num_diffusion_steps"])
         except ValueError as exc:
             return str(exc)
 
         references = self._reference_sources(request)
         if not references:
             return "VibeVoice requires 'ref_audio' for each speaker"
-        if len(references) > MAX_AUDIO_ITEMS:
-            return f"VibeVoice supports at most {MAX_AUDIO_ITEMS} reference audios per request"
         if len(references) != num_speakers:
-            return (
-                f"VibeVoice found {num_speakers} speakers but received "
-                f"{len(references)} reference audios"
-            )
+            return f"VibeVoice found {num_speakers} speakers but received {len(references)} reference audios"
 
         validate_format = getattr(self.ctx.server, "_validate_ref_audio_format", None)
         if callable(validate_format):
@@ -121,9 +156,7 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
         waveform, sample_rate = await connector.fetch_audio_async(source)
         waveform = np.asarray(waveform, dtype=np.float32)
         if waveform.ndim not in (1, 2):
-            raise ValueError(
-                f"VibeVoice reference audio must be one- or two-dimensional, got {waveform.shape}."
-            )
+            raise ValueError(f"VibeVoice reference audio must be one- or two-dimensional, got {waveform.shape}.")
         num_samples = int(waveform.shape[0] if waveform.ndim == 1 else max(waveform.shape))
         sample_rate = int(sample_rate)
         if sample_rate <= 0:
@@ -132,26 +165,20 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
             raise ValueError("VibeVoice reference audio is empty.")
         duration = num_samples / sample_rate
         if duration > MAX_AUDIO_SECONDS:
-            raise ValueError(
-                f"VibeVoice reference audio is {duration:.2f}s; "
-                f"the maximum is {MAX_AUDIO_SECONDS}s."
-            )
+            raise ValueError(f"VibeVoice reference audio is {duration:.2f}s; the maximum is {MAX_AUDIO_SECONDS}s.")
         return waveform, sample_rate
 
     @staticmethod
     def _render_prompt(parsed: list[tuple[int, str]], num_speakers: int) -> str:
         voice_prompt = " Voice input:\n" + "".join(
-            f" Speaker {speaker_id}:{_REFERENCE_SEGMENT}\n"
-            for speaker_id in range(num_speakers)
+            f" Speaker {speaker_id}:{_REFERENCE_SEGMENT}\n" for speaker_id in range(num_speakers)
         )
-        text_prompt = " Text input:\n" + "".join(
-            f" Speaker {speaker_id}: {text}\n" for speaker_id, text in parsed
-        )
+        text_prompt = " Text input:\n" + "".join(f" Speaker {speaker_id}: {text}\n" for speaker_id, text in parsed)
         return f"{_SYSTEM_PROMPT}{voice_prompt}{text_prompt} Speech output:\n{AUDIO_BOS_TOKEN}"
 
     async def build(
         self,
-        request: "OpenAICreateSpeechRequest",
+        request: OpenAICreateSpeechRequest,
         sampling_params_list: list,
         has_inline_ref_audio: bool,
     ) -> PreparedRequest:
@@ -159,10 +186,7 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
         references = self._reference_sources(request)
         # validate() normally checks this first; keep build safe for direct use.
         if len(references) != num_speakers:
-            raise ValueError(
-                f"VibeVoice found {num_speakers} speakers but received "
-                f"{len(references)} reference audios"
-            )
+            raise ValueError(f"VibeVoice found {num_speakers} speakers but received {len(references)} reference audios")
         audio_items = [await self._resolve_reference(source) for source in references]
         prompt = {
             "prompt": self._render_prompt(parsed, num_speakers),
@@ -184,9 +208,7 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
         request_id: str,
     ) -> PreparedRequest:
         audio_items = prepared.prompt.get("multi_modal_data", {}).get("audio", [])
-        prepared.prompt["prompt_token_ids"] = self._tokenize_prompt(
-            prepared.prompt["prompt"]
-        )
+        prepared.prompt["prompt_token_ids"] = self._tokenize_prompt(prepared.prompt["prompt"])
         prepared.prompt["multi_modal_uuids"] = {
             "audio": [f"{request_id}:audio:{item_idx}" for item_idx in range(len(audio_items))]
         }
@@ -195,7 +217,7 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
     def apply_sampling_overrides(
         self,
         sampling_params_list: list,
-        request: "OpenAICreateSpeechRequest",
+        request: OpenAICreateSpeechRequest,
     ) -> list:
         if not sampling_params_list:
             return sampling_params_list

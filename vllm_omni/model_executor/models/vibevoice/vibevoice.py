@@ -73,10 +73,7 @@ def _num_tokenizer_stages(config: Any, child_config_name: str) -> int:
     child_config = getattr(config, child_config_name, None)
     depths = getattr(child_config, "depths", None)
     if not isinstance(depths, (list, tuple)) or not depths:
-        raise ValueError(
-            f"VibeVoice {child_config_name}.depths must be a non-empty list or tuple, "
-            f"got {depths!r}."
-        )
+        raise ValueError(f"VibeVoice {child_config_name}.depths must be a non-empty list or tuple, got {depths!r}.")
     return len(depths)
 
 
@@ -88,16 +85,14 @@ def _add_encoder_mappings(
     num_stages: int,
 ) -> None:
     """Add Microsoft tokenizer-encoder to HF Acoustic Encoder mappings."""
-    mappings[re.compile(rf"{source}\.encoder\.downsample_layers\.0\.0\.conv\.")] = (
-        f"{target}.stem.conv.conv."
-    )
+    mappings[re.compile(rf"{source}\.encoder\.downsample_layers\.0\.0\.conv\.")] = f"{target}.stem.conv.conv."
     mappings[re.compile(rf"{source}\.encoder\.stages\.0\.")] = f"{target}.stem.stage."
 
     for source_idx in range(1, num_stages):
         target_idx = source_idx - 1
-        mappings[
-            re.compile(rf"{source}\.encoder\.downsample_layers\.{source_idx}\.0\.conv\.")
-        ] = f"{target}.conv_layers.{target_idx}.conv.conv."
+        mappings[re.compile(rf"{source}\.encoder\.downsample_layers\.{source_idx}\.0\.conv\.")] = (
+            f"{target}.conv_layers.{target_idx}.conv.conv."
+        )
         mappings[re.compile(rf"{source}\.encoder\.stages\.{source_idx}\.")] = (
             f"{target}.conv_layers.{target_idx}.stage."
         )
@@ -113,18 +108,14 @@ def _add_decoder_mappings(
     num_stages: int,
 ) -> None:
     """Add Microsoft tokenizer-decoder to HF Acoustic Decoder mappings."""
-    mappings[
-        re.compile(rf"{source}\.decoder\.upsample_layers\.0\.0\.conv\.conv\.")
-    ] = f"{target}.stem.conv.conv."
+    mappings[re.compile(rf"{source}\.decoder\.upsample_layers\.0\.0\.conv\.conv\.")] = f"{target}.stem.conv.conv."
     mappings[re.compile(rf"{source}\.decoder\.stages\.0\.")] = f"{target}.stem.stage."
 
     for source_idx in range(1, num_stages):
         target_idx = source_idx - 1
-        mappings[
-            re.compile(
-                rf"{source}\.decoder\.upsample_layers\.{source_idx}\.0\.convtr\.convtr\."
-            )
-        ] = f"{target}.conv_layers.{target_idx}.convtr.convtr."
+        mappings[re.compile(rf"{source}\.decoder\.upsample_layers\.{source_idx}\.0\.convtr\.convtr\.")] = (
+            f"{target}.conv_layers.{target_idx}.convtr.convtr."
+        )
         mappings[re.compile(rf"{source}\.decoder\.stages\.{source_idx}\.")] = (
             f"{target}.conv_layers.{target_idx}.stage."
         )
@@ -175,21 +166,13 @@ def _build_vibevoice_weights_mapper(config: Any) -> WeightsMapper:
             # Any remaining Acoustic Tokenizer keys belong below audio_tower.
             re.compile(r"acoustic_tokenizer\."): "audio_tower.",
             # Diffusion Head.
-            re.compile(r"prediction_head\.t_embedder\.mlp\.0\."): (
-                "diffusion_head.timestep_proj.layer_1."
-            ),
-            re.compile(r"prediction_head\.t_embedder\.mlp\.2\."): (
-                "diffusion_head.timestep_proj.layer_2."
-            ),
-            re.compile(r"prediction_head\.layers\.(\d+)\.adaLN_modulation\.1\."): (
-                r"diffusion_head.layers.\1.linear."
-            ),
+            re.compile(r"prediction_head\.t_embedder\.mlp\.0\."): ("diffusion_head.timestep_proj.layer_1."),
+            re.compile(r"prediction_head\.t_embedder\.mlp\.2\."): ("diffusion_head.timestep_proj.layer_2."),
+            re.compile(r"prediction_head\.layers\.(\d+)\.adaLN_modulation\.1\."): (r"diffusion_head.layers.\1.linear."),
             re.compile(r"prediction_head\.final_layer\.adaLN_modulation\.1\."): (
                 "diffusion_head.final_layer.linear_1."
             ),
-            re.compile(r"prediction_head\.final_layer\.linear\."): (
-                "diffusion_head.final_layer.linear_2."
-            ),
+            re.compile(r"prediction_head\.final_layer\.linear\."): ("diffusion_head.final_layer.linear_2."),
             re.compile(r"prediction_head\."): "diffusion_head.",
             # Acoustic and semantic connectors.
             re.compile(r"acoustic_connector\.fc1\."): "multi_modal_projector.linear_1.",
@@ -361,23 +344,22 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
             latent_size=int(self.config.audio_config.hidden_size),
             condition_size=int(self.config.text_config.hidden_size),
             default_guidance_scale=1.3,
-            default_num_diffusion_steps=(
-                self.model.diffusion_sampler.default_num_inference_steps
-            ),
+            default_num_diffusion_steps=(self.model.diffusion_sampler.default_num_inference_steps),
         )
         self._negative_kv_branch: VibeVoiceNegativeKVBranch | None = None
         runtime_config = VibeVoiceRuntimeConfig.from_vllm_config(vllm_config)
         self.named_kv_branch_request = NamedKVBranchRequest(
             name="negative",
             memory_bytes=runtime_config.negative_kv_cache_memory_bytes,
-            activation_margin_bytes=(
-                runtime_config.negative_kv_activation_margin_bytes
-            ),
+            activation_margin_bytes=(runtime_config.negative_kv_activation_margin_bytes),
         )
         self._pending_request_ids: list[str] = []
         self._pending_request_spans: list[tuple[str, int, int]] = []
         self._pending_audio_transitions: list[tuple[str, int]] = []
         self._pending_num_input_rows = 0
+        # GPUARModelRunner consumes these declarative hooks only after sampling
+        # a token that reaches a hard length cap. Other models pay no cost.
+        self.terminal_sample_drain_token_ids = frozenset({self._stateful.audio_token_id})
 
     def get_language_model(self) -> Qwen2Model:
         return self.model.language_model
@@ -401,15 +383,13 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         """
         if input_values.ndim != 3:
             raise ValueError(
-                "VibeVoice input_values must have shape "
-                f"(batch, channels, samples), got {tuple(input_values.shape)}."
+                f"VibeVoice input_values must have shape (batch, channels, samples), got {tuple(input_values.shape)}."
             )
         if padding_mask.ndim == 1:
             padding_mask = padding_mask.unsqueeze(0)
         if padding_mask.ndim != 2:
             raise ValueError(
-                "VibeVoice padding_mask must have shape (batch, samples), "
-                f"got {tuple(padding_mask.shape)}."
+                f"VibeVoice padding_mask must have shape (batch, samples), got {tuple(padding_mask.shape)}."
             )
         if input_values.shape[0] != padding_mask.shape[0]:
             raise ValueError(
@@ -418,10 +398,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
                 f"padding_mask={padding_mask.shape[0]}."
             )
         if input_values.shape[1] != 1:
-            raise ValueError(
-                "VibeVoice Acoustic Encoder requires mono input, got "
-                f"{input_values.shape[1]} channels."
-            )
+            raise ValueError(f"VibeVoice Acoustic Encoder requires mono input, got {input_values.shape[1]} channels.")
         if input_values.shape[-1] != padding_mask.shape[-1]:
             raise ValueError(
                 "VibeVoice waveform/mask length mismatch: "
@@ -464,16 +441,12 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
                 sample=sample,
             ).latents
             acoustic_features = (
-                acoustic_latents
-                + self.model.latent_bias_factor.to(acoustic_latents.device)
+                acoustic_latents + self.model.latent_bias_factor.to(acoustic_latents.device)
             ) * self.model.latent_scaling_factor.to(acoustic_latents.device)
             projected = self.model.multi_modal_projector(acoustic_features)
 
         if projected.ndim != 3 or projected.shape[0] != input_values.shape[0]:
-            raise ValueError(
-                "VibeVoice Acoustic Encoder returned an unexpected shape: "
-                f"{tuple(projected.shape)}."
-            )
+            raise ValueError(f"VibeVoice Acoustic Encoder returned an unexpected shape: {tuple(projected.shape)}.")
 
         embeddings: list[torch.Tensor] = []
         for item_idx, num_tokens in enumerate(audio_num_tokens.tolist()):
@@ -500,9 +473,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         if not isinstance(padding_mask, torch.Tensor):
             raise TypeError("VibeVoice embed_multimodal requires tensor padding_mask.")
         audio_num_tokens = kwargs.get("audio_num_tokens")
-        if audio_num_tokens is not None and not isinstance(
-            audio_num_tokens, torch.Tensor
-        ):
+        if audio_num_tokens is not None and not isinstance(audio_num_tokens, torch.Tensor):
             audio_num_tokens = torch.as_tensor(audio_num_tokens)
         return self._get_audio_embeddings(
             input_values,
@@ -589,9 +560,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
             if token_id == self._stateful.audio_token_id:
                 # Defer M4a so all active audio-token requests in this runner
                 # step consume one official [2B, latent] RNG draw.
-                self._pending_audio_transitions.append(
-                    (request_id, self._pending_num_input_rows)
-                )
+                self._pending_audio_transitions.append((request_id, self._pending_num_input_rows))
             else:
                 next_embedding, _ = self._stateful.process_sampled_token(
                     request_id=request_id,
@@ -645,6 +614,105 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
                 "AsyncOmni with GPUARModelRunner."
             )
 
+    def drain_terminal_sampled_tokens(
+        self,
+        request_ids: list[str],
+        multimodal_outputs: Any,
+    ) -> dict[str, Any]:
+        """Decode hard-capped sampled audio tokens without another AR step."""
+        if not request_ids:
+            return {}
+        if len(request_ids) != 1:
+            raise ValueError("VibeVoice terminal drain v1 requires exactly one request.")
+        if self._negative_kv_branch is None:
+            raise RuntimeError("VibeVoice terminal audio-token drain requires the bound negative Qwen branch.")
+
+        request_id = request_ids[0]
+        state = self._stateful.get(request_id)
+        negative_input = state.negative_input_embedding if state is not None else None
+        if negative_input is None:
+            raise RuntimeError(
+                f"VibeVoice terminal audio-token drain has no preceding input embedding for request {request_id!r}."
+            )
+        (negative_condition,) = self._negative_kv_branch.forward_step(
+            [request_id],
+            [negative_input],
+        )
+        self._stateful.record_negative_condition(
+            request_id,
+            negative_condition,
+        )
+        token_embedding = self.get_input_embeddings()(
+            torch.tensor(
+                [self._stateful.audio_token_id],
+                device=negative_input.device,
+                dtype=torch.long,
+            )
+        )
+        self._stateful.process_audio_tokens_batch(
+            request_ids=[request_id],
+            token_embeddings=[token_embedding],
+            kernel=self.model,
+        )
+        waveform = self._stateful.drain_waveform_chunks(request_id)
+        if waveform is None:
+            raise RuntimeError("VibeVoice terminal audio-token drain produced no waveform.")
+        # A hard cap has no later preprocess/safe point. The terminal negative
+        # condition has already been consumed, so release its Paged KV now;
+        # deferred parent cleanup remains idempotent for the other side state.
+        self._negative_kv_branch.free(request_id)
+        terminal_waveform = waveform.detach().to(device="cpu", dtype=torch.float32).contiguous()
+        if not multimodal_outputs:
+            return {
+                "audio": [terminal_waveform],
+                "sr": [torch.tensor(SAMPLE_RATE, dtype=torch.int32)],
+                "meta": {
+                    "req_id": [request_id],
+                    "sparse_audio": ["1"],
+                },
+            }
+        if not isinstance(multimodal_outputs, dict):
+            raise TypeError("VibeVoice terminal drain requires dictionary multimodal output.")
+        meta = multimodal_outputs.get("meta")
+        audio = multimodal_outputs.get("audio")
+        sample_rates = multimodal_outputs.get("sr")
+        if (
+            not isinstance(meta, dict)
+            or not isinstance(meta.get("req_id"), list)
+            or not isinstance(audio, list)
+            or not isinstance(sample_rates, list)
+            or len(audio) != len(meta["req_id"])
+            or len(sample_rates) != len(audio)
+        ):
+            raise ValueError("VibeVoice terminal drain received malformed sparse audio output.")
+
+        merged_audio = list(audio)
+        merged_sample_rates = list(sample_rates)
+        merged_request_ids = list(meta["req_id"])
+        if request_id in merged_request_ids:
+            index = merged_request_ids.index(request_id)
+            prior_waveform = merged_audio[index]
+            if not isinstance(prior_waveform, torch.Tensor):
+                raise TypeError("VibeVoice sparse audio output must contain tensors.")
+            merged_audio[index] = torch.cat(
+                [prior_waveform.to(terminal_waveform), terminal_waveform],
+                dim=0,
+            ).contiguous()
+        else:
+            merged_request_ids.append(request_id)
+            merged_audio.append(terminal_waveform)
+            merged_sample_rates.append(torch.tensor(SAMPLE_RATE, dtype=torch.int32))
+        return {
+            **multimodal_outputs,
+            "audio": merged_audio,
+            "sr": merged_sample_rates,
+            "meta": {
+                **meta,
+                "req_id": merged_request_ids,
+                "sparse_audio": ["1"],
+            },
+        }
+
     def make_omni_output(
         self,
         model_outputs: torch.Tensor | OmniOutput,
@@ -658,9 +726,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         if runtime_info is None:
             runtime_info = kwargs.get("runtime_additional_information") or []
         if not isinstance(runtime_info, list):
-            raise TypeError(
-                "VibeVoice make_omni_output requires request-aligned runtime information."
-            )
+            raise TypeError("VibeVoice make_omni_output requires request-aligned runtime information.")
 
         ready_request_ids: list[str] = []
         audio_chunks: list[torch.Tensor] = []
@@ -674,14 +740,9 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
             if waveform is None:
                 continue
             if waveform.ndim != 1 or not waveform.is_floating_point():
-                raise ValueError(
-                    "VibeVoice published waveform must be a one-dimensional "
-                    "floating-point tensor."
-                )
+                raise ValueError("VibeVoice published waveform must be a one-dimensional floating-point tensor.")
             ready_request_ids.append(request_id)
-            audio_chunks.append(
-                waveform.detach().to(device="cpu", dtype=torch.float32).contiguous()
-            )
+            audio_chunks.append(waveform.detach().to(device="cpu", dtype=torch.float32).contiguous())
 
         multimodal_outputs: dict[str, Any] = {}
         if audio_chunks:
@@ -726,21 +787,13 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
 
         if pending_audio_transitions:
             if inputs_embeds is None:
-                raise RuntimeError(
-                    "VibeVoice audio-token feedback requires inputs_embeds."
-                )
+                raise RuntimeError("VibeVoice audio-token feedback requires inputs_embeds.")
             if self._negative_kv_branch is not None:
-                negative_request_ids = [
-                    request_id for request_id, _ in pending_audio_transitions
-                ]
+                negative_request_ids = [request_id for request_id, _ in pending_audio_transitions]
                 negative_inputs: list[torch.Tensor] = []
                 for request_id in negative_request_ids:
                     state = self._stateful.get(request_id)
-                    negative_input = (
-                        state.negative_input_embedding
-                        if state is not None
-                        else None
-                    )
+                    negative_input = state.negative_input_embedding if state is not None else None
                     if negative_input is None:
                         raise RuntimeError(
                             "VibeVoice negative Qwen branch has no preceding "
@@ -753,8 +806,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
                 )
                 if len(negative_conditions) != len(negative_request_ids):
                     raise RuntimeError(
-                        "VibeVoice negative Qwen branch returned a condition "
-                        "batch with the wrong length."
+                        "VibeVoice negative Qwen branch returned a condition batch with the wrong length."
                     )
                 for request_id, condition in zip(
                     negative_request_ids,
@@ -775,9 +827,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
             for request_id, row_offset in pending_audio_transitions:
                 state = self._stateful.get(request_id)
                 if state is None:
-                    raise RuntimeError(
-                        f"Missing VibeVoice request state for {request_id!r}."
-                    )
+                    raise RuntimeError(f"Missing VibeVoice request state for {request_id!r}.")
                 transition_groups.setdefault(
                     (state.guidance_scale, state.num_diffusion_steps),
                     [],
@@ -786,10 +836,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
             for transitions in transition_groups.values():
                 request_ids = [item[0] for item in transitions]
                 offsets = [item[1] for item in transitions]
-                token_embeddings = [
-                    inputs_embeds[offset : offset + 1]
-                    for offset in offsets
-                ]
+                token_embeddings = [inputs_embeds[offset : offset + 1] for offset in offsets]
                 next_embeddings, _ = self._stateful.process_audio_tokens_batch(
                     request_ids=request_ids,
                     token_embeddings=token_embeddings,

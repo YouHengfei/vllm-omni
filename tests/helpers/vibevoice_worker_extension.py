@@ -71,16 +71,100 @@ class VibeVoiceWorkerExtensionForTest:
     def vibevoice_test_runtime_state(self) -> dict[str, Any]:
         return _runner_snapshot(self)
 
-    def vibevoice_test_arm_generation_trace(
+    def vibevoice_test_arm_natural_lifecycle_trace(
         self,
         seed: int,
     ) -> dict[str, Any]:
-        """Seed this TP rank and capture full cached audio-token transitions."""
+        """Trace natural audio-segment transitions without production hooks."""
+        import torch
+
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        runner = self.model_runner
+        model = runner.get_model()
+        stateful = model._stateful
+        if hasattr(self, "_vibevoice_natural_lifecycle_trace"):
+            raise RuntimeError("VibeVoice natural lifecycle trace was armed twice")
+
+        trace: list[dict[str, Any]] = []
+        original_start = stateful.start_audio_segment
+        original_process = stateful.process_sampled_token
+
+        def negative_length(request_id: str) -> int:
+            branch = model._negative_kv_branch
+            return 0 if branch is None else int(branch.store.get_sequence_length(request_id))
+
+        def traced_start(request_id: str) -> None:
+            original_start(request_id)
+            state = stateful.get(request_id)
+            trace.append(
+                {
+                    "event": "start_audio_segment",
+                    "request_id": request_id,
+                    "in_audio_segment": bool(state is not None and state.in_audio_segment),
+                    "negative_tokens": negative_length(request_id),
+                }
+            )
+
+        def traced_process_sampled_token(**kwargs: Any) -> Any:
+            request_id = kwargs["request_id"]
+            token_id = int(kwargs["token_id"])
+            negative_tokens_before = negative_length(request_id)
+            result = original_process(**kwargs)
+            state = stateful.get(request_id)
+            trace.append(
+                {
+                    "event": "process_sampled_token",
+                    "request_id": request_id,
+                    "token_id": token_id,
+                    "in_audio_segment": bool(state is not None and state.in_audio_segment),
+                    "audio_token_count": (int(state.audio_token_count) if state is not None else 0),
+                    "negative_tokens_before": negative_tokens_before,
+                    "negative_tokens_after": negative_length(request_id),
+                }
+            )
+            return result
+
+        stateful.start_audio_segment = traced_start
+        stateful.process_sampled_token = traced_process_sampled_token
+        self._vibevoice_natural_lifecycle_trace = trace
+        self._vibevoice_natural_lifecycle_originals = (
+            stateful,
+            original_start,
+            original_process,
+        )
+        return {"rank": int(self.rank), "armed": True, "seed": int(seed)}
+
+    def vibevoice_test_take_natural_lifecycle_trace(self) -> dict[str, Any]:
+        """Restore natural-lifecycle instrumentation and return its events."""
+        trace = getattr(self, "_vibevoice_natural_lifecycle_trace", None)
+        originals = getattr(self, "_vibevoice_natural_lifecycle_originals", None)
+        if trace is None or originals is None:
+            raise RuntimeError("VibeVoice natural lifecycle trace is not armed")
+        stateful, original_start, original_process = originals
+        stateful.start_audio_segment = original_start
+        stateful.process_sampled_token = original_process
+        del self._vibevoice_natural_lifecycle_trace
+        del self._vibevoice_natural_lifecycle_originals
+        return {"rank": int(self.rank), "events": list(trace)}
+
+    def vibevoice_test_arm_generation_trace(
+        self,
+        seed: int,
+        production_rng: bool = False,
+    ) -> dict[str, Any]:
+        """Seed this TP rank and capture full cached audio-token transitions.
+
+        The default preserves the deterministic three-step golden contract.
+        ``production_rng=True`` is test-only diagnostics: reference VAE sampling
+        and diffusion consume the unmodified global-device RNG stream.
+        """
         import torch
 
         runner = self.model_runner
         model = runner.get_model()
         kernel = model.model
+        stateful = model._stateful
         if hasattr(self, "_vibevoice_generation_trace"):
             raise RuntimeError("VibeVoice generation trace was armed twice")
 
@@ -89,36 +173,49 @@ class VibeVoiceWorkerExtensionForTest:
         original_audio_encode = model.model.audio_tower.encode
         encoded_reference_latents: list[Any] = []
 
-        def encode_with_deterministic_mode(
+        def encode_with_trace(
             input_values: Any,
             *args: Any,
             **kwargs: Any,
         ) -> Any:
-            kwargs["sample"] = False
+            if not production_rng:
+                kwargs["sample"] = False
             encoded = original_audio_encode(input_values, *args, **kwargs)
             encoded_reference_latents.append(encoded.latents.detach().cpu())
             return encoded
 
-        model.model.audio_tower.encode = encode_with_deterministic_mode
+        model.model.audio_tower.encode = encode_with_trace
         model._vibevoice_test_encoded_reference_latents = encoded_reference_latents
         trace: list[dict[str, Any]] = []
         original_sample = kernel.sample_audio_latent
         original_decode = kernel.decode_audio_token
         original_negative_forward = model._negative_kv_branch.forward_step
+        original_record_negative_input = stateful.record_negative_input_embedding
         negative_inputs_for_trace: list[Any] = []
+        negative_inputs_at_record: list[Any] = []
+
+        def traced_record_negative_input(
+            request_id: str,
+            input_embedding: Any,
+        ) -> None:
+            negative_inputs_at_record.append(input_embedding.detach().cpu().clone())
+            original_record_negative_input(request_id, input_embedding)
+
+        stateful.record_negative_input_embedding = traced_record_negative_input
 
         def traced_negative_forward(
             request_ids: list[str],
             input_embeddings: list[Any],
         ) -> list[Any]:
-            conditions = original_negative_forward(
+            if len(request_ids) != 1 or len(input_embeddings) != 1:
+                raise RuntimeError("VibeVoice golden trace requires one active negative request")
+            # Snapshot before Qwen executes and before the request state can
+            # replace/release this cross-step tensor.
+            negative_inputs_for_trace.append(input_embeddings[0].detach().cpu().clone())
+            return original_negative_forward(
                 request_ids,
                 input_embeddings,
             )
-            if len(request_ids) != 1 or len(input_embeddings) != 1:
-                raise RuntimeError("VibeVoice golden trace requires one active negative request")
-            negative_inputs_for_trace.append(input_embeddings[0].detach().cpu())
-            return conditions
 
         model._negative_kv_branch.forward_step = traced_negative_forward
 
@@ -129,37 +226,41 @@ class VibeVoiceWorkerExtensionForTest:
             **kwargs: Any,
         ) -> Any:
             step = len(trace)
-            deterministic_noise = (
-                torch.linspace(
-                    -1.0,
-                    1.0,
-                    128,
-                    dtype=torch.float32,
-                    device=noise.device,
+            traced_noise = noise
+            if not production_rng:
+                traced_noise = (
+                    torch.linspace(
+                        -1.0,
+                        1.0,
+                        128,
+                        dtype=torch.float32,
+                        device=noise.device,
+                    )
+                    .reshape(2, 64)
+                    .add_(step * 0.03125)
+                    .to(noise)
                 )
-                .reshape(2, 64)
-                .add_(step * 0.03125)
-                .to(noise)
-            )
-            if tuple(noise.shape) != tuple(deterministic_noise.shape):
+            if tuple(noise.shape) != tuple(traced_noise.shape):
                 raise RuntimeError(
                     f"VibeVoice golden trace expected a single-request noise draw, got {tuple(noise.shape)}"
                 )
             latent = original_sample(
                 positive_condition,
                 negative_condition,
-                deterministic_noise,
+                traced_noise,
                 **kwargs,
             )
             negative_input = negative_inputs_for_trace.pop(0) if negative_inputs_for_trace else None
-            if negative_input is None:
+            recorded_negative_input = negative_inputs_at_record.pop(0) if negative_inputs_at_record else None
+            if negative_input is None or recorded_negative_input is None:
                 raise RuntimeError("VibeVoice golden trace is missing the negative input")
             trace.append(
                 {
                     "negative_input_embedding": negative_input,
+                    "negative_input_at_record": recorded_negative_input,
                     "positive_condition": positive_condition.detach().cpu(),
                     "negative_condition": negative_condition.detach().cpu(),
-                    "noise": deterministic_noise.detach().cpu(),
+                    "noise": traced_noise.detach().cpu(),
                     "audio_latent": latent.detach().cpu(),
                 }
             )
@@ -188,12 +289,15 @@ class VibeVoiceWorkerExtensionForTest:
             original_sample,
             original_decode,
             original_negative_forward,
+            stateful,
+            original_record_negative_input,
         )
         return {
             "rank": int(self.rank),
             "armed": True,
             "seed": int(torch.initial_seed()),
             "encoded_reference_latents": encoded_reference_latents,
+            "production_rng": bool(production_rng),
         }
 
     def vibevoice_test_write_generation_trace(
@@ -218,11 +322,14 @@ class VibeVoiceWorkerExtensionForTest:
             original_sample,
             original_decode,
             original_negative_forward,
+            stateful,
+            original_record_negative_input,
         ) = originals
         model.model.audio_tower.encode = original_audio_encode
         kernel.sample_audio_latent = original_sample
         kernel.decode_audio_token = original_decode
         model._negative_kv_branch.forward_step = original_negative_forward
+        stateful.record_negative_input_embedding = original_record_negative_input
         path = Path(output_dir) / f"omni-rank-{self.rank}.pt"
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(path.suffix + ".tmp")

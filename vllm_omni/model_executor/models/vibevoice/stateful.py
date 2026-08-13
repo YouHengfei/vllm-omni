@@ -19,6 +19,30 @@ import torch
 from .audio_decode import VibeVoiceAudioTokenDecodeOutput
 
 
+def validate_guidance_scale(value: Any) -> float:
+    """Validate one VibeVoice CFG guidance scale."""
+    try:
+        scale = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"VibeVoice guidance_scale must be finite, got {value!r}.") from exc
+    if not math.isfinite(scale):
+        raise ValueError(f"VibeVoice guidance_scale must be finite, got {value!r}.")
+    return scale
+
+
+def validate_num_diffusion_steps(value: Any) -> int:
+    """Validate one VibeVoice diffusion-step count."""
+    if isinstance(value, bool):
+        raise ValueError("VibeVoice num_diffusion_steps must be a positive integer.")
+    try:
+        steps = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("VibeVoice num_diffusion_steps must be a positive integer.") from exc
+    if steps < 1:
+        raise ValueError("VibeVoice num_diffusion_steps must be a positive integer.")
+    return steps
+
+
 class VibeVoiceInferenceKernel(Protocol):
     """Model-side math used by :class:`VibeVoiceStatefulInference`."""
 
@@ -130,12 +154,8 @@ class VibeVoiceStatefulInference:
         self.eos_token_id = int(eos_token_id)
         self.latent_size = int(latent_size)
         self.condition_size = int(condition_size)
-        self.default_guidance_scale = self._validate_guidance_scale(
-            default_guidance_scale
-        )
-        self.default_num_diffusion_steps = self._validate_num_diffusion_steps(
-            default_num_diffusion_steps
-        )
+        self.default_guidance_scale = validate_guidance_scale(default_guidance_scale)
+        self.default_num_diffusion_steps = validate_num_diffusion_steps(default_num_diffusion_steps)
         self._states: dict[str, VibeVoiceRequestState] = {}
         self._deferred_cleanup_ids: set[str] = set()
         self._negative_kv_branch: VibeVoiceNegativeKVBranch | None = None
@@ -147,38 +167,6 @@ class VibeVoiceStatefulInference:
         if self._negative_kv_branch is not None:
             raise RuntimeError("VibeVoice negative KV branch was bound twice.")
         self._negative_kv_branch = branch
-
-    @staticmethod
-    def _validate_guidance_scale(value: Any) -> float:
-        try:
-            scale = float(value)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(
-                f"VibeVoice guidance_scale must be finite, got {value!r}."
-            ) from exc
-        if not math.isfinite(scale):
-            raise ValueError(
-                f"VibeVoice guidance_scale must be finite, got {value!r}."
-            )
-        return scale
-
-    @staticmethod
-    def _validate_num_diffusion_steps(value: Any) -> int:
-        if isinstance(value, bool):
-            raise ValueError(
-                "VibeVoice num_diffusion_steps must be a positive integer."
-            )
-        try:
-            steps = int(value)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(
-                "VibeVoice num_diffusion_steps must be a positive integer."
-            ) from exc
-        if steps < 1:
-            raise ValueError(
-                "VibeVoice num_diffusion_steps must be a positive integer."
-            )
-        return steps
 
     @property
     def active_request_ids(self) -> tuple[str, ...]:
@@ -220,13 +208,9 @@ class VibeVoiceStatefulInference:
             return
         state = self.get_or_create(request_id)
         if "guidance_scale" in extra_args:
-            state.guidance_scale = self._validate_guidance_scale(
-                extra_args["guidance_scale"]
-            )
+            state.guidance_scale = validate_guidance_scale(extra_args["guidance_scale"])
         if "num_diffusion_steps" in extra_args:
-            state.num_diffusion_steps = self._validate_num_diffusion_steps(
-                extra_args["num_diffusion_steps"]
-            )
+            state.num_diffusion_steps = validate_num_diffusion_steps(extra_args["num_diffusion_steps"])
 
     def _validate_condition(
         self,
@@ -237,13 +221,13 @@ class VibeVoiceStatefulInference:
             raise TypeError(f"VibeVoice {name} must be a tensor.")
         expected_shape = (1, self.condition_size)
         if tuple(condition.shape) != expected_shape:
-            raise ValueError(
-                f"VibeVoice {name} must have shape {expected_shape}, got "
-                f"{tuple(condition.shape)}."
-            )
+            raise ValueError(f"VibeVoice {name} must have shape {expected_shape}, got {tuple(condition.shape)}.")
         if not condition.is_floating_point():
             raise TypeError(f"VibeVoice {name} must be floating-point.")
-        return condition.detach().contiguous()
+        # Conditions survive across runner steps. Always take request-owned
+        # storage: ``contiguous()`` alone aliases an already-contiguous slice
+        # of GPUARModelRunner's reusable inputs/hidden-state buffers.
+        return condition.detach().clone(memory_format=torch.contiguous_format)
 
     def record_positive_condition(
         self,
@@ -251,9 +235,7 @@ class VibeVoiceStatefulInference:
         condition: torch.Tensor,
     ) -> None:
         state = self.get_or_create(request_id)
-        state.positive_condition = self._validate_condition(
-            "positive_condition", condition
-        )
+        state.positive_condition = self._validate_condition("positive_condition", condition)
 
     def record_negative_input_embedding(
         self,
@@ -261,9 +243,7 @@ class VibeVoiceStatefulInference:
         input_embedding: torch.Tensor,
     ) -> None:
         state = self.get_or_create(request_id)
-        state.negative_input_embedding = self._validate_condition(
-            "negative_input_embedding", input_embedding
-        )
+        state.negative_input_embedding = self._validate_condition("negative_input_embedding", input_embedding)
 
     def record_negative_condition(
         self,
@@ -271,9 +251,7 @@ class VibeVoiceStatefulInference:
         condition: torch.Tensor,
     ) -> None:
         state = self.get_or_create(request_id)
-        state.negative_condition = self._validate_condition(
-            "negative_condition", condition
-        )
+        state.negative_condition = self._validate_condition("negative_condition", condition)
         state.negative_reset_pending = False
 
     def start_audio_segment(self, request_id: str) -> None:
@@ -310,13 +288,11 @@ class VibeVoiceStatefulInference:
         state = self.get_or_create(request_id)
         if token_embedding.ndim != 2 or token_embedding.shape[0] != 1:
             raise ValueError(
-                "VibeVoice token_embedding must have shape (1, hidden_size), "
-                f"got {tuple(token_embedding.shape)}."
+                f"VibeVoice token_embedding must have shape (1, hidden_size), got {tuple(token_embedding.shape)}."
             )
         if token_embedding.shape[1] != self.condition_size:
             raise ValueError(
-                "VibeVoice token_embedding hidden size must be "
-                f"{self.condition_size}, got {token_embedding.shape[1]}."
+                f"VibeVoice token_embedding hidden size must be {self.condition_size}, got {token_embedding.shape[1]}."
             )
 
         token_id = int(token_id)
@@ -356,13 +332,9 @@ class VibeVoiceStatefulInference:
         if not request_ids:
             return [], []
         if len(request_ids) != len(token_embeddings):
-            raise ValueError(
-                "VibeVoice audio-token request/embedding batch lengths must match."
-            )
+            raise ValueError("VibeVoice audio-token request/embedding batch lengths must match.")
         if len(request_ids) != len(set(request_ids)):
-            raise ValueError(
-                "VibeVoice audio-token active subset contains duplicate request IDs."
-            )
+            raise ValueError("VibeVoice audio-token active subset contains duplicate request IDs.")
 
         states: list[VibeVoiceRequestState] = []
         positive_conditions: list[torch.Tensor] = []
@@ -387,10 +359,7 @@ class VibeVoiceStatefulInference:
                     "audio_bos_token must be generated first."
                 )
             if state.positive_condition is None:
-                raise RuntimeError(
-                    "VibeVoice audio_token has no positive Qwen condition from the "
-                    "preceding AR step."
-                )
+                raise RuntimeError("VibeVoice audio_token has no positive Qwen condition from the preceding AR step.")
             if state.negative_condition is None or state.negative_reset_pending:
                 raise RuntimeError(
                     "VibeVoice audio_token requires an independent negative Qwen "
@@ -400,10 +369,7 @@ class VibeVoiceStatefulInference:
             if guidance_scale is None:
                 guidance_scale = state.guidance_scale
                 num_diffusion_steps = state.num_diffusion_steps
-            elif (
-                state.guidance_scale != guidance_scale
-                or state.num_diffusion_steps != num_diffusion_steps
-            ):
+            elif state.guidance_scale != guidance_scale or state.num_diffusion_steps != num_diffusion_steps:
                 raise RuntimeError(
                     "VibeVoice active audio-token requests with different guidance_scale "
                     "or num_diffusion_steps cannot share one diffusion batch."
@@ -412,13 +378,9 @@ class VibeVoiceStatefulInference:
             negative = state.negative_condition.to(positive)
             if positive_conditions:
                 if positive.device != positive_conditions[0].device:
-                    raise ValueError(
-                        "VibeVoice active diffusion conditions must use one device."
-                    )
+                    raise ValueError("VibeVoice active diffusion conditions must use one device.")
                 if positive.dtype != positive_conditions[0].dtype:
-                    raise ValueError(
-                        "VibeVoice active diffusion conditions must use one dtype."
-                    )
+                    raise ValueError("VibeVoice active diffusion conditions must use one dtype.")
             states.append(state)
             positive_conditions.append(positive)
             negative_conditions.append(negative)
@@ -459,10 +421,7 @@ class VibeVoiceStatefulInference:
             state.semantic_cache = decoded.semantic_cache
             state.next_embedding = decoded.next_embedding.reshape(1, -1)
             state.waveform_chunks_cpu.append(
-                decoded.audio.detach()
-                .reshape(-1)
-                .to(device="cpu", dtype=torch.float32)
-                .contiguous()
+                decoded.audio.detach().reshape(-1).to(device="cpu", dtype=torch.float32).contiguous()
             )
             state.audio_token_count += 1
             # Conditions are one-step values. Keeping either one would allow a
@@ -532,4 +491,6 @@ __all__ = [
     "VibeVoiceNegativeKVBranch",
     "VibeVoiceRequestState",
     "VibeVoiceStatefulInference",
+    "validate_guidance_scale",
+    "validate_num_diffusion_steps",
 ]

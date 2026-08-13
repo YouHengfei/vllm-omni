@@ -21,7 +21,7 @@ pytestmark = [
     pytest.mark.core_model,
     pytest.mark.cuda,
     pytest.mark.skipif(
-        not torch.cuda.is_available() or torch.cuda.device_count() < 2,
+        not torch.accelerator.is_available() or torch.accelerator.device_count() < 2,
         reason="Two CUDA devices are required",
     ),
 ]
@@ -146,7 +146,7 @@ def _run_omni_generation(
                 )
                 assert len(written) == 1
                 assert [item["rank"] for item in written[0]] == [0, 1]
-                assert all(item["num_steps"] == 2 for item in written[0])
+                assert all(item["num_steps"] == 3 for item in written[0])
                 audio_path = Path(output_dir) / "omni-audio.pt"
                 torch.save(torch.cat(audio_chunks).contiguous(), audio_path)
                 return {
@@ -280,15 +280,15 @@ def test_full_cached_generation_matches_transformers_pr_reference() -> None:
             weights_only=True,
         )
 
-    assert hf_result["token_ids"] == [151654, 151654]
+    assert hf_result["token_ids"] == [151654, 151654, 151654]
     assert omni_result["token_ids"] == [151654, 151654, 151654]
-    assert hf_result["audio"].shape == (1, 6_400)
-    assert omni_audio.shape == (6_400,)
+    assert hf_result["audio"].shape == (1, 9_600)
+    assert omni_audio.shape == (9_600,)
     assert omni_audio.dtype == torch.float32
     assert omni_result["sample_rates"] and set(omni_result["sample_rates"]) == {24_000}
     assert torch.isfinite(omni_audio).all()
-    assert len(hf_result["trace"]) == 2
-    assert [len(trace) for trace in omni_traces] == [2, 2]
+    assert len(hf_result["trace"]) == 3
+    assert [len(trace) for trace in omni_traces] == [3, 3]
     assert len(hf_result["encoded_reference_latents"]) == 1
     assert [len(payload["encoded_reference_latents"]) for payload in omni_trace_payloads] == [1, 1]
     for payload in omni_trace_payloads:
@@ -308,7 +308,24 @@ def test_full_cached_generation_matches_transformers_pr_reference() -> None:
                     msg=f"TP rank parity: step={step_index}, tensor={key}",
                 )
 
-    assert len(hf_result["replay_trace"]) == 2
+    # The first negative step in both runtimes consumes the same audio-BOS
+    # embedding. This guards request-state ownership: an aliased view into the
+    # runner's reusable input buffer is overwritten before negative Qwen uses
+    # it and causes long-generation CFG/audio amplitude drift.
+    torch.testing.assert_close(
+        omni_traces[0][0]["negative_input_embedding"],
+        hf_result["trace"][0]["negative_input_embedding"],
+        rtol=0,
+        atol=0,
+    )
+    torch.testing.assert_close(
+        omni_traces[0][0]["negative_condition"].float(),
+        hf_result["trace"][0]["negative_condition"].float(),
+        rtol=0.03,
+        atol=0.25,
+    )
+
+    assert len(hf_result["replay_trace"]) == 3
     replay_keys = (
         "audio_latent",
         "audio",

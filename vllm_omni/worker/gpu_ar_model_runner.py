@@ -1574,6 +1574,135 @@ class GPUARModelRunner(OmniGPUModelRunner, OmniConnectorModelRunnerMixin):
         except TypeError:
             return scheduler_output
 
+    def _terminal_sample_drain_request_ids(
+        self,
+        *,
+        req_ids: list[str],
+        valid_sampled_token_ids: list[list[int]],
+        sampled_token_ids: torch.Tensor | None = None,
+        invalid_req_indices: list[int] | None = None,
+    ) -> list[str]:
+        """Select model-declared sampled tokens ending on a hard length cap.
+
+        Async scheduling normally leaves ``valid_sampled_token_ids`` empty to
+        avoid a per-step D2H synchronization. A declaring model pays that cost
+        only for requests whose post-bookkeeping length has reached a cap.
+        """
+        terminal_token_ids = getattr(
+            getattr(self, "model", None),
+            "terminal_sample_drain_token_ids",
+            None,
+        )
+        if not terminal_token_ids:
+            return []
+
+        invalid_indices = set(invalid_req_indices or ())
+        capped_indices: list[int] = []
+        for req_index, request_id in enumerate(req_ids):
+            if req_index in invalid_indices:
+                continue
+            state = self.requests.get(request_id)
+            if state is None or state.sampling_params is None:
+                continue
+            max_tokens = state.sampling_params.max_tokens
+            output_length_capped = max_tokens is not None and len(state.output_token_ids) >= int(max_tokens)
+            model_length_capped = state.num_tokens >= self.max_model_len
+            if output_length_capped or model_length_capped:
+                capped_indices.append(req_index)
+        if not capped_indices:
+            return []
+
+        if valid_sampled_token_ids:
+            sampled_ids_by_index = valid_sampled_token_ids
+        else:
+            if sampled_token_ids is None:
+                return []
+            if sampled_token_ids.ndim != 2 or sampled_token_ids.shape[-1] != 1:
+                raise RuntimeError("Terminal sampled-token drain requires exactly one sampled token per request.")
+            # This synchronization is intentionally limited to the terminal
+            # capability path; undeclared models and non-terminal steps never
+            # perform it.
+            sampled_ids_by_index = sampled_token_ids.detach().to("cpu").tolist()
+
+        terminal_request_ids: list[str] = []
+        for req_index in capped_indices:
+            if req_index >= len(sampled_ids_by_index):
+                continue
+            sampled_ids = sampled_ids_by_index[req_index]
+            if not sampled_ids:
+                continue
+            if len(sampled_ids) != 1:
+                raise RuntimeError("Terminal sampled-token drain requires exactly one accepted token per request.")
+            token_id = int(sampled_ids[0])
+            if token_id not in terminal_token_ids:
+                continue
+            state = self.requests[req_ids[req_index]]
+            sampling_params = state.sampling_params
+            assert sampling_params is not None
+            # Match scheduler stop semantics: min_tokens gates all stopping;
+            # afterwards EOS/stop-token termination wins before length caps.
+            if len(state.output_token_ids) < sampling_params.min_tokens:
+                continue
+            if token_id == sampling_params.eos_token_id or token_id in (sampling_params.stop_token_ids or ()):
+                continue
+            terminal_request_ids.append(req_ids[req_index])
+        return terminal_request_ids
+
+    def _maybe_run_terminal_sample_drain(
+        self,
+        *,
+        hidden_states: torch.Tensor,
+        multimodal_outputs: Any,
+        num_scheduled_tokens_np: np.ndarray,
+        scheduler_output: SchedulerOutput,
+        req_ids_output_copy: list[str],
+        valid_sampled_token_ids: list[list[int]],
+        sampled_token_ids: torch.Tensor,
+        invalid_req_indices: list[int],
+        query_start_loc_cpu: Any,
+    ) -> tuple[Any, bool]:
+        """Run an opt-in model drain before the terminal output snapshot."""
+        terminal_request_ids = self._terminal_sample_drain_request_ids(
+            req_ids=req_ids_output_copy,
+            valid_sampled_token_ids=valid_sampled_token_ids,
+            sampled_token_ids=sampled_token_ids,
+            invalid_req_indices=invalid_req_indices,
+        )
+        if not terminal_request_ids:
+            return multimodal_outputs, False
+
+        drain = getattr(self.model, "drain_terminal_sampled_tokens", None)
+        if not callable(drain):
+            raise RuntimeError(
+                "A model declaring terminal_sample_drain_token_ids must provide drain_terminal_sampled_tokens()."
+            )
+
+        _, downstream_req_ids = self._resolve_pooler_payload_req_ids(req_ids_output_copy)
+        postprocess_applied = False
+        if self._model_omni_flag(self.model, "has_postprocess"):
+            if not downstream_req_ids:
+                raise RuntimeError("Terminal sampled-token drain requires an Omni output route for model postprocess.")
+            with record_function_or_nullcontext("omni_output_builder:terminal_postprocess"):
+                self._process_additional_information_updates(
+                    hidden_states,
+                    multimodal_outputs,
+                    num_scheduled_tokens_np,
+                    scheduler_output,
+                    None,
+                    None,
+                    req_ids_filter=set(downstream_req_ids),
+                    req_ids=req_ids_output_copy,
+                    query_start_loc_cpu=query_start_loc_cpu,
+                )
+            postprocess_applied = True
+
+        with record_function_or_nullcontext("gpu_model_runner:terminal_sample_drain"):
+            multimodal_outputs = drain(
+                request_ids=terminal_request_ids,
+                multimodal_outputs=multimodal_outputs,
+            )
+        return multimodal_outputs, postprocess_applied
+
     def _should_return_omni_routed_experts(self) -> bool:
         model_config = getattr(self, "model_config", None)
         if model_config is None:
@@ -2075,8 +2204,21 @@ class GPUARModelRunner(OmniGPUModelRunner, OmniConnectorModelRunnerMixin):
         )
 
         use_async_omni_output = self._should_use_async_omni_output()
-        omni_postprocess_already_applied = False
-        if use_async_omni_output:
+        (
+            multimodal_outputs,
+            omni_postprocess_already_applied,
+        ) = self._maybe_run_terminal_sample_drain(
+            hidden_states=hidden_states,
+            multimodal_outputs=multimodal_outputs,
+            num_scheduled_tokens_np=num_scheduled_tokens_np,
+            scheduler_output=scheduler_output,
+            req_ids_output_copy=req_ids_output_copy,
+            valid_sampled_token_ids=valid_sampled_token_ids,
+            sampled_token_ids=sampler_output.sampled_token_ids,
+            invalid_req_indices=invalid_req_indices,
+            query_start_loc_cpu=query_start_loc_cpu,
+        )
+        if use_async_omni_output and not omni_postprocess_already_applied:
             omni_postprocess_already_applied = self._maybe_run_eager_omni_postprocess_before_async_output(
                 hidden_states=hidden_states,
                 multimodal_outputs=multimodal_outputs,
