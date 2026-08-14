@@ -23,20 +23,19 @@ class _FakeStore:
         self.name = name
         self.reset_ids: list[str] = []
         self.free_ids: list[str] = []
-        self.steps = 0
+        self.steps: dict[str, int] = {}
 
     def reset(self, request_id: str) -> None:
         self.reset_ids.append(request_id)
-        self.steps = 0
+        self.steps[request_id] = 0
 
     @contextmanager
     def append_and_enter(self, request_id: str):
-        del request_id
-        position = torch.tensor([self.steps])
-        self.steps += 1
+        position = torch.tensor([self.steps.get(request_id, 0)])
+        self.steps[request_id] = int(position.item()) + 1
         yield SimpleNamespace(
             position=position,
-            sequence_length=self.steps,
+            sequence_length=self.steps[request_id],
         )
 
     def free(self, request_id: str) -> None:
@@ -46,6 +45,24 @@ class _FakeStore:
 class _FailingQwen(nn.Module):
     def forward(self, **_: Any) -> torch.Tensor:
         raise RuntimeError("injected negative Qwen failure")
+
+
+class _ReusingQwen(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_buffer("output", torch.empty(1, 4))
+
+    def forward(
+        self,
+        input_ids: torch.Tensor | None,
+        positions: torch.Tensor,
+        intermediate_tensors: Any = None,
+        inputs_embeds: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        del input_ids, intermediate_tensors
+        assert inputs_embeds is not None
+        self.output.copy_(inputs_embeds + positions.reshape(-1, 1).to(inputs_embeds))
+        return self.output
 
 
 class _FakeQwen(nn.Module):
@@ -100,15 +117,62 @@ def test_negative_executor_frees_branch_after_model_exception() -> None:
     assert store.free_ids == ["request-a"]
 
 
-def test_negative_executor_rejects_non_v1_batch_and_bad_embedding() -> None:
+def test_negative_executor_advances_multiple_requests_sequentially() -> None:
+    store = _FakeStore()
+    branch = VibeVoiceNegativeBranch(
+        store=store,  # type: ignore[arg-type]
+        language_model=_FakeQwen(),  # type: ignore[arg-type]
+        hidden_size=4,
+    )
+    branch.reset_audio_segment("request-a")
+    branch.reset_audio_segment("request-b")
+
+    first = branch.forward_step(
+        ["request-a", "request-b"],
+        [torch.ones(1, 4), torch.full((1, 4), 2.0)],
+    )
+    second = branch.forward_step(
+        ["request-b", "request-a"],
+        [torch.full((1, 4), 2.0), torch.ones(1, 4)],
+    )
+
+    assert torch.equal(first[0], torch.ones(1, 4))
+    assert torch.equal(first[1], torch.full((1, 4), 2.0))
+    assert torch.equal(second[0], torch.full((1, 4), 3.0))
+    assert torch.equal(second[1], torch.full((1, 4), 2.0))
+
+
+def test_negative_executor_owns_each_condition_across_sequential_requests() -> None:
+    store = _FakeStore()
+    branch = VibeVoiceNegativeBranch(
+        store=store,  # type: ignore[arg-type]
+        language_model=_ReusingQwen(),  # type: ignore[arg-type]
+        hidden_size=4,
+    )
+    branch.reset_audio_segment("request-a")
+    branch.reset_audio_segment("request-b")
+
+    conditions = branch.forward_step(
+        ["request-a", "request-b"],
+        [torch.ones(1, 4), torch.full((1, 4), 2.0)],
+    )
+
+    assert torch.equal(conditions[0], torch.ones(1, 4))
+    assert torch.equal(conditions[1], torch.full((1, 4), 2.0))
+    assert conditions[0].data_ptr() != conditions[1].data_ptr()
+
+
+def test_negative_executor_rejects_unaligned_duplicate_or_bad_embeddings() -> None:
     branch = VibeVoiceNegativeBranch(
         store=_FakeStore(),  # type: ignore[arg-type]
         language_model=_FakeQwen(),  # type: ignore[arg-type]
         hidden_size=4,
     )
-    with pytest.raises(ValueError, match="exactly one active request"):
+    with pytest.raises(ValueError, match="non-empty and aligned"):
+        branch.forward_step(["a", "b"], [torch.zeros(1, 4)])
+    with pytest.raises(ValueError, match="duplicate request IDs"):
         branch.forward_step(
-            ["a", "b"],
+            ["a", "a"],
             [torch.zeros(1, 4), torch.zeros(1, 4)],
         )
     with pytest.raises(ValueError, match=r"shape \(1, 4\)"):

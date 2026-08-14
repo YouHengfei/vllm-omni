@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import copy
+import json
 from types import SimpleNamespace
 
 import numpy as np
@@ -10,7 +12,13 @@ import torch
 from vllm import SamplingParams
 from vllm.multimodal.media import MediaConnector
 
-from vllm_omni.entrypoints.openai.protocol.audio import OpenAICreateSpeechRequest
+from vllm_omni.entrypoints.openai.protocol.audio import (
+    BatchSpeechRequest,
+    CreateAudio,
+    OpenAICreateSpeechRequest,
+    SpeechBatchItem,
+    SpeechTokenUsage,
+)
 from vllm_omni.entrypoints.openai.serving_speech import OmniOpenAIServingSpeech
 from vllm_omni.entrypoints.openai.tts_adapters import resolve_adapter
 from vllm_omni.entrypoints.openai.tts_adapters.base import SpeechServingContext
@@ -28,6 +36,7 @@ pytestmark = [pytest.mark.core_model, pytest.mark.cpu]
 def _adapter() -> VibeVoiceTTSAdapter:
     server = SimpleNamespace(
         _validate_ref_audio_format=lambda _: None,
+        uploaded_speakers={},
         model_config=SimpleNamespace(
             allowed_local_media_path=None,
             allowed_media_domains=None,
@@ -40,6 +49,28 @@ def _adapter() -> VibeVoiceTTSAdapter:
         )
     )
     return VibeVoiceTTSAdapter(SpeechServingContext(server=server, engine_client=engine_client))
+
+
+def _uploaded_voice_adapter(
+    *,
+    voice_name: str = "alice",
+    embedding_source: str = "audio",
+    audio_data: str | None = "data:audio/wav;base64,dGVzdA==",
+    ref_text: str | None = "stored transcript",
+) -> VibeVoiceTTSAdapter:
+    adapter = _adapter()
+    server = adapter.ctx.server
+    server._tts_model_type = "vibevoice"
+    server.uploaded_speakers = {
+        voice_name.lower(): {
+            "name": voice_name,
+            "embedding_source": embedding_source,
+            "ref_text": ref_text,
+        }
+    }
+    server._get_uploaded_audio_data = lambda _voice: audio_data
+    server._apply_uploaded_speaker = lambda request: OmniOpenAIServingSpeech._apply_uploaded_speaker(server, request)
+    return adapter
 
 
 def test_vibevoice_adapter_is_registered_and_detected() -> None:
@@ -85,7 +116,6 @@ def test_vibevoice_adapter_rejects_mismatched_or_ambiguous_speakers() -> None:
 @pytest.mark.parametrize(
     ("field_name", "field_value"),
     [
-        pytest.param("voice", "alice", id="voice"),
         pytest.param("speaker_embedding", [0.1, 0.2], id="speaker-embedding"),
         pytest.param("instructions", "speak softly", id="instructions"),
         pytest.param("language", "English", id="language"),
@@ -120,6 +150,92 @@ def test_vibevoice_adapter_rejects_explicit_unsupported_fields(
     assert f"does not support '{field_name}'" in (_adapter().validate(request) or "")
 
 
+def test_vibevoice_uploaded_voice_validation_is_idempotent_and_build_resolves_audio(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = _uploaded_voice_adapter()
+    request = OpenAICreateSpeechRequest(input="hello", voice="Alice")
+    resolved_sources: list[str] = []
+
+    async def resolve(source: str):
+        resolved_sources.append(source)
+        return np.zeros(3_200, dtype=np.float32), 24_000
+
+    monkeypatch.setattr(adapter, "_resolve_reference", resolve)
+
+    assert adapter.validate(request) is None
+    assert adapter.validate(request) is None
+    assert request.voice == "Alice"
+    assert request.ref_audio is None
+
+    prepared = asyncio.run(adapter.build(request, [], False))
+
+    assert resolved_sources == ["data:audio/wav;base64,dGVzdA=="]
+    assert request.voice is None
+    assert request.ref_audio == "data:audio/wav;base64,dGVzdA=="
+    assert request.ref_text is None
+    assert len(prepared.prompt["multi_modal_data"]["audio"]) == 1
+    # Resolution canonicalizes the mutable serving request, so later defensive
+    # validation sees the same ref_audio-only request rather than a false XOR.
+    assert adapter.validate(request) is None
+
+
+@pytest.mark.parametrize(
+    ("speech_request", "message"),
+    [
+        pytest.param(
+            OpenAICreateSpeechRequest(
+                input="hello",
+                voice="alice",
+                ref_audio="file:///voice.wav",
+            ),
+            "exactly one of 'voice' or 'ref_audio'",
+            id="voice-and-inline-reference",
+        ),
+        pytest.param(
+            OpenAICreateSpeechRequest(
+                input="Speaker 0: hello\nSpeaker 1: world",
+                voice="alice",
+            ),
+            "only supported for single-speaker",
+            id="multi-speaker",
+        ),
+    ],
+)
+def test_vibevoice_uploaded_voice_rejects_conflicting_request_shapes(
+    speech_request: OpenAICreateSpeechRequest,
+    message: str,
+) -> None:
+    assert message in (_uploaded_voice_adapter().validate(speech_request) or "")
+
+
+def test_vibevoice_uploaded_voice_rejects_unknown_and_embedding_profiles() -> None:
+    unknown = OpenAICreateSpeechRequest(input="hello", voice="missing")
+    assert "Unknown VibeVoice voice 'missing'" in (_uploaded_voice_adapter().validate(unknown) or "")
+
+    embedding = OpenAICreateSpeechRequest(input="hello", voice="alice")
+    error = _uploaded_voice_adapter(embedding_source="direct").validate(embedding) or ""
+    assert "uses a speaker embedding" in error
+    assert "re-upload it with an audio file" in error
+
+
+def test_vibevoice_uploaded_voice_missing_audio_is_request_visible() -> None:
+    adapter = _uploaded_voice_adapter(audio_data=None)
+    request = OpenAICreateSpeechRequest(input="hello", voice="alice")
+
+    assert adapter.validate(request) is None
+    with pytest.raises(ValueError, match="Audio file for uploaded voice 'alice' is missing"):
+        asyncio.run(adapter.build(request, [], False))
+
+
+def test_vibevoice_speaker_alias_resolves_uploaded_voice() -> None:
+    adapter = _uploaded_voice_adapter(voice_name="narrator")
+    request = OpenAICreateSpeechRequest(input="hello", speaker="Narrator")
+
+    assert request.voice == "Narrator"
+    assert adapter.validate(request) is None
+
+
 def test_vibevoice_adapter_accepts_all_supported_request_fields() -> None:
     request = OpenAICreateSpeechRequest(
         input="hello",
@@ -143,14 +259,11 @@ def test_vibevoice_adapter_accepts_all_supported_request_fields() -> None:
 @pytest.mark.parametrize(
     ("stream", "stream_format"),
     [
-        (True, None),
         (False, "audio"),
-        (False, "sse"),
         (True, "audio"),
-        (True, "sse"),
     ],
 )
-def test_vibevoice_adapter_rejects_every_streaming_request_form(
+def test_vibevoice_adapter_rejects_raw_http_streaming(
     stream: bool,
     stream_format: str | None,
 ) -> None:
@@ -162,20 +275,18 @@ def test_vibevoice_adapter_rejects_every_streaming_request_form(
         # Keep protocol validation from masking the adapter-specific rejection.
         response_format="wav",
     )
-    assert request.is_streaming()
-    assert "non-streaming" in (_adapter().validate(request) or "")
+    assert request.is_raw_audio_stream()
+    assert "cannot expose the terminal finish reason" in (_adapter().validate(request) or "")
 
 
 @pytest.mark.parametrize(
     ("stream", "stream_format"),
     [
-        (True, None),
         (False, "audio"),
-        (False, "sse"),
         (True, "audio"),
     ],
 )
-def test_vibevoice_serving_rejects_streaming_before_engine_generation(
+def test_vibevoice_serving_rejects_raw_streaming_before_engine_generation(
     stream: bool,
     stream_format: str | None,
 ) -> None:
@@ -212,7 +323,106 @@ def test_vibevoice_serving_rejects_streaming_before_engine_generation(
     response = asyncio.run(serving.create_speech(request))
 
     assert response.error.code == 400
-    assert "non-streaming" in response.error.message
+    assert "cannot expose the terminal finish reason" in response.error.message
+
+
+def test_vibevoice_sse_streams_delta_pcm_and_terminal_finish_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    tokenizer = SimpleNamespace(encode=lambda text, add_special_tokens=False: list(text.encode("utf-8")))
+    waveforms = [
+        np.linspace(-0.2, 0.0, 3_200, dtype=np.float32),
+        np.linspace(0.0, 0.2, 3_200, dtype=np.float32),
+    ]
+
+    def generate(**kwargs):
+        captured.update(kwargs)
+
+        async def outputs():
+            for index, waveform in enumerate(waveforms):
+                finish_reason = "length" if index == len(waveforms) - 1 else None
+                yield SimpleNamespace(
+                    multimodal_output={
+                        "audio": torch.from_numpy(waveform),
+                        "sr": torch.tensor(24_000, dtype=torch.int32),
+                    },
+                    request_output=SimpleNamespace(
+                        outputs=[SimpleNamespace(finish_reason=finish_reason)],
+                    ),
+                    outputs=[SimpleNamespace(finish_reason=finish_reason)],
+                    metrics={"stage_metrics": {0: {"num_tokens_out": index + 1}}},
+                )
+
+        return outputs()
+
+    engine_client = SimpleNamespace(
+        errored=False,
+        default_sampling_params_list=[SamplingParams(max_tokens=2)],
+        model_config=SimpleNamespace(
+            async_chunk=False,
+            allowed_local_media_path=None,
+            allowed_media_domains=None,
+        ),
+        engine=SimpleNamespace(
+            input_processor=SimpleNamespace(renderer=SimpleNamespace(get_tokenizer=lambda: tokenizer))
+        ),
+        generate=generate,
+    )
+    serving = object.__new__(OmniOpenAIServingSpeech)
+    serving._diffusion_mode = False
+    serving.engine_client = engine_client
+    serving.model_config = engine_client.model_config
+    serving._tts_model_type = "vibevoice"
+    serving._is_tts = True
+    serving._request_ref_audio_artifact_keys = {}
+    serving._ref_audio_model_artifact_ready = set()
+    serving._ref_audio_resolve_cache = {}
+    serving._track_ref_audio_artifact_warmup = lambda *_args, **_kwargs: None
+    serving._validate_ref_audio_format = lambda _source: None
+    serving._adapter = VibeVoiceTTSAdapter(SpeechServingContext(server=serving, engine_client=engine_client))
+    serving._build_speech_usage = lambda *_args, **_kwargs: SpeechTokenUsage(output_tokens=2, total_tokens=2)
+
+    async def resolve_reference(_source: str):
+        return np.zeros(3_200, dtype=np.float32), 24_000
+
+    async def check_model(_request):
+        return None
+
+    monkeypatch.setattr(serving._adapter, "_resolve_reference", resolve_reference)
+    serving._check_model = check_model
+    request = OpenAICreateSpeechRequest(
+        input="hello",
+        ref_audio="file:///voice.wav",
+        stream=True,
+        response_format="pcm",
+    )
+
+    async def collect_response() -> bytes:
+        response = await serving.create_speech(request)
+        chunks = []
+        async for chunk in response.body_iterator:
+            chunks.append(chunk.encode() if isinstance(chunk, str) else chunk)
+        return b"".join(chunks)
+
+    body = asyncio.run(collect_response()).decode()
+    events = [json.loads(line.removeprefix("data: ")) for line in body.splitlines() if line.startswith("data: ")]
+
+    audio_events = [event for event in events if event["type"] == "speech.audio.delta"]
+    streamed_pcm = b"".join(base64.b64decode(event["audio"]) for event in audio_events)
+    expected_pcm = serving.create_audio(
+        CreateAudio(
+            audio_tensor=np.concatenate(waveforms),
+            sample_rate=24_000,
+            response_format="pcm",
+            speed=1.0,
+            base64_encode=False,
+        )
+    ).audio_data
+    assert streamed_pcm == expected_pcm
+    assert events[-1]["type"] == "speech.audio.done"
+    assert events[-1]["finish_reason"] == "length"
+    assert captured["sampling_params_list"][0].output_kind.name == "DELTA"
 
 
 def test_vibevoice_serving_rejects_unsupported_field_before_engine_generation() -> None:
@@ -240,15 +450,14 @@ def test_vibevoice_serving_rejects_unsupported_field_before_engine_generation() 
     serving._check_model = check_model
     request = OpenAICreateSpeechRequest(
         input="hello",
-        voice="alice",
+        instructions="speak softly",
         ref_audio="file:///voice.wav",
     )
 
     response = asyncio.run(serving.create_speech(request))
 
     assert response.error.code == 400
-    assert "does not support 'voice'" in response.error.message
-    assert "use 'ref_audio'" in response.error.message
+    assert "does not support 'instructions'" in response.error.message
 
 
 @pytest.mark.parametrize(
@@ -623,6 +832,104 @@ def test_nonstreaming_speech_response_exposes_vibevoice_finish_reason(
 
     assert response.status_code == 200
     assert response.headers.get("X-Finish-Reason") == expected_header
+
+
+def test_vibevoice_batch_returns_mixed_item_results_and_finish_reasons(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generated_prompts: list[str] = []
+    tokenizer = SimpleNamespace(encode=lambda text, add_special_tokens=False: list(text.encode("utf-8")))
+
+    def generate(**kwargs):
+        prompt = kwargs["prompt"]["prompt"]
+        generated_prompts.append(prompt)
+        finish_reason = "length" if "force length" in prompt else "stop"
+        waveform = torch.from_numpy(np.linspace(-0.25, 0.25, 3_200, dtype=np.float32))
+        multimodal_output = {
+            "audio": waveform,
+            "sr": torch.tensor(24_000, dtype=torch.int32),
+        }
+        final = SimpleNamespace(
+            multimodal_output=multimodal_output,
+            request_output=SimpleNamespace(
+                outputs=[SimpleNamespace(finish_reason=finish_reason)],
+            ),
+            outputs=[],
+            metrics={"stage_metrics": {0: {"num_tokens_out": 1}}},
+        )
+
+        async def outputs():
+            yield final
+
+        return outputs()
+
+    engine_client = SimpleNamespace(
+        errored=False,
+        default_sampling_params_list=[SamplingParams(max_tokens=32)],
+        model_config=SimpleNamespace(
+            async_chunk=False,
+            allowed_local_media_path=None,
+            allowed_media_domains=None,
+        ),
+        engine=SimpleNamespace(
+            input_processor=SimpleNamespace(renderer=SimpleNamespace(get_tokenizer=lambda: tokenizer))
+        ),
+        generate=generate,
+    )
+    serving = object.__new__(OmniOpenAIServingSpeech)
+    serving._diffusion_mode = False
+    serving._batch_max_items = 32
+    serving.engine_client = engine_client
+    serving.model_config = engine_client.model_config
+    serving._tts_model_type = "vibevoice"
+    serving._is_tts = True
+    serving._request_ref_audio_artifact_keys = {}
+    serving._ref_audio_model_artifact_ready = set()
+    serving._ref_audio_resolve_cache = {}
+    serving._track_ref_audio_artifact_warmup = lambda *_args, **_kwargs: None
+    serving._validate_ref_audio_format = lambda _source: None
+    serving.uploaded_speakers = {
+        "alice": {
+            "name": "alice",
+            "embedding_source": "audio",
+            "ref_text": "stored transcript",
+        }
+    }
+    serving._get_uploaded_audio_data = lambda _voice: "data:audio/wav;base64,dGVzdA=="
+    serving._adapter = VibeVoiceTTSAdapter(SpeechServingContext(server=serving, engine_client=engine_client))
+    serving._build_speech_usage = lambda *_args, **_kwargs: SpeechTokenUsage(output_tokens=1, total_tokens=1)
+
+    async def resolve_reference(_source: str):
+        return np.zeros(3_200, dtype=np.float32), 24_000
+
+    async def check_model(_request):
+        return None
+
+    monkeypatch.setattr(serving._adapter, "_resolve_reference", resolve_reference)
+    serving._check_model = check_model
+    batch = BatchSpeechRequest(
+        items=[
+            SpeechBatchItem(input="force length", voice="alice", max_new_tokens=2),
+            SpeechBatchItem(
+                input="invalid item",
+                ref_audio="file:///voice.wav",
+                instructions="unsupported",
+            ),
+            SpeechBatchItem(input="natural stop", ref_audio="file:///voice.wav"),
+        ]
+    )
+
+    response = asyncio.run(serving.create_speech_batch(batch))
+
+    assert [item.status for item in response.results] == ["success", "error", "success"]
+    assert response.results[0].finish_reason == "length"
+    assert response.results[0].audio_data is not None
+    assert "does not support 'instructions'" in (response.results[1].error or "")
+    assert response.results[1].finish_reason is None
+    assert response.results[2].finish_reason == "stop"
+    assert response.succeeded == 2
+    assert response.failed == 1
+    assert len(generated_prompts) == 2
 
 
 def test_vibevoice_sampling_constraints_replace_dict_and_are_idempotent() -> None:

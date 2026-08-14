@@ -324,6 +324,10 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         # condition; never reconstruct a full prefix-cache hidden span.
         self.requires_full_prefix_cached_hidden_states = False
         self.postprocess_uses_multimodal_outputs = False
+        # Sparse waveform routing may include only the decode subset of a
+        # mixed prefill/decode batch. Every scheduled hidden tail is still a
+        # request-local positive condition required by the next AR step.
+        self.postprocess_requires_all_scheduled_requests = True
         self.vllm_config = vllm_config
         self.config = vllm_config.model_config.hf_config
         self.model = VibeVoiceModel(
@@ -530,10 +534,6 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         request_id = info_dict.get("request_id")
         if not isinstance(request_id, str) or not request_id:
             raise ValueError("VibeVoice preprocess requires a non-empty request_id.")
-        self._stateful.flush_deferred_cleanup(
-            exclude_request_ids={request_id},
-        )
-
         if input_embeds is None:
             input_embeds = self.embed_input_ids(input_ids)
         is_prefill = bool(info_dict.get("_omni_is_prefill", input_ids.numel() > 1))
@@ -622,88 +622,123 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         """Decode hard-capped sampled audio tokens without another AR step."""
         if not request_ids:
             return {}
-        if len(request_ids) != 1:
-            raise ValueError("VibeVoice terminal drain v1 requires exactly one request.")
+        if len(request_ids) != len(set(request_ids)):
+            raise ValueError("VibeVoice terminal drain contains duplicate request IDs.")
         if self._negative_kv_branch is None:
             raise RuntimeError("VibeVoice terminal audio-token drain requires the bound negative Qwen branch.")
 
-        request_id = request_ids[0]
-        state = self._stateful.get(request_id)
-        negative_input = state.negative_input_embedding if state is not None else None
-        if negative_input is None:
-            raise RuntimeError(
-                f"VibeVoice terminal audio-token drain has no preceding input embedding for request {request_id!r}."
-            )
-        (negative_condition,) = self._negative_kv_branch.forward_step(
-            [request_id],
-            [negative_input],
+        negative_inputs: list[torch.Tensor] = []
+        for request_id in request_ids:
+            state = self._stateful.get(request_id)
+            negative_input = state.negative_input_embedding if state is not None else None
+            if negative_input is None:
+                raise RuntimeError(
+                    f"VibeVoice terminal audio-token drain has no preceding input embedding for request {request_id!r}."
+                )
+            negative_inputs.append(negative_input)
+
+        negative_conditions = self._negative_kv_branch.forward_step(
+            request_ids,
+            negative_inputs,
         )
-        self._stateful.record_negative_condition(
-            request_id,
-            negative_condition,
-        )
-        token_embedding = self.get_input_embeddings()(
-            torch.tensor(
-                [self._stateful.audio_token_id],
-                device=negative_input.device,
+        if len(negative_conditions) != len(request_ids):
+            raise RuntimeError("VibeVoice terminal negative branch returned the wrong number of conditions.")
+        for request_id, condition in zip(
+            request_ids,
+            negative_conditions,
+            strict=True,
+        ):
+            self._stateful.record_negative_condition(request_id, condition)
+
+        token_embedding_batch = self.get_input_embeddings()(
+            torch.full(
+                (len(request_ids),),
+                self._stateful.audio_token_id,
+                device=negative_inputs[0].device,
                 dtype=torch.long,
             )
         )
-        self._stateful.process_audio_tokens_batch(
-            request_ids=[request_id],
-            token_embeddings=[token_embedding],
-            kernel=self.model,
-        )
-        waveform = self._stateful.drain_waveform_chunks(request_id)
-        if waveform is None:
-            raise RuntimeError("VibeVoice terminal audio-token drain produced no waveform.")
-        # A hard cap has no later preprocess/safe point. The terminal negative
-        # condition has already been consumed, so release its Paged KV now;
-        # deferred parent cleanup remains idempotent for the other side state.
-        self._negative_kv_branch.free(request_id)
-        terminal_waveform = waveform.detach().to(device="cpu", dtype=torch.float32).contiguous()
-        if not multimodal_outputs:
-            return {
-                "audio": [terminal_waveform],
-                "sr": [torch.tensor(SAMPLE_RATE, dtype=torch.int32)],
-                "meta": {
-                    "req_id": [request_id],
-                    "sparse_audio": ["1"],
-                },
-            }
-        if not isinstance(multimodal_outputs, dict):
-            raise TypeError("VibeVoice terminal drain requires dictionary multimodal output.")
-        meta = multimodal_outputs.get("meta")
-        audio = multimodal_outputs.get("audio")
-        sample_rates = multimodal_outputs.get("sr")
-        if (
-            not isinstance(meta, dict)
-            or not isinstance(meta.get("req_id"), list)
-            or not isinstance(audio, list)
-            or not isinstance(sample_rates, list)
-            or len(audio) != len(meta["req_id"])
-            or len(sample_rates) != len(audio)
-        ):
-            raise ValueError("VibeVoice terminal drain received malformed sparse audio output.")
+        # Match the regular forward path exactly: preserve first-seen group
+        # order and issue one official [2B, latent] RNG draw per shared
+        # (guidance_scale, num_diffusion_steps) contract.
+        transition_groups: dict[tuple[float, int], list[int]] = {}
+        for index, request_id in enumerate(request_ids):
+            state = self._stateful.get(request_id)
+            if state is None:
+                raise RuntimeError(f"Missing VibeVoice terminal request state for {request_id!r}.")
+            transition_groups.setdefault(
+                (state.guidance_scale, state.num_diffusion_steps),
+                [],
+            ).append(index)
+        for indices in transition_groups.values():
+            group_request_ids = [request_ids[index] for index in indices]
+            group_embeddings = [token_embedding_batch[index : index + 1] for index in indices]
+            self._stateful.process_audio_tokens_batch(
+                request_ids=group_request_ids,
+                token_embeddings=group_embeddings,
+                kernel=self.model,
+            )
 
-        merged_audio = list(audio)
-        merged_sample_rates = list(sample_rates)
-        merged_request_ids = list(meta["req_id"])
-        if request_id in merged_request_ids:
-            index = merged_request_ids.index(request_id)
-            prior_waveform = merged_audio[index]
-            if not isinstance(prior_waveform, torch.Tensor):
-                raise TypeError("VibeVoice sparse audio output must contain tensors.")
-            merged_audio[index] = torch.cat(
-                [prior_waveform.to(terminal_waveform), terminal_waveform],
-                dim=0,
-            ).contiguous()
+        terminal_waveforms: dict[str, torch.Tensor] = {}
+        for request_id in request_ids:
+            waveform = self._stateful.drain_waveform_chunks(request_id)
+            if waveform is None:
+                raise RuntimeError(f"VibeVoice terminal audio-token drain produced no waveform for {request_id!r}.")
+            terminal_waveforms[request_id] = (
+                waveform.detach()
+                .to(
+                    device="cpu",
+                    dtype=torch.float32,
+                )
+                .contiguous()
+            )
+            # A hard cap has no later preprocess/safe point. Its final negative
+            # condition is consumed, so release Paged KV immediately; deferred
+            # parent cleanup remains idempotent for the other side state.
+            self._negative_kv_branch.free(request_id)
+
+        if not multimodal_outputs:
+            merged_audio: list[torch.Tensor] = []
+            merged_sample_rates: list[torch.Tensor] = []
+            merged_request_ids: list[str] = []
+            meta: dict[str, Any] = {}
         else:
-            merged_request_ids.append(request_id)
-            merged_audio.append(terminal_waveform)
-            merged_sample_rates.append(torch.tensor(SAMPLE_RATE, dtype=torch.int32))
+            if not isinstance(multimodal_outputs, dict):
+                raise TypeError("VibeVoice terminal drain requires dictionary multimodal output.")
+            meta_value = multimodal_outputs.get("meta")
+            audio = multimodal_outputs.get("audio")
+            sample_rates = multimodal_outputs.get("sr")
+            if (
+                not isinstance(meta_value, dict)
+                or not isinstance(meta_value.get("req_id"), list)
+                or not isinstance(audio, list)
+                or not isinstance(sample_rates, list)
+                or len(audio) != len(meta_value["req_id"])
+                or len(sample_rates) != len(audio)
+            ):
+                raise ValueError("VibeVoice terminal drain received malformed sparse audio output.")
+            meta = meta_value
+            merged_audio = list(audio)
+            merged_sample_rates = list(sample_rates)
+            merged_request_ids = list(meta["req_id"])
+
+        for request_id in request_ids:
+            terminal_waveform = terminal_waveforms[request_id]
+            if request_id in merged_request_ids:
+                index = merged_request_ids.index(request_id)
+                prior_waveform = merged_audio[index]
+                if not isinstance(prior_waveform, torch.Tensor):
+                    raise TypeError("VibeVoice sparse audio output must contain tensors.")
+                merged_audio[index] = torch.cat(
+                    [prior_waveform.to(terminal_waveform), terminal_waveform],
+                    dim=0,
+                ).contiguous()
+            else:
+                merged_request_ids.append(request_id)
+                merged_audio.append(terminal_waveform)
+                merged_sample_rates.append(torch.tensor(SAMPLE_RATE, dtype=torch.int32))
         return {
-            **multimodal_outputs,
+            **(multimodal_outputs or {}),
             "audio": merged_audio,
             "sr": merged_sample_rates,
             "meta": {
@@ -773,6 +808,14 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         pending_request_ids = self._pending_request_ids
         pending_request_spans = self._pending_request_spans
         pending_audio_transitions = self._pending_audio_transitions
+        # preprocess() is invoked once per scheduled request. Flushing there
+        # lets request A delete a deferred request C that is also scheduled in
+        # the same multi-request forward before C reaches postprocess. At this
+        # point the complete scheduled set is known, so preserve all of it and
+        # clean only idle finished/aborted requests.
+        self._stateful.flush_deferred_cleanup(
+            exclude_request_ids=set(pending_request_ids),
+        )
         self._pending_request_ids = []
         self._pending_request_spans = []
         self._pending_audio_transitions = []

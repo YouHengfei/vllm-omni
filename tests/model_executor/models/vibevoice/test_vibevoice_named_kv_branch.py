@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import vllm_omni.worker.named_kv_branch as named_kv_module
 from vllm_omni.model_executor.models.vibevoice.runtime_config import (
     VibeVoiceRuntimeConfig,
 )
@@ -113,9 +114,7 @@ def test_named_kv_fault_cleanup_does_not_mask_original_exception(
     monkeypatch.setattr(
         branch,
         "_free_unchecked",
-        lambda _request_id: (_ for _ in ()).throw(
-            RuntimeError("secondary cleanup failure")
-        ),
+        lambda _request_id: (_ for _ in ()).throw(RuntimeError("secondary cleanup failure")),
     )
     monkeypatch.setattr(
         "vllm_omni.worker.named_kv_branch.logger.exception",
@@ -133,11 +132,91 @@ def test_named_kv_fault_cleanup_does_not_mask_original_exception(
     assert errors[0][1] == "request"
 
 
-def test_runtime_config_uses_additional_config_without_touching_hf_config() -> None:
-    default = VibeVoiceRuntimeConfig.from_vllm_config(
-        SimpleNamespace(additional_config={})
+def _fixed_concurrency_runner(*, positive_blocks: int):
+    class FakeFullAttentionSpec:
+        block_size = 16
+        page_size_bytes = 16
+
+    config = SimpleNamespace(
+        scheduler_config=SimpleNamespace(max_num_seqs=2),
+        cache_config=SimpleNamespace(
+            enable_prefix_caching=False,
+            cache_dtype="auto",
+        ),
+        parallel_config=SimpleNamespace(
+            pipeline_parallel_size=1,
+            prefill_context_parallel_size=1,
+            decode_context_parallel_size=1,
+            use_ubatching=False,
+        ),
+        model_config=SimpleNamespace(
+            enable_sleep_mode=False,
+            enforce_eager=True,
+            max_model_len=64,
+        ),
+        speculative_config=None,
+        kv_transfer_config=None,
+        compilation_config=SimpleNamespace(
+            static_forward_context={"layer": object()},
+        ),
     )
-    assert default.negative_kv_cache_memory_bytes == 2 * 1024**3
+    spec = FakeFullAttentionSpec()
+    runner = SimpleNamespace(
+        vllm_config=config,
+        device="cpu",
+        kv_cache_config=SimpleNamespace(
+            kv_cache_groups=[SimpleNamespace(kv_cache_spec=spec)],
+            num_blocks=positive_blocks,
+        ),
+        attn_groups=[
+            [
+                SimpleNamespace(
+                    backend=object(),
+                    layer_names=["layer"],
+                )
+            ]
+        ],
+        _kernel_block_sizes=[16],
+    )
+    return runner, FakeFullAttentionSpec
+
+
+def test_fixed_concurrency_rejects_insufficient_positive_capacity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner, fake_spec = _fixed_concurrency_runner(positive_blocks=7)
+    monkeypatch.setattr(named_kv_module, "FullAttentionSpec", fake_spec)
+
+    with pytest.raises(
+        ValueError,
+        match=r"Positive KV pool.*max_concurrent_requests=2.*required_tokens=128",
+    ):
+        NamedCausalKVBranch(
+            runner=runner,
+            request=NamedKVBranchRequest(name="negative", memory_bytes=128),
+        )
+
+
+def test_fixed_concurrency_rejects_insufficient_negative_capacity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner, fake_spec = _fixed_concurrency_runner(positive_blocks=8)
+    monkeypatch.setattr(named_kv_module, "FullAttentionSpec", fake_spec)
+
+    with pytest.raises(
+        ValueError,
+        match=r"Named causal KV branch.*max_concurrent_requests=2.*required_tokens=128",
+    ):
+        NamedCausalKVBranch(
+            runner=runner,
+            # Seven 16-byte blocks cannot reserve 2 x ceil(64 / 16).
+            request=NamedKVBranchRequest(name="negative", memory_bytes=112),
+        )
+
+
+def test_runtime_config_uses_additional_config_without_touching_hf_config() -> None:
+    default = VibeVoiceRuntimeConfig.from_vllm_config(SimpleNamespace(additional_config={}))
+    assert default.negative_kv_cache_memory_bytes == 4 * 1024**3
     assert default.negative_kv_activation_margin_bytes == 512 * 1024**2
 
     config = SimpleNamespace(
@@ -148,9 +227,7 @@ def test_runtime_config_uses_additional_config_without_touching_hf_config() -> N
                 "future_key": True,
             }
         },
-        model_config=SimpleNamespace(
-            hf_config=SimpleNamespace(vibevoice_runtime_config={"wrong": 1})
-        ),
+        model_config=SimpleNamespace(hf_config=SimpleNamespace(vibevoice_runtime_config={"wrong": 1})),
     )
     parsed = VibeVoiceRuntimeConfig.from_vllm_config(config)
     assert parsed == VibeVoiceRuntimeConfig(
@@ -185,9 +262,7 @@ def test_runtime_config_rejects_invalid_capacity_values(
     value: object,
     message: str,
 ) -> None:
-    config = SimpleNamespace(
-        additional_config={"vibevoice_runtime_config": {key: value}}
-    )
+    config = SimpleNamespace(additional_config={"vibevoice_runtime_config": {key: value}})
     with pytest.raises(ValueError, match=message):
         VibeVoiceRuntimeConfig.from_vllm_config(config)
 

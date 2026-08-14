@@ -25,10 +25,10 @@ enable_chunked_prefill: true
 stages:
   - stage_id: 0
     devices: "0,1"
-    # Correctness-first M4c v1: one complete positive and negative sequence
-    # must remain resident, so KV-pressure preemption is unreachable.
+    # Correctness-first fixed concurrency: two complete positive and negative
+    # sequences must remain resident, so KV-pressure preemption is unreachable.
     tensor_parallel_size: 2
-    max_num_seqs: 1
+    max_num_seqs: 2
     gpu_memory_utilization: 0.9
     # The processor and scheduler contract permits up to eight ordered
     # reference audios (for example, an eight-speaker prompt). At 60 seconds
@@ -45,7 +45,7 @@ stages:
     engine_extras:
       additional_config:
         vibevoice_runtime_config:
-          negative_kv_cache_memory_bytes: 2147483648  # 2 GiB
+          negative_kv_cache_memory_bytes: 4294967296  # 4 GiB
           negative_kv_activation_margin_bytes: 536870912  # 512 MiB
 
     # The official backbone supports 64k positions and generation_config.json

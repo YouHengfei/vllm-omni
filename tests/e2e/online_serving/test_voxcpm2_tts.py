@@ -18,7 +18,7 @@ from tests.helpers.mark import hardware_test
 from tests.helpers.runtime import OmniServerParams
 from tests.helpers.stage_config import get_deploy_config_path
 
-MODEL = "openbmb/VoxCPM2"
+MODEL = os.getenv("VOXCPM2_TEST_MODEL", "openbmb/VoxCPM2")
 DEFAULT_AUDIO_SPEECH_TIMEOUT_S = 300.0
 MAX_CONCURRENT = 4
 

@@ -134,6 +134,147 @@ def _omni_ar_worker(
                     stage_ids=[0],
                 )
 
+                armed = await engine.collective_rpc(
+                    method="vibevoice_test_arm_concurrency_trace",
+                    timeout=60,
+                    stage_ids=[0],
+                )
+                assert all(item["armed"] for item in armed[0])
+
+                concurrent_params = SamplingParams(
+                    max_tokens=8,
+                    temperature=0.0,
+                    allowed_token_ids=[151654],
+                    stop_token_ids=[151643],
+                    detokenize=False,
+                    extra_args={
+                        "guidance_scale": 1.3,
+                        "num_diffusion_steps": 1,
+                    },
+                )
+
+                async def generate_concurrent(request_id: str) -> dict[str, Any]:
+                    outputs = []
+                    request_params = concurrent_params.clone()
+                    # Async scheduling pipelines A two sampled-token iterations
+                    # ahead while B finishes prefill. Offset its cap so both
+                    # terminal sampled tokens are drained in one runner batch.
+                    request_params.max_tokens = 10 if request_id.endswith("-a") else 8
+                    async for output in engine.generate(
+                        prompt=make_prompt(request_id),
+                        request_id=request_id,
+                        sampling_params_list=[request_params],
+                        output_modalities=["audio"],
+                    ):
+                        outputs.append(output)
+                    final_output = outputs[-1]
+                    completion = final_output.outputs[0]
+                    mm = getattr(completion, "multimodal_output", None)
+                    if mm is None:
+                        mm = final_output.multimodal_output
+                    request_audio = mm.get("audio") if mm is not None else None
+                    return {
+                        "token_ids": list(completion.token_ids),
+                        "finish_reason": completion.finish_reason,
+                        "audio_shape": (
+                            tuple(request_audio.shape) if isinstance(request_audio, torch.Tensor) else None
+                        ),
+                        "audio_finite": bool(
+                            isinstance(request_audio, torch.Tensor) and torch.isfinite(request_audio).all()
+                        ),
+                    }
+
+                concurrent_results = await asyncio.gather(
+                    generate_concurrent("omni-ar-concurrent-a"),
+                    generate_concurrent("omni-ar-concurrent-b"),
+                )
+                concurrency_trace = await engine.collective_rpc(
+                    method="vibevoice_test_take_concurrency_trace",
+                    timeout=60,
+                    stage_ids=[0],
+                )
+                concurrent_runtime_state = await engine.collective_rpc(
+                    method="vibevoice_test_runtime_state",
+                    timeout=60,
+                    stage_ids=[0],
+                )
+
+                abort_armed = await engine.collective_rpc(
+                    method="vibevoice_test_arm_concurrency_trace",
+                    timeout=60,
+                    stage_ids=[0],
+                )
+                assert all(item["armed"] for item in abort_armed[0])
+
+                async def generate_abort_case(
+                    request_id: str,
+                    max_tokens: int,
+                ) -> dict[str, Any]:
+                    params = concurrent_params.clone()
+                    params.max_tokens = max_tokens
+                    outputs = []
+                    async for output in engine.generate(
+                        prompt=make_prompt(request_id),
+                        request_id=request_id,
+                        sampling_params_list=[params],
+                        output_modalities=["audio"],
+                    ):
+                        outputs.append(output)
+                    final_output = outputs[-1]
+                    completion = final_output.outputs[0]
+                    mm = getattr(completion, "multimodal_output", None)
+                    if mm is None:
+                        mm = final_output.multimodal_output
+                    request_audio = mm.get("audio") if mm is not None else None
+                    return {
+                        "token_ids": list(completion.token_ids),
+                        "finish_reason": completion.finish_reason,
+                        "audio_shape": (
+                            tuple(request_audio.shape) if isinstance(request_audio, torch.Tensor) else None
+                        ),
+                    }
+
+                abort_task = asyncio.create_task(
+                    generate_abort_case("omni-ar-abort-a", 32),
+                )
+                survivor_task = asyncio.create_task(
+                    generate_abort_case("omni-ar-abort-survivor", 8),
+                )
+                observed_two_resident = False
+                for _ in range(50):
+                    resident_state = await engine.collective_rpc(
+                        method="vibevoice_test_runtime_state",
+                        timeout=60,
+                        stage_ids=[0],
+                    )
+                    if all(
+                        len(rank_state["named_branches"]["negative"]["requests"]) == 2
+                        for rank_state in resident_state[0]
+                    ):
+                        observed_two_resident = True
+                        break
+                    await asyncio.sleep(0.02)
+                assert observed_two_resident
+
+                abort_task.cancel()
+                await engine.abort("omni-ar-abort-a")
+                abort_cancelled = False
+                try:
+                    await abort_task
+                except asyncio.CancelledError:
+                    abort_cancelled = True
+                survivor_result = await survivor_task
+                abort_trace = await engine.collective_rpc(
+                    method="vibevoice_test_take_concurrency_trace",
+                    timeout=60,
+                    stage_ids=[0],
+                )
+                abort_runtime_state = await engine.collective_rpc(
+                    method="vibevoice_test_runtime_state",
+                    timeout=60,
+                    stage_ids=[0],
+                )
+
                 return {
                     "scheduler_cls": scheduler_cls,
                     "worker_type": worker_type,
@@ -156,6 +297,13 @@ def _omni_ar_worker(
                         else forced_sample_rate
                     ),
                     "forced_runtime_state": forced_runtime_state[0],
+                    "concurrent_results": concurrent_results,
+                    "concurrency_trace": concurrency_trace[0],
+                    "concurrent_runtime_state": concurrent_runtime_state[0],
+                    "abort_cancelled": abort_cancelled,
+                    "abort_survivor_result": survivor_result,
+                    "abort_trace": abort_trace[0],
+                    "abort_runtime_state": abort_runtime_state[0],
                 }
             finally:
                 engine.shutdown()
@@ -234,6 +382,63 @@ def test_runtime_publishes_decoded_mono_24khz_waveform(
     assert result["forced_sample_rate"] == 24_000
     assert [item["rank"] for item in result["forced_runtime_state"]] == [0, 1]
     for rank_state in result["forced_runtime_state"]:
+        branch = rank_state["named_branches"]["negative"]
+        assert branch["requests"] == {}
+        assert branch["num_free_blocks"] == branch["num_blocks"]
+
+
+def test_runtime_executes_two_resident_requests_with_batched_terminal_rng(
+    omni_ar_processing_result: dict[str, Any],
+) -> None:
+    result = omni_ar_processing_result
+    for index, request_result in enumerate(result["concurrent_results"]):
+        expected_tokens = 10 if index == 0 else 8
+        assert request_result["token_ids"] == [151654] * expected_tokens
+        assert request_result["finish_reason"] == "length"
+        assert request_result["audio_shape"] == (3_200 * expected_tokens,)
+        assert request_result["audio_finite"] is True
+
+    assert [item["rank"] for item in result["concurrency_trace"]] == [0, 1]
+    for rank_trace in result["concurrency_trace"]:
+        assert rank_trace["max_active_requests"] >= 2
+        assert any(len(batch) == 2 for batch in rank_trace["negative_batches"]), rank_trace
+        assert any(
+            item["batch_size"] == 2 and item["noise_shape"] == [4, 64] for item in rank_trace["diffusion_batches"]
+        )
+        assert any(
+            len(batch) == 2
+            and any(request_id.startswith("omni-ar-concurrent-a-") for request_id in batch)
+            and any(request_id.startswith("omni-ar-concurrent-b-") for request_id in batch)
+            for batch in rank_trace["terminal_batches"]
+        ), rank_trace
+        assert any(
+            any(request_id.startswith("omni-ar-concurrent-a-") for request_id in excluded)
+            and any(request_id.startswith("omni-ar-concurrent-b-") for request_id in excluded)
+            for excluded in rank_trace["cleanup_exclusions"]
+        ), rank_trace
+
+    for rank_state in result["concurrent_runtime_state"]:
+        branch = rank_state["named_branches"]["negative"]
+        assert branch["requests"] == {}
+        assert branch["num_free_blocks"] == branch["num_blocks"]
+
+
+def test_aborting_one_resident_request_does_not_interrupt_the_other(
+    omni_ar_processing_result: dict[str, Any],
+) -> None:
+    result = omni_ar_processing_result
+    assert result["abort_cancelled"] is True
+    survivor = result["abort_survivor_result"]
+    assert survivor["token_ids"] == [151654] * 8
+    assert survivor["finish_reason"] == "length"
+    assert survivor["audio_shape"] == (25_600,)
+
+    assert [item["rank"] for item in result["abort_trace"]] == [0, 1]
+    for rank_trace in result["abort_trace"]:
+        assert rank_trace["max_active_requests"] >= 2
+        assert any(len(batch) == 2 for batch in rank_trace["negative_batches"])
+
+    for rank_state in result["abort_runtime_state"]:
         branch = rank_state["named_branches"]["negative"]
         assert branch["requests"] == {}
         assert branch["num_free_blocks"] == branch["num_blocks"]

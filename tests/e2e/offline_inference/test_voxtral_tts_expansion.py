@@ -27,7 +27,7 @@ from tests.helpers.runtime import OmniRunner
 from tests.helpers.stage_config import get_deploy_config_path
 from vllm_omni.entrypoints.async_omni import AsyncOmni
 
-MODEL = "mistralai/Voxtral-4B-TTS-2603"
+MODEL = os.getenv("VOXTRAL_TTS_TEST_MODEL", "mistralai/Voxtral-4B-TTS-2603")
 STAGE_CONFIG = get_deploy_config_path("voxtral_tts.yaml")
 MIN_AUDIO_SAMPLES = 1000
 VOICE = "casual_female"

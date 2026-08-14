@@ -1885,6 +1885,16 @@ class GPUARModelRunner(OmniGPUModelRunner, OmniConnectorModelRunnerMixin):
 
         needs_pooler_payload = len(downstream_req_ids) > 0
         downstream_req_id_set = set(downstream_req_ids)
+        # Sparse waveform routing controls which requests publish payload, not
+        # which scheduled hidden rows a stateful model must consume. Models
+        # declaring this capability keep postprocess aligned for mixed
+        # prefill/decode batches where only the decode subset emitted audio.
+        if self._runner_model_omni_flag(
+            "postprocess_requires_all_scheduled_requests",
+        ):
+            postprocess_req_id_set = set(req_ids_output_copy)
+        else:
+            postprocess_req_id_set = downstream_req_id_set
         hidden_states_cpu = None
         req_hidden_states_cpu: dict[str, torch.Tensor] | None = None
         include_hidden_payload = self._model_omni_pooler_payload_include_hidden()
@@ -1953,7 +1963,7 @@ class GPUARModelRunner(OmniGPUModelRunner, OmniConnectorModelRunnerMixin):
                         scheduler_output,
                         combined_hidden_states,
                         combined_multimodal_outputs,
-                        req_ids_filter=downstream_req_id_set,
+                        req_ids_filter=postprocess_req_id_set,
                         req_ids=req_ids_output_copy,
                         query_start_loc_cpu=query_start_loc_cpu,
                     )

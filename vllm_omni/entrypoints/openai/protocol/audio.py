@@ -483,6 +483,9 @@ class SpeechBatchItemResult(BaseModel):
     audio_data: str | None = None
     media_type: str | None = None
     error: str | None = None
+    # VibeVoice exposes whether this independent single-pass item reached a
+    # natural stop or its generation-token limit. Other TTS models leave it null.
+    finish_reason: str | None = None
     # Per-item token usage (input text + reference-audio conditioning, and
     # generated audio tokens). None when the item errored before generation.
     usage: SpeechTokenUsage | None = None

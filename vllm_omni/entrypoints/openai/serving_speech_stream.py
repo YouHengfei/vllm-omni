@@ -271,6 +271,18 @@ class OmniStreamingSpeechHandler:
         """
         response_format = config.response_format or "wav"
 
+        if (
+            config.stream_audio
+            and getattr(self._speech_service, "_tts_model_type", None) == "vibevoice"
+            and response_format != "pcm"
+        ):
+            await self._send_error(
+                websocket,
+                "VibeVoice WebSocket streaming requires response_format='pcm'; "
+                "WAV framing is only available for non-streaming responses or SSE.",
+            )
+            return
+
         # Reject unmet word-timestamps preconditions early with a clear reason.
         if config.word_timestamps:
             if self._speech_service.forced_aligner_config is None:
@@ -327,6 +339,7 @@ class OmniStreamingSpeechHandler:
         total_bytes = 0
         generation_failed = False
         request_id = None
+        generation_metadata: dict[str, str] = {}
         try:
             if config.stream_audio:
                 request_id, generator, _ = await self._speech_service._prepare_speech_generation(request)
@@ -339,14 +352,27 @@ class OmniStreamingSpeechHandler:
                         utterance_index=utterance_index,
                         sentence_index=sentence_index,
                         language=config.language,
+                        generation_metadata_out=generation_metadata,
                     )
                 else:
-                    async with aclosing(self._speech_service._generate_pcm_chunks(generator, request_id)) as stream:
+                    async with aclosing(
+                        self._speech_service._generate_pcm_chunks(
+                            generator,
+                            request_id,
+                            generation_metadata_out=generation_metadata,
+                        )
+                    ) as stream:
                         async for chunk in stream:
                             total_bytes += len(chunk)
                             await websocket.send_bytes(chunk)
             else:
-                audio_bytes, _ = await self._speech_service._generate_audio_bytes(request)
+                response_headers: dict[str, str] = {}
+                audio_bytes, _ = await self._speech_service._generate_audio_bytes(
+                    request,
+                    response_headers_out=response_headers,
+                )
+                if finish_reason := response_headers.get("X-Finish-Reason"):
+                    generation_metadata["finish_reason"] = finish_reason
                 total_bytes = len(audio_bytes)
                 await websocket.send_bytes(audio_bytes)
         except WebSocketDisconnect:
@@ -370,15 +396,16 @@ class OmniStreamingSpeechHandler:
             )
         finally:
             try:
-                await websocket.send_json(
-                    {
-                        "type": "audio.done",
-                        "utterance_index": utterance_index,
-                        "sentence_index": sentence_index,
-                        "total_bytes": total_bytes,
-                        "error": generation_failed,
-                    }
-                )
+                done_payload = {
+                    "type": "audio.done",
+                    "utterance_index": utterance_index,
+                    "sentence_index": sentence_index,
+                    "total_bytes": total_bytes,
+                    "error": generation_failed,
+                }
+                if finish_reason := generation_metadata.get("finish_reason"):
+                    done_payload["finish_reason"] = finish_reason
+                await websocket.send_json(done_payload)
             except Exception:
                 logger.debug("Failed to send audio.done for sentence %d", sentence_index, exc_info=True)
 
@@ -392,6 +419,7 @@ class OmniStreamingSpeechHandler:
         utterance_index: int,
         sentence_index: int,
         language: str | None = None,
+        generation_metadata_out: dict[str, str] | None = None,
     ) -> int:
         """Stream PCM as JSON ``audio.chunk`` frames, aligned per sentence.
 
@@ -437,6 +465,7 @@ class OmniStreamingSpeechHandler:
                 generator,
                 request_id,
                 include_sample_rate=True,
+                generation_metadata_out=generation_metadata_out,
             )
         ) as stream:
             async for chunk, chunk_sample_rate in stream:

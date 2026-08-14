@@ -233,16 +233,11 @@ def hf_checkpoint_dir(tmp_path_factory):
 
 def test_vibevoice_tokenizer_fallback_uses_preprocessor_contract(tmp_path):
     (tmp_path / "preprocessor_config.json").write_text(
-        json.dumps(
-            {"language_model_pretrained_name": "example/Qwen-tokenizer"}
-        ),
+        json.dumps({"language_model_pretrained_name": "example/Qwen-tokenizer"}),
         encoding="utf-8",
     )
 
-    assert (
-        _resolve_vibevoice_tokenizer_contract(str(tmp_path))
-        == "example/Qwen-tokenizer"
-    )
+    assert _resolve_vibevoice_tokenizer_contract(str(tmp_path)) == "example/Qwen-tokenizer"
 
 
 def test_vibevoice_tokenizer_contract_rejects_missing_model_name(tmp_path):
@@ -289,12 +284,8 @@ def test_pr_token_gate_uses_eos_as_the_only_pipeline_stop():
     ]
 
     assert pr_valid_token_ids == VIBEVOICE_VALID_TOKEN_IDS
-    assert VIBEVOICE_PIPELINE.stages[0].sampling_constraints[
-        "stop_token_ids"
-    ] == [config.eos_token_id]
-    assert config.audio_eos_token_id not in VIBEVOICE_PIPELINE.stages[
-        0
-    ].sampling_constraints["stop_token_ids"]
+    assert VIBEVOICE_PIPELINE.stages[0].sampling_constraints["stop_token_ids"] == [config.eos_token_id]
+    assert config.audio_eos_token_id not in VIBEVOICE_PIPELINE.stages[0].sampling_constraints["stop_token_ids"]
 
 
 def test_vllm_allowed_token_ids_matches_pr_logits_processor_semantics():
@@ -356,11 +347,11 @@ def test_single_stage_deploy_defaults_match_vibevoice_generation_contract():
     assert stage.enforce_eager is True
     assert stage.async_scheduling is True
     assert stage.max_model_len == 65536
-    assert stage.max_num_seqs == 1
+    assert stage.max_num_seqs == 2
     assert stage.engine_extras["kv_cache_memory_bytes"] == 6 * 1024**3
     assert stage.engine_extras["additional_config"] == {
         "vibevoice_runtime_config": {
-            "negative_kv_cache_memory_bytes": 2 * 1024**3,
+            "negative_kv_cache_memory_bytes": 4 * 1024**3,
             "negative_kv_activation_margin_bytes": 512 * 1024**2,
         }
     }

@@ -18,7 +18,10 @@ from tests.helpers.media import load_test_audio_data_url
 from tests.helpers.runtime import OmniServerParams
 from tests.helpers.stage_config import get_deploy_config_path
 
-MODEL = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+MODEL = os.getenv(
+    "QWEN3_TTS_TEST_MODEL",
+    "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+)
 DEFAULT_AUDIO_SPEECH_TIMEOUT_S = 180.0
 
 # Vendored under tests/assets/qwen3_tts/clone_2.wav so the server does not need

@@ -2292,6 +2292,7 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
         request_start_s: float | None = None,
         include_sample_rate: bool = False,
         usage_acc: SpeechOutputTokenCounter | None = None,
+        generation_metadata_out: dict[str, str] | None = None,
     ):
         """Generate audio chunks for streaming response.
 
@@ -2322,6 +2323,12 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
                 # off the final output; a cheap early-return on every other res).
                 if usage_acc is not None:
                     usage_acc.observe(res)
+                if generation_metadata_out is not None:
+                    for completion in getattr(res, "outputs", None) or []:
+                        finish_reason = getattr(completion, "finish_reason", None)
+                        if finish_reason:
+                            generation_metadata_out["finish_reason"] = str(finish_reason)
+                            break
                 audio_output, audio_key = self._extract_audio_output(res)
                 if audio_key is None:
                     continue
@@ -2474,6 +2481,7 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
         ``input_tokens`` is computed from the request text + reference audio.
         """
         usage_acc = SpeechOutputTokenCounter()
+        generation_metadata: dict[str, str] = {}
         try:
             async for chunk in self._generate_audio_chunks(
                 generator,
@@ -2482,6 +2490,7 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
                 raw_request=raw_request,
                 request_start_s=request_start_s,
                 usage_acc=usage_acc,
+                generation_metadata_out=generation_metadata,
             ):
                 payload = {
                     "type": "speech.audio.delta",
@@ -2491,6 +2500,8 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
                 data = json.dumps(payload, separators=(",", ":"))
                 yield f"event: speech.audio.delta\ndata: {data}\n\n"
             done_payload: dict[str, Any] = {"type": "speech.audio.done"}
+            if finish_reason := generation_metadata.get("finish_reason"):
+                done_payload["finish_reason"] = finish_reason
             if request is not None:
                 # Streaming path: output_tokens = sum of stage-0 deltas.
                 usage = self._build_speech_usage(request, tts_params or {}, usage_acc.total())
@@ -3484,7 +3495,14 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
         )
         return request_id, generator, tts_params
 
-    async def _generate_pcm_chunks(self, generator, request_id: str, *, include_sample_rate: bool = False):
+    async def _generate_pcm_chunks(
+        self,
+        generator,
+        request_id: str,
+        *,
+        include_sample_rate: bool = False,
+        generation_metadata_out: dict[str, str] | None = None,
+    ):
         """Yield raw PCM byte chunks from the engine generator.
 
         Delegates to ``_generate_audio_chunks`` with ``response_format="pcm"``.
@@ -3495,6 +3513,7 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
             request_id,
             response_format="pcm",
             include_sample_rate=include_sample_rate,
+            generation_metadata_out=generation_metadata_out,
         ):
             yield chunk
 
@@ -4005,9 +4024,14 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
             if validation_error is not None:
                 return SpeechBatchItemResult(index=idx, status="error", error=validation_error)
             usage_box: list[SpeechTokenUsage] = []
+            response_headers: dict[str, str] = {}
             try:
                 audio_data, media_type = await self._generate_audio_bytes(
-                    req, base64_encode=True, usage_out=usage_box, has_inline_ref_audio=has_inline_ref_audio
+                    req,
+                    base64_encode=True,
+                    usage_out=usage_box,
+                    response_headers_out=response_headers,
+                    has_inline_ref_audio=has_inline_ref_audio,
                 )
             except Exception as e:
                 logger.exception("Batch item %d failed: %s", idx, e)
@@ -4017,6 +4041,7 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
                 status="success",
                 audio_data=audio_data,
                 media_type=media_type,
+                finish_reason=response_headers.get("X-Finish-Reason"),
                 usage=usage_box[0] if usage_box else None,
             )
 

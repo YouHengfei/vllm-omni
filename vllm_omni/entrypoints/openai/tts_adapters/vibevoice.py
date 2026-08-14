@@ -43,8 +43,7 @@ _SPEAKER_LINE = re.compile(r"^Speaker\s+(\d+)\s*:\s*(.+)$", re.IGNORECASE)
 _REFERENCE_SEGMENT = f"{AUDIO_BOS_TOKEN}{AUDIO_TOKEN}{AUDIO_EOS_TOKEN}"
 _OFFICIAL_MAX_SPEAKERS = 4
 _UNSUPPORTED_VIBEVOICE_FIELDS: dict[str, str | None] = {
-    "voice": "use 'ref_audio' for VibeVoice voice cloning",
-    "speaker_embedding": "use 'ref_audio' for VibeVoice voice cloning",
+    "speaker_embedding": "use 'ref_audio' or an uploaded audio voice for VibeVoice voice cloning",
     "instructions": None,
     "language": None,
     "ref_text": None,
@@ -101,8 +100,12 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
         return list(ref_audio) if isinstance(ref_audio, list) else [ref_audio]
 
     def validate(self, request: OpenAICreateSpeechRequest) -> str | None:
-        if request.is_streaming():
-            return "VibeVoice currently supports non-streaming speech responses only"
+        if request.is_raw_audio_stream():
+            return (
+                "VibeVoice does not support raw PCM/WAV HTTP streaming because "
+                "that transport cannot expose the terminal finish reason; use "
+                "SSE or the WebSocket speech endpoint."
+            )
         if request.seed is not None:
             return (
                 "VibeVoice does not support request-level seed determinism; "
@@ -121,6 +124,23 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
             _, num_speakers = self._parse_script(request.input)
             if num_speakers > _OFFICIAL_MAX_SPEAKERS:
                 return f"VibeVoice-1.5B supports at most {_OFFICIAL_MAX_SPEAKERS} speakers per request"
+            if request.voice is not None:
+                if request.ref_audio is not None:
+                    return "VibeVoice accepts exactly one of 'voice' or 'ref_audio', not both"
+                if num_speakers != 1:
+                    return "VibeVoice uploaded 'voice' is only supported for single-speaker scripts"
+                voice_lower = request.voice.lower()
+                speaker_info = getattr(self.ctx.server, "uploaded_speakers", {}).get(voice_lower)
+                if speaker_info is None:
+                    return (
+                        f"Unknown VibeVoice voice '{request.voice}'. Upload an audio voice first via "
+                        "POST /v1/audio/voices, or use 'ref_audio'."
+                    )
+                if speaker_info.get("embedding_source") == "direct":
+                    return (
+                        f"Uploaded voice '{request.voice}' uses a speaker embedding, which VibeVoice "
+                        "does not support; re-upload it with an audio file."
+                    )
             extra_params = request.extra_params or {}
             if "guidance_scale" in extra_params:
                 validate_guidance_scale(extra_params["guidance_scale"])
@@ -130,16 +150,17 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
             return str(exc)
 
         references = self._reference_sources(request)
-        if not references:
-            return "VibeVoice requires 'ref_audio' for each speaker"
-        if len(references) != num_speakers:
-            return f"VibeVoice found {num_speakers} speakers but received {len(references)} reference audios"
+        if request.voice is None:
+            if not references:
+                return "VibeVoice requires 'ref_audio' for each speaker"
+            if len(references) != num_speakers:
+                return f"VibeVoice found {num_speakers} speakers but received {len(references)} reference audios"
 
-        validate_format = getattr(self.ctx.server, "_validate_ref_audio_format", None)
-        if callable(validate_format):
-            for reference in references:
-                if error := validate_format(reference):
-                    return error
+            validate_format = getattr(self.ctx.server, "_validate_ref_audio_format", None)
+            if callable(validate_format):
+                for reference in references:
+                    if error := validate_format(reference):
+                        return error
         if request.max_new_tokens is not None:
             if request.max_new_tokens < self.max_new_tokens_min:
                 return f"max_new_tokens must be at least {self.max_new_tokens_min}"
@@ -183,6 +204,21 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
         has_inline_ref_audio: bool,
     ) -> PreparedRequest:
         parsed, num_speakers = self._parse_script(request.input)
+        if request.voice is not None:
+            if request.ref_audio is not None:
+                raise ValueError("VibeVoice accepts exactly one of 'voice' or 'ref_audio', not both")
+            apply_uploaded_speaker = getattr(self.ctx.server, "_apply_uploaded_speaker", None)
+            if not callable(apply_uploaded_speaker):
+                raise RuntimeError("VibeVoice uploaded voice resolution is unavailable")
+            if error := apply_uploaded_speaker(request):
+                raise ValueError(error)
+            # VibeVoice conditions only on reference audio. The generic voice
+            # registry may attach a stored transcript for other TTS models;
+            # clear those internal convenience fields so the resolved request
+            # has one canonical source (ref_audio) and remains consistent with
+            # VibeVoice's public voice/ref_text validation contract.
+            request.voice = None
+            request.ref_text = None
         references = self._reference_sources(request)
         # validate() normally checks this first; keep build safe for direct use.
         if len(references) != num_speakers:

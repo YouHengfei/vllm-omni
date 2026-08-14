@@ -966,11 +966,22 @@ Adapter 负责：
 
 服务层按 VibeVoice-1.5B 官方能力限制最多 4 个 speaker；Processor 和 deploy 的
 `MAX_AUDIO_ITEMS=8` 只保留为 MM 基础设施容量。`response_format` 由共享 audio serializer
-处理，非流式 `speed` 由共享后处理真实生效。VibeVoice 未消费的通用 Speech 字段
-（`voice`、`speaker_embedding`、`instructions`、`language`、`ref_text`、`ref_audio_2`、
-`task_type`、`ambient_sound`、`duration_seconds`、`x_vector_only_mode`、
-`initial_codec_chunk_frames`、`non_streaming_mode`、`word_timestamps`）在显式设置时返回
-400，不允许静默忽略；`extra_params` 作为模型扩展通道继续允许未知键前向兼容。
+处理，非流式 `speed` 由共享后处理真实生效。单 speaker 请求可使用已通过
+`POST /v1/audio/voices` 上传的音频 `voice`，语义等价于直接提供该音频的 `ref_audio`；
+`voice` 与显式 `ref_audio` 互斥，多 speaker 仍要求按首次出现顺序直接提供 reference list，
+embedding-only uploaded voice 不支持。Adapter 的 validate 保持只读和幂等，build 才把
+uploaded voice 解析为 canonical `ref_audio`，并清除通用 registry 可能附带但 VibeVoice
+不消费的 stored `ref_text`。
+
+VibeVoice 未消费的通用 Speech 字段（`speaker_embedding`、`instructions`、`language`、
+`ref_text`、`ref_audio_2`、`task_type`、`ambient_sound`、`duration_seconds`、
+`x_vector_only_mode`、`initial_codec_chunk_frames`、`non_streaming_mode`、
+`word_timestamps`）在显式设置时返回 400，不允许静默忽略；`extra_params` 作为模型扩展
+通道继续允许未知键前向兼容。Batch Speech 第一版只承诺单 speaker item（协议中的
+per-item `ref_audio` 是单字符串）；每个 item 是独立 single pass，整体 HTTP 200 内以
+`results[i].status=success|error` 隔离错误，成功项以 `finish_reason=stop|length` 暴露终止
+原因。PCM DELTA 拼接以逐比特相同为验收口径；streaming WAV 因 header 长度字段不同，只
+比较解码后的样本，不比较完整文件 bytes。
 
 低层 `LLM.generate()` 是高级 API，调用者必须显式提供 request-scoped UUID；Processor
 不得隐式生成随机 UUID，否则会破坏同请求 chunked-prefill 复用。完整 waveform E2E
@@ -982,13 +993,18 @@ TP=2 gate 已完成：vLLM Qwen2 的 packed QKV/gate-up 按 rank 分片，Acoust
 Encoder、projector、Diffusion Head 和 latent scale/bias 在各 rank 复制；相同输入的
 projector/diffusion 输出逐值一致。覆盖位于 `test_vibevoice_tp2_gpu.py`。
 
-Serving/API 契约还包括：所有 `request.is_streaming()` 表达（`stream=true`、
-`stream_format=audio/sse` 及组合）都在提交 Engine 前拒绝；显式 request `seed` 返回 400，
+Serving/API 契约还包括：HTTP SSE（`stream=true` 或 `stream_format=sse`）和 WebSocket
+`stream_audio=true` 使用现有 DELTA waveform 通路；SSE 的 `speech.audio.done` 与 WebSocket
+的 `audio.done` 都携带 `finish_reason=stop|length`。无法在响应结束时携带结构化终止状态的
+raw PCM/WAV HTTP streaming（`stream_format=audio`）继续在提交 Engine 前拒绝，避免重新
+引入静默截断；WebSocket streaming 按共享协议只接受 PCM。显式 request `seed` 返回 400，
 deploy 默认 seed 不改变官方 waveform RNG；显式 `guidance_scale` 必须为有限数值，
 `num_diffusion_steps` 必须为非 bool 正整数。Adapter 与 stateful runtime 共用同一校验函数，
 runtime 校验仍作为低层防御。非流式 HTTP 音频响应保持 200，并以
 `X-Finish-Reason: stop|length` 暴露最终终止原因；`length` 明确表示 token cap 截断，不能
-解释为内容已完整生成。
+解释为内容已完整生成。当前 4-speaker 只完成 CPU contract 验证，真实 checkpoint 自然生成
+覆盖到 2 speaker；约 90 分钟探针验证的是容量、终止和运行稳定性，不代表长程内容准确率或
+speaker consistency 的质量信封，后者需由 opt-in CER/WER/speaker-similarity 评测补齐。
 
 Golden oracle 边界必须明确：Microsoft 官方 Git 历史没有公开发布与 1.5B checkpoint
 匹配的完整非 Realtime `generate()`（usage 因滥用风险关闭；当前仓库中的
@@ -1144,12 +1160,13 @@ capability（参考 AR-Diffusion ownership，但复用 Qwen2 causal PagedAttenti
 本小节是该能力的唯一事实源。vLLM 本体零改动；共享 runner 仅纯增量且默认关闭
 （模型不声明能力则零行为变化）。
 
-修订记录：v3 保留 runner-owned NamedCausalKVBranch 最终 ownership，但将实施顺序调整为
-correctness-first：v1 固定 `tensor_parallel_size=2`、`max_num_seqs=1`、每 rank 2 GiB
-negative GPU pool、无 swap、无自定义 scheduler，先完成 Microsoft waveform E2E；随后
-优先以增大 GPU pool 的方式扩展固定安全
-并发。active-subset microbatch、CPU arena、swap 和动态 reservation scheduler 不再是首版
-依赖，只有 profiling 证明固定容量无法满足目标负载时才实施。D1 继续使用
+修订记录：v4 保留 runner-owned NamedCausalKVBranch 最终 ownership，并在完成单请求
+Microsoft waveform E2E 后落地固定安全并发：默认 `tensor_parallel_size=2`、
+`max_num_seqs=2`、每 rank 4 GiB negative GPU pool、无 swap、无自定义 scheduler。
+正负两池均以 `max_num_seqs * max_model_len` 做启动守卫；negative Qwen 按请求顺序进入
+独立 attention context，同 controls 的 active subset 用一次 `[2B,64]` 官方 RNG draw。
+CPU arena、swap 和动态 reservation scheduler 仍不实施，只有 profiling 证明固定容量
+无法满足目标负载时才立项。D1 继续使用
 `VllmConfig.additional_config`；bind 期按实际 page/block/TP 布局做容量和显存 pre-flight。
 最终 ownership：
 
@@ -1170,15 +1187,17 @@ schema，也不写入 HF Config（遵守“Config 层不承载部署参数”边
 ```text
 deploy/vibevoice.yaml:
   stages[0].engine_extras.additional_config.vibevoice_runtime_config:
-    negative_kv_cache_memory_bytes: 2147483648       # 2 GiB，缺省同值
+    negative_kv_cache_memory_bytes: 4294967296       # 4 GiB，缺省同值
     negative_kv_activation_margin_bytes: 536870912   # 512 MiB，缺省同值
 ```
 
 解析侧新增 `models/vibevoice/runtime_config.py`（类型化 dataclass，仿
 `voxcpm2/runtime_config.py`：默认值、coerce、未知键 warning、下限校验），读取
 `vllm_config.additional_config["vibevoice_runtime_config"]`。容量公式（TP=1）：
-28 层 x 2(K,V) x 2 kv heads x 128 x 2 B = 28,672 B/token；2 GiB ≈ 74.9k negative
-tokens；v1 以 `max_model_len=65,536` 做单分支启动守卫，不分配 swap arena。deploy
+28 层 x 2(K,V) x 2 kv heads x 128 x 2 B = 28,672 B/token；4 GiB 在 TP=1 估算约
+149.8k negative tokens。实际默认 TP=2 启动日志按分片 page 布局得到 299,584 tokens；
+实现始终按实际 page/block 布局校验 `2 * max_model_len`，不使用估算值，也不分配 swap
+arena。deploy
 契约对用户不感知：框架内置
 yaml 经 `default_deploy_config_name` 按 model_type 自动命中，高级用户可自带 deploy
 覆盖。
@@ -1193,22 +1212,21 @@ yaml 经 `default_deploy_config_name` 按 model_type 自动命中，高级用户
 每 rank tensor 布局校验，文档中的 28,672 B/token 只作为 TP=1 估算，不作为实现常量：
 
 ```text
-C1 单请求负分支可容：
-     negative_pool_tokens >= max_negative_sequence_tokens
-     max_negative_sequence_tokens 使用 max_model_len=65,536 作为低层请求绝对上界，
-     不能只依赖 deploy 默认 max_tokens=40,500
-     当前 2 GiB 估算容量约 74.9k token，因此单请求成立
-C2 单请求正分支可容：
-     positive_pool_blocks >= ceil(max_model_len / block_size) + 必要 headroom
-     当前 6 GiB 估算容量约 224k token，因此单请求成立
-C3 首版并发固定：
-     tensor_parallel_size=2（默认 deploy；side modules 每 rank replicated）
-     max_num_seqs=1
-     正负两池均可完整容纳唯一 running request，KV 压力抢占构造性不可达
+C1 固定并发负分支可容：
+     negative_pool_blocks >= max_num_seqs * ceil(max_model_len / block_size)
+     max_model_len=65,536 是低层请求绝对上界，不能只依赖 deploy 默认
+     max_tokens=40,500
+C2 固定并发正分支可容：
+     positive_pool_tokens >= max_num_seqs * max_model_len
+C3 默认并发固定：
+     tensor_parallel_size=2（side modules 每 rank replicated）
+     max_num_seqs=2
+     正负两池都完整容纳两个最大请求，KV 压力抢占构造性不可达；真实默认启动日志为
+     positive=449,376 tokens/rank、negative=299,584 tokens/rank，均大于 131,072
 ```
 
 任一守卫不满足都在启动期明确失败；运行时不以 forward 异常表达普通容量不足。由于
-单请求的正负完整 working set 都常驻 GPU，v1 不需要 victim、arena、microbatch 或
+两个请求的正负完整 working set 都可常驻 GPU，当前实现不需要 victim、arena、swap 或
 embedding replay，也不改变官方 global-device RNG 语义。
 
 **容量扩展顺序**：waveform E2E 和 TP=2 stateful 通过后，先增加 negative GPU pool，并将
@@ -1239,10 +1257,11 @@ active-subset 保序 microbatch、CPU arena、块级 swap 和动态 reservation 
 仍有最后一次调度；free 必须挂在 stateful 的 deferred 清理汇聚点 `cleanup_request`
 （`flush_deferred_cleanup` / `finish_postprocess` 两条路径汇聚），模型 bind 时把 branch
 引用交给 stateful。另注：abort 后若再无新请求（真 idle），deferred cleanup 会延迟到
-下一请求的 preprocess 或进程退出才释放——占用有界（<= max_num_seqs 份），不影响
-正确性。不能改为 step 末无条件 flush：async scheduling 下 finish 判定晚一拍，step 末
-无法知道该请求是否已被下一步调度，提前 free 会破坏 finished-and-scheduled 的最后
-一次 forward；next-preprocess flush（带 exclude）是当前已知信息下最早的安全点。
+下一次具有完整 scheduled request 集合的 model forward 或进程退出才释放——占用有界
+（<= max_num_seqs 份），不影响正确性。不能在逐请求 preprocess 或 step 末无条件 flush：
+前者尚不知道同 batch 后续请求，后者在 async scheduling 下无法判断 finished request
+是否已进入下一步。当前在 model forward 开始时用完整 scheduled set 作为 exclude，只清理
+不在该集合中的 deferred request；final postprocess 继续承担另一条安全清理路径。
 
 **机制事实**（pinned vLLM 源码核实，方案的事实基础）：
 
@@ -1283,20 +1302,20 @@ vllm_omni/worker/named_kv_branch.py（新增，固定 GPU pool）
   NamedKVBranchRequest（frozen dataclass：name/memory_bytes/layer_group/activation_margin）
   NamedCausalKVBranch：负池 tensor + free-list allocator + 独立 builder
     + reset/free/append_and_enter（换属性 + 嵌套 context 的上下文管理器）
-    + bind 期实际容量/显存 pre-flight + 1 请求 metadata 冒烟
+    + bind 期实际容量/显存 pre-flight + 固定 `max_num_seqs` 个独立 request state
 vllm_omni/worker/gpu_model_runner.py（纯增量、默认关闭）
   initialize_kv_cache 覆写：super() 后 _maybe_bind_named_kv_branches()
   （getattr(model, "named_kv_branch_request", None) 为 None -> 零行为变化；
   is_profiling 跳过；逐项守卫校验）
 models/vibevoice/negative_branch.py（新增）
-  VibeVoiceNegativeBranch：单请求 Protocol 实现
+  VibeVoiceNegativeBranch：多请求按序进入独立 KV context 的 Protocol 实现
 models/vibevoice/runtime_config.py（新增，D1，读 vllm_config.additional_config）
 models/vibevoice/vibevoice.py
   named_kv_branch_request 属性、bind_named_kv_branch、删 on_requests_finished 转发
 models/vibevoice/stateful.py
   Protocol 收敛、bind_negative_branch、cleanup_request 调 branch.free
 models/vibevoice/pipeline.py / deploy/vibevoice.yaml
-  继续使用 OmniARAsyncScheduler；v1 固定 max_num_seqs=1 和 negative pool 配置
+  继续使用 OmniARAsyncScheduler；默认 max_num_seqs=2 和 4 GiB negative pool
 ```
 
 非 v1 组件包括 CPU arena、swap/victim、active-subset microbatch 和
@@ -1318,10 +1337,10 @@ embedding 消费（同一 E 流，wall-clock 差一步），两侧 hidden 按"�
 
 **正池抢占防护（v1）**：v1 RECOMPUTE 抢占对 VibeVoice 不可恢复（E 历史未保留、
 conv cache 不能由 token IDs 重建、重放 audio 位会退化为普通 token embedding）。首版不以
-自定义 scheduler 修补该问题，而是通过 `max_num_seqs=1` 和 C2 启动守卫保证唯一请求的
-完整正序列可常驻 positive pool，使 KV 压力抢占构造性不可达。仍使用现有
-`OmniARAsyncScheduler -> GPUARModelRunner`，若 deploy 覆盖 `max_num_seqs>1` 则启动失败，
-不能只 warning。
+自定义 scheduler 修补该问题，而是通过 C1/C2 的 `max_num_seqs * max_model_len` 启动守卫
+保证所有固定准入请求的完整正负序列可常驻，使 KV 压力抢占构造性不可达。仍使用现有
+`OmniARAsyncScheduler -> GPUARModelRunner`；任意 deploy 覆盖值都必须同时满足正负容量
+守卫，否则启动失败而不是运行时 warning 或 preemption。
 
 **并发扩展**：优先把正负 GPU pool 同时扩大到固定安全并发，并继续使用现有 scheduler。
 只有需要允许 `max_num_seqs` 大于 worst-case safe concurrency 时，才设计模型私有动态
@@ -1333,7 +1352,7 @@ request-local error handling 的 input/preprocess 层，不能从 `Scheduler.add
 **v1 守卫条件**（bind/启动时逐项检查，不满足明确报错）：
 
 ```text
-is_profiling=False；max_num_seqs=1；enable_prefix_caching=False；
+is_profiling=False；max_num_seqs>=1；enable_prefix_caching=False；
 目标 group 为 FullAttentionSpec（非 sliding window/MLA）；kv_cache_dtype 非量化；
 scheduler/kernel block size 相同且 page 无额外 padding；
 无 KV transfer connector（正负共享层名，connector 会把负分支写入误记为正向层事件）；
@@ -1341,21 +1360,23 @@ PP=1；DCP=1 且 PCP=1（手工 metadata 不含 dcp_local_seq_lens 语义）；
 use_ubatching=False（ubatch wrapper 会 override_forward_context(None) 且多线程 capture，
 与嵌套 context 冲突）；enable_sleep_mode=False（负池 tensor 未注册进 sleep/wake 生命周期）；
 speculative_config 为空；enforce_eager=True；
-正池 >= 单请求完整 max_model_len；负池 >= 单请求完整 negative 上界；
+正池 >= max_num_seqs * max_model_len；
+负池 blocks >= max_num_seqs * ceil(max_model_len / block_size)；
 bind 期显存 pre-flight 通过
 ```
 
 **v1 测试矩阵**：
 
 ```text
-CPU   allocator append/reset/free；slot/block 数学；deferred free；实际 C1/C2 容量守卫；
-      未声明 capability 的模型零行为变化；故障注入后 28 层 kv_cache/context 必然恢复
-冒烟  真实 builder 1 请求 metadata 构造（版本漂移第一闸）
+CPU   allocator append/reset/free；slot/block 数学；deferred free；N*max_model_len C1/C2
+      容量守卫；双请求 negative 顺序 forward；same/different controls RNG 分组；多请求
+      terminal drain 和 sparse waveform routing；未声明 capability 模型零行为变化
+冒烟  真实 builder metadata 构造（版本漂移第一闸）
 GPU   负分支逐次 append vs Transformers Qwen2 同权重朴素 forward，hidden 逐行 bf16 close；
-      positive/negative condition 对齐；长序列接近容量上界；TP=2 每 rank 实际布局/容量
-E2E   单请求 TTS 出音频；finished-and-scheduled/abort cleanup；Microsoft 官方 cached golden
-      对拍；旧 waveform-mislabel 与 temperature strict xfail 已移除；新增 hard max-token
-      terminal audio-token 边界 drain 见风险表
+      TP=2 两请求同时 resident；mixed prefill/decode；same-controls `[2B,64]`；同步
+      terminal drain；abort one/survivor；双 rank allocator parity
+E2E   Microsoft 官方 cached golden；真实 TP=2 HTTP uploaded voice/batch/SSE/WS；natural EOS、
+      length cap、terminal drain；其他 AR TTS capability/header no-op 门禁
 ```
 
 固定并发扩展必须补双/多请求 active-subset 和无抢占证明。swap 路径若经 profiling 立项，
@@ -1390,11 +1411,11 @@ active-subset microbatch、CPU arena/swap、动态 reservation scheduler、负�
 | 直接 vllm.LLM 使用上游 GPUModelRunner，不安装 Omni named-KV capability，也不执行 preprocess/postprocess/make_omni_output/stateful transition                | 实测 stock 探针（显式强制 control-token）只产控制 token、响应无 waveform；capability acknowledgement 会在日志中 warning_once，不再是完全静默。普通 stock 调用不经过 pipeline sampling_constraints，还可能采样完整词表——两种形态都无波形。低层路径仅保留 Processor/Encoder-cache/prefill 测试；M4c waveform 仅支持 AsyncOmni/GPUARModelRunner。`OmniGPUModelRunner.load_model`（先于 profile_run/dummy forward）只为声明 named-KV request 的模型置标志；合法 profiling 不误报，未声明模型零行为。支持 upstream runner 属于计划外，未修改 | 警告完成；支持已登记 |
 | Transformers PR#40546 当前 checkout 缺少 `LOGITS_PROCESSOR_INPUTS_DOCSTRING` import，且本地 HF checkpoint 缺 shard 1                                       | 未修改外部 runtime；test-only helper 在隔离进程中注入缺失 doc constant，并从官方三 shards 在线映射出 HF state（1205 含 tied lm_head、missing/unexpected=0）。自动 golden 已运行 PR 原生 full cached `generate()`，并以真实 Omni condition/noise 重放 PR diffusion + cached decoder/Semantic feedback 做逐步有界对拍；无需生成持久转换 checkpoint | 自动回归完成；外部缺口已登记 |
 | Stock runner 在下一次 scheduled forward 才消费 sampled `audio_token`；hard length cap 后没有下一次 forward | 已实现 capability-gated post-sample drain：bookkeeping 后仅声明模型检查 terminal token，先执行本步正常 postprocess，再由 VibeVoice 独立推进 negative Qwen 和 M4a/M4b，将最后 3200-sample chunk 合并进 snapshot 前 sparse output；EOS/stop 优先级不变。未声明模型零额外 D2H/forward/属性。官方 checkpoint、TP=2、AsyncOmni 已验证 3 tokens→9600 samples，negative blocks 全归还；strict xfail 与过期 serving warning 已移除 | 完成 |
-| 父请求正 KV 被 scheduler 抢占                                                                                                                                | max_num_seqs=1 + 正池完整 max_model_len 启动守卫已实现，使 v1 KV 压力抢占不可达                                                                                                                                                      | 完成（v1）   |
-| 负池耗尽                                                                                                                                                     | 负池可容完整 max_model_len + max_num_seqs=1 启动守卫已实现；运行时禁止超卖                                                                                                                                                           | 完成（v1）   |
+| 父请求正 KV 被 scheduler 抢占                                                                                                                                | 正池 `max_num_seqs * max_model_len` 启动守卫已实现；默认两请求可完整常驻，使 KV 压力抢占不可达                                                                                                                                         | 完成         |
+| 负池耗尽                                                                                                                                                     | 负池按 `max_num_seqs * ceil(max_model_len/block_size)` 启动守卫；默认 4 GiB/rank，运行时禁止超卖                                                                                                                                       | 完成         |
 | 负池显存未纳入 vLLM 核算（固定 kv_cache_memory_bytes 跳过自动 sizing）                                                                                       | bind 期 pre-flight 已实现（free VRAM >= 负池 + 512 MiB 默认 activation margin）；预算合并核算列为演进                                                                                                                                | 完成（v1）   |
 | 持续超卖下换出抖动                                                                                                                                           | v1 不超卖；swap/microbatch 只有 profiling 证明必要且定义背压门槛后才立项                                                                                                                                                             | Perf backlog |
-| idle abort 后 side state 延迟释放                                                                                                                            | 有界（<= max_num_seqs 份），下一请求 preprocess / final postprocess / 进程退出时释放；step 末 flush 在 async scheduling 下不安全，不为此改代码。注意 free() 只归还 block ID 给 allocator，不擦除 KV tensor 内容。test-only worker extension + collective RPC 已在真实 TP=2 AsyncOmni 证明 finish/abort 后 side state 先 deferred，下一安全请求后 Acoustic/Semantic/waveform state 删除且负池全部 block 归还；abort 后无新 waveform payload | 完成（v1）   |
+| idle abort 后 side state 延迟释放                                                                                                                            | 有界（<= max_num_seqs 份），下一次完整 scheduled-set forward / final postprocess / 进程退出时释放；逐请求 preprocess 和 step 末 flush 在 async scheduling 下都不安全。free() 只归还 block ID，不擦除 KV tensor。test-only worker extension + collective RPC 已在真实 TP=2 双 resident 请求证明 abort one 后 survivor 继续，最终 Acoustic/Semantic/waveform state 删除且负池全部 block 归还 | 完成         |
 | 负分支依赖 vLLM 私有接触面，主要至少包括：forward 路径语义（kv_cache 属性 / override_forward_context / create_forward_context / CommonAttentionMetadata / builder 构造与 build()，静默漂移风险，conformance 兜底）；bind 期结构读取（`_kernel_block_sizes` / `attn_groups` / `kv_cache_config` / `static_forward_context` / backend get_kv_cache_shape / get_kv_cache_stride_order / FullAttentionSpec page 与 layout 字段，上游改名即 bind 失败，响亮不静默） | 收口 named_kv_branch.py 单文件 + bind 冒烟 + conformance 测试；fake-runner conformance 伪造 runner 结构，真实 AsyncOmni 路径是 bind 期失效的检测闸；清单按“主要接触面”登记，不做精确计数                                                                                                                                | 升级门槛     |
 | async scheduling 下 negative forward 异常后的排队 step                                                                                                       | 真实 TP=2 fault injection 证明首个异常已丢弃负 branch 并触发 EngineCore fatal；已排队 step 仍可能二次报 `must be reset before append`，scheduler 随后可见 request-index `KeyError`。最终 worker shutdown 已证明双 cache/model state 释放、branch close、allocator 全部 block 归还；其中一次测试宿主退出时 resource_tracker 报告并回收 1 个 leaked shared_memory object，后续隔离及全量重跑未复现。抑制 secondary error/若复现则修复 fatal shared-memory teardown 均需 shared async runtime 修改，计划外未实施 | 已登记       |
 | 正常 AsyncOmni shutdown 偶发残留 process-manager 子进程                                                                                                      | focused full golden 的一次成功运行在两 TP worker graceful exit 后仍记录 `Process manager: force killing remaining processes count=1`；随后包含相同 golden 的 VibeVoice 全量成功且未复现。资源生命周期断言和测试结果不受影响；定位/修改 shared process manager 属于计划外 runtime 工作，先登记不实施                                                         | 已登记       |
@@ -1442,13 +1463,14 @@ PR-0 单请求 conformance：tiny 28-layer Qwen2 使用独立 builder + 手工 C
      四步 cached execution 与 Transformers BF16 max_abs_diff=0.03125；每步 28 层 kv_cache
      属性和外层 ForwardContext 均恢复；未修改 shared runtime
 PR-1 固定 GPU pool NamedCausalKVBranch + runner capability + additional_config 通道；
-     max_num_seqs=1、正负完整 max_model_len、显存/模式守卫、allocator/reset/free、异常时
+     正负 `max_num_seqs * max_model_len`、显存/模式守卫、allocator/reset/free、异常时
      整分支丢弃、runner shutdown close、未声明模型零行为均已实现；public reset/free 在
      active context 内拒绝，内部 `_free_unchecked`/best-effort fault cleanup 保证释放且不覆盖
      原始 forward 异常；tiny 28-layer store 十七步 cached hidden 跨 block 对拍和
      block/fault/active-context cleanup 通过
 PR-2 VibeVoiceNegativeBranch + vibevoice.py/stateful.py 已接线；Protocol 收敛为
-     reset_audio_segment/forward_step/free，deferred cleanup 统一释放 store；官方 checkpoint
+     reset_audio_segment/forward_step/free，多请求按序 negative forward，deferred cleanup
+     统一释放 store；官方 checkpoint
      连续两步 negative hidden、真实 Omni 强制 audio-token M4a/M4b transition、TP=2 rank-local
      negative KV/聚合 hidden 一致性均通过
 PR-3 output path：sparse request-scoped waveform output（mono CPU FP32 / 24 kHz、
@@ -1469,8 +1491,11 @@ PR-3 output path：sparse request-scoped waveform output（mono CPU FP32 / 24 kH
       双说话人分别走 1/2 个 audio segment，最终 audio_eos→eos/finish_reason=stop；WAV、PCM、
       data URL、file URL 及流式/controls/seed/URI/60 秒/第 5 个 speaker 的 4xx 均已覆盖；
       hard length cap 的 HTTP 200 响应携带 `X-Finish-Reason: length`。
-Gate  其他真实 AR 模型 GPU 回归（需带 qwen3_tts/voxcpm2 fixture 的机器）：
-      合入 main 的门禁，feature 分支不阻塞。
+Gate  其他真实 AR 模型 GPU 回归：VoxCPM2 与 Qwen3-TTS 为必测门禁，Voxtral-TTS 在
+      权重可用时作为可选对照；本地 checkpoint 可分别通过 `VOXCPM2_TEST_MODEL`、
+      `QWEN3_TTS_TEST_MODEL`、`VOXTRAL_TTS_TEST_MODEL` 注入。门禁同时断言未声明模型的
+      length-cap terminal drain 是 no-op，非 VibeVoice speech 响应无
+      `X-Finish-Reason`。
 Next-1 真实 AsyncOmni stateful finish/abort/exception cleanup 已完成：test-only
       worker_extension_cls + collective RPC 覆盖 TP=2；finish/abort 在下一安全请求后释放
       Acoustic/Semantic/waveform state 和全部 negative block，abort 后无新 payload；同步
@@ -1496,7 +1521,10 @@ Next-4 Microsoft 全生成自动化 golden 已完成：真实官方 checkpoint�
       + Acoustic/Semantic cached decode，逐步对拍 latent/waveform/semantic/next embedding。
       PR native negative reset（tail-KV copy）与 Omni fresh named-BOS 表示不直接逐值比较；
       negative Qwen 本身继续由独立 17-step Transformers cached conformance 覆盖。
-Perf-1 profiling 后优先增大 negative GPU pool并提高固定 safe concurrency。
+F3     固定 safe concurrency=2 已完成：4 GiB negative pool、N*max_model_len 双池守卫、
+       TP=2 真实双 resident、mixed prefill/decode、同 controls `[2B,64]`、同步 terminal
+       drain、abort one/survivor 与双 rank allocator parity 均通过。
+Perf-1 profiling 后评估是否继续提高固定 safe concurrency。
 Perf-2 只有固定容量不能满足目标时，另行设计 microbatch/swap/dynamic reservation；
        不作为 M4 waveform correctness 完成条件。
 Pre-M4 最低显存/profiling 门槛（H100 环境无法定义，需小卡实测）。

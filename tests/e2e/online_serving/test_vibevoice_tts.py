@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import os
 from pathlib import Path
 
@@ -13,6 +14,7 @@ import numpy as np
 import pytest
 import soundfile as sf
 import torch
+from websockets.sync.client import connect as websocket_connect
 
 from tests.helpers.mark import hardware_test
 from tests.helpers.media import get_asset_path, load_test_audio_data_url
@@ -67,6 +69,18 @@ _SERVER_PARAMS = [
 
 def _speech_url(omni_server) -> str:
     return f"http://{omni_server.host}:{omni_server.port}/v1/audio/speech"
+
+
+def _batch_url(omni_server) -> str:
+    return f"{_speech_url(omni_server)}/batch"
+
+
+def _voices_url(omni_server) -> str:
+    return f"http://{omni_server.host}:{omni_server.port}/v1/audio/voices"
+
+
+def _speech_websocket_url(omni_server) -> str:
+    return f"ws://{omni_server.host}:{omni_server.port}/v1/audio/speech/stream"
 
 
 def _post(omni_server, payload: dict, *, timeout: float = 300.0) -> httpx.Response:
@@ -140,6 +154,183 @@ def test_vibevoice_http_wav_pcm_and_local_file(omni_server) -> None:
 @pytest.mark.advanced_model
 @hardware_test(res={"cuda": "H100"}, num_cards=2)
 @pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
+def test_vibevoice_http_uploaded_audio_voice_lifecycle(omni_server) -> None:
+    voice_name = "vibevoice-e2e-narrator"
+    with httpx.Client(trust_env=False, timeout=300.0) as client:
+        try:
+            with _REFERENCE_FILE.open("rb") as audio_file:
+                upload_response = client.post(
+                    _voices_url(omni_server),
+                    data={
+                        "name": voice_name,
+                        "consent": "vibevoice-e2e-consent",
+                        # The registry may retain this for other models;
+                        # VibeVoice must resolve only the uploaded audio.
+                        "ref_text": "stored but unused transcript",
+                    },
+                    files={
+                        "audio_sample": (
+                            _REFERENCE_FILE.name,
+                            audio_file,
+                            "audio/wav",
+                        )
+                    },
+                )
+            assert upload_response.status_code == 200, upload_response.text
+
+            voices_response = client.get(_voices_url(omni_server))
+            assert voices_response.status_code == 200, voices_response.text
+            assert voice_name in voices_response.json()["voices"]
+
+            speech_response = client.post(
+                _speech_url(omni_server),
+                json={
+                    "model": omni_server.model,
+                    "input": "Hello from an uploaded voice.",
+                    "voice": voice_name,
+                    "response_format": "wav",
+                },
+            )
+            assert speech_response.status_code == 200, speech_response.text
+            assert speech_response.headers.get("X-Finish-Reason") == "stop"
+            waveform, sample_rate = sf.read(io.BytesIO(speech_response.content), dtype="float32")
+            assert sample_rate == 24_000
+            assert waveform.ndim == 1
+            assert waveform.size > 0
+        finally:
+            delete_response = client.delete(f"{_voices_url(omni_server)}/{voice_name}")
+            assert delete_response.status_code in (200, 404), delete_response.text
+
+
+@pytest.mark.advanced_model
+@hardware_test(res={"cuda": "H100"}, num_cards=2)
+@pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
+def test_vibevoice_http_batch_mixed_results_and_safe_queueing(omni_server) -> None:
+    with httpx.Client(trust_env=False, timeout=600.0) as client:
+        response = client.post(
+            _batch_url(omni_server),
+            json={
+                "model": omni_server.model,
+                "items": [
+                    {
+                        "input": "Force a short length cap.",
+                        "ref_audio": _REFERENCE_DATA_URL,
+                        "response_format": "wav",
+                        "max_new_tokens": 2,
+                    },
+                    {
+                        "input": "This item must fail before generation.",
+                        "ref_audio": _REFERENCE_DATA_URL,
+                        "instructions": "unsupported",
+                    },
+                    {
+                        "input": "Hello.",
+                        "ref_audio": _REFERENCE_DATA_URL,
+                        "response_format": "wav",
+                        "max_new_tokens": 256,
+                    },
+                ],
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["total"] == 3
+    assert payload["succeeded"] == 2
+    assert payload["failed"] == 1
+    first, invalid, third = payload["results"]
+    assert first["status"] == "success"
+    assert first["finish_reason"] == "length"
+    assert base64.b64decode(first["audio_data"])[:4] == b"RIFF"
+    assert invalid["status"] == "error"
+    assert "does not support 'instructions'" in invalid["error"]
+    assert "finish_reason" not in invalid
+    assert third["status"] == "success"
+    assert third["finish_reason"] == "stop"
+    assert base64.b64decode(third["audio_data"])[:4] == b"RIFF"
+
+
+@pytest.mark.advanced_model
+@hardware_test(res={"cuda": "H100"}, num_cards=2)
+@pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
+def test_vibevoice_sse_and_websocket_expose_terminal_length(omni_server) -> None:
+    sse_audio = bytearray()
+    done_event = None
+    with httpx.Client(trust_env=False, timeout=600.0) as client:
+        with client.stream(
+            "POST",
+            _speech_url(omni_server),
+            json={
+                "model": omni_server.model,
+                "input": "Force a short SSE length cap.",
+                "ref_audio": _REFERENCE_DATA_URL,
+                "response_format": "pcm",
+                "stream": True,
+                "max_new_tokens": 2,
+            },
+        ) as response:
+            assert response.status_code == 200, response.read().decode()
+            assert response.headers["content-type"].startswith("text/event-stream")
+            for line in response.iter_lines():
+                if not line.startswith("data: "):
+                    continue
+                event = json.loads(line.removeprefix("data: "))
+                if event["type"] == "speech.audio.delta":
+                    sse_audio.extend(base64.b64decode(event["audio"]))
+                elif event["type"] == "speech.audio.done":
+                    done_event = event
+
+    assert done_event is not None
+    assert done_event["finish_reason"] == "length"
+    assert len(sse_audio) == 2 * 3_200 * 2
+
+    with websocket_connect(
+        _speech_websocket_url(omni_server),
+        proxy=None,
+        open_timeout=30,
+        close_timeout=30,
+        max_size=None,
+    ) as websocket:
+        websocket.send(
+            json.dumps(
+                {
+                    "type": "session.config",
+                    "model": omni_server.model,
+                    "ref_audio": _REFERENCE_DATA_URL,
+                    "response_format": "pcm",
+                    "stream_audio": True,
+                    "max_new_tokens": 2,
+                }
+            )
+        )
+        websocket.send(json.dumps({"type": "input.text", "text": "Force a short WebSocket length cap."}))
+        websocket.send(json.dumps({"type": "input.done"}))
+
+        start = json.loads(websocket.recv())
+        assert start["type"] == "audio.start"
+        assert start["format"] == "pcm"
+        websocket_audio = bytearray()
+        audio_done = None
+        while audio_done is None:
+            message = websocket.recv()
+            if isinstance(message, bytes):
+                websocket_audio.extend(message)
+                continue
+            event = json.loads(message)
+            if event["type"] == "audio.done":
+                audio_done = event
+            else:
+                pytest.fail(f"Unexpected WebSocket event before audio.done: {event}")
+        assert audio_done["finish_reason"] == "length"
+        assert audio_done["error"] is False
+        assert len(websocket_audio) == 2 * 3_200 * 2
+        assert json.loads(websocket.recv())["type"] == "session.done"
+        websocket.send(json.dumps({"type": "session.close"}))
+
+
+@pytest.mark.advanced_model
+@hardware_test(res={"cuda": "H100"}, num_cards=2)
+@pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
 def test_vibevoice_http_rejects_invalid_requests_before_generation(omni_server) -> None:
     valid = {
         "model": omni_server.model,
@@ -150,7 +341,7 @@ def test_vibevoice_http_rejects_invalid_requests_before_generation(omni_server) 
 
     _assert_error(
         _post(omni_server, {**valid, "stream_format": "audio"}),
-        "non-streaming",
+        "cannot expose the terminal finish reason",
     )
     _assert_error(
         _post(

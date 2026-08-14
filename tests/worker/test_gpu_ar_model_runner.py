@@ -619,6 +619,81 @@ def test_process_additional_information_uses_snapshot_request_order(monkeypatch)
     assert torch.equal(seen[1], torch.tensor([[2.0], [3.0]]))
 
 
+@pytest.mark.parametrize(
+    ("all_scheduled", "expected_request_ids"),
+    [
+        (False, ["r1"]),
+        (True, ["r1", "r2"]),
+    ],
+)
+def test_sparse_audio_postprocess_all_scheduled_is_capability_gated(
+    monkeypatch,
+    all_scheduled,
+    expected_request_ids,
+):
+    runner = _make_async_output_runner()
+    seen_request_ids = []
+
+    class PostprocessModel:
+        has_postprocess = True
+        omni_pooler_payload_include_hidden = False
+        postprocess_uses_multimodal_outputs = False
+
+        def postprocess(self, hidden_states, **kwargs):
+            assert hidden_states.shape == (1, 1)
+            seen_request_ids.append(kwargs["request_id"])
+            return {}
+
+    runner.model = PostprocessModel()
+    if all_scheduled:
+        runner.model.postprocess_requires_all_scheduled_requests = True
+    runner.model_intermediate_buffer = {
+        "r1": {"request_id": "r1"},
+        "r2": {"request_id": "r2"},
+    }
+
+    monkeypatch.setattr(
+        GPUARModelRunner,
+        "_resolve_pooler_payload_req_ids",
+        lambda self, req_ids: ("audio", req_ids),
+    )
+    monkeypatch.setattr(GPUARModelRunner, "_should_accumulate_full_payload_output", lambda self: False)
+    monkeypatch.setattr(GPUARModelRunner, "get_omni_connector_output", lambda self: None)
+    monkeypatch.setattr(GPUARModelRunner, "_update_intermediate_buffer", lambda *args, **kwargs: None)
+
+    output = GPUARModelRunner._build_omni_model_runner_output_from_snapshot(
+        runner,
+        scheduler_output=SimpleNamespace(
+            total_num_scheduled_tokens=2,
+            num_scheduled_tokens={"r1": 1, "r2": 1},
+        ),
+        hidden_states=torch.tensor([[1.0], [2.0]]),
+        staged_hidden_states_cpu=None,
+        multimodal_outputs={
+            "audio": [torch.tensor([0.25])],
+            "sr": [torch.tensor(24_000, dtype=torch.int32)],
+            "meta": {"req_id": ["r1"], "sparse_audio": ["1"]},
+        },
+        req_ids_output_copy=["r1", "r2"],
+        req_id_to_index_output_copy={"r1": 0, "r2": 1},
+        valid_sampled_token_ids=[[], []],
+        logprobs_lists=None,
+        prompt_logprobs_dict={},
+        num_nans_in_logits=None,
+        kv_connector_output=None,
+        ec_connector_output=None,
+        cudagraph_stats=None,
+        kv_extracted_req_ids=None,
+        num_scheduled_tokens_np=np.array([1, 1], dtype=np.int32),
+        query_start_loc_cpu=torch.tensor([0, 1], dtype=torch.long),
+    )
+
+    assert seen_request_ids == expected_request_ids
+    assert output.multimodal_outputs is not None
+    assert output.multimodal_outputs[0]["audio"].tolist() == [0.25]
+    assert output.multimodal_outputs[1] is None
+
+
 def test_async_omni_output_guard_requires_safe_conditions():
     runner = _make_async_output_runner()
     runner.use_async_scheduling = True

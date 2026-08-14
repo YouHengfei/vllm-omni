@@ -2,9 +2,10 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Optional runner-owned causal PagedAttention KV branches.
 
-The v1 implementation is deliberately narrow: one request, one full-attention
-layer group, eager execution, and a fixed GPU pool with no overcommit. Models
-that do not declare a :class:`NamedKVBranchRequest` never construct this store.
+The implementation is deliberately narrow: a fixed scheduler-bounded number
+of requests, one full-attention layer group, eager execution, and a fixed GPU
+pool with no overcommit. Models that do not declare a
+:class:`NamedKVBranchRequest` never construct this store.
 """
 
 from __future__ import annotations
@@ -42,9 +43,7 @@ class NamedKVBranchRequest:
         if self.layer_group < 0:
             raise ValueError("Named KV branch layer_group must be non-negative.")
         if self.activation_margin_bytes < 0:
-            raise ValueError(
-                "Named KV branch activation_margin_bytes must be non-negative."
-            )
+            raise ValueError("Named KV branch activation_margin_bytes must be non-negative.")
 
 
 @dataclass(frozen=True)
@@ -72,8 +71,7 @@ class _FixedBlockAllocator:
     def allocate(self) -> int:
         if not self._free_blocks:
             raise RuntimeError(
-                "Named causal KV branch exhausted its fixed GPU block pool. "
-                "This violates the startup capacity guard."
+                "Named causal KV branch exhausted its fixed GPU block pool. This violates the startup capacity guard."
             )
         block_id = self._free_blocks.pop()
         if block_id in self._allocated_blocks:
@@ -84,9 +82,7 @@ class _FixedBlockAllocator:
     def free(self, block_ids: list[int]) -> None:
         for block_id in reversed(block_ids):
             if block_id not in self._allocated_blocks:
-                raise ValueError(
-                    f"Cannot free unallocated named-KV block {block_id}."
-                )
+                raise ValueError(f"Cannot free unallocated named-KV block {block_id}.")
             self._allocated_blocks.remove(block_id)
             self._free_blocks.append(block_id)
 
@@ -118,6 +114,7 @@ class NamedCausalKVBranch:
         self._states: dict[str, _NamedKVRequestState] = {}
         self._entered = False
         self._closed = False
+        self.max_concurrent_requests = int(self.vllm_config.scheduler_config.max_num_seqs)
 
         self._validate_runner_contract(runner)
         kv_group = runner.kv_cache_config.kv_cache_groups[request.layer_group]
@@ -126,8 +123,7 @@ class NamedCausalKVBranch:
         attention_groups = runner.attn_groups[request.layer_group]
         if len(attention_groups) != 1:
             raise ValueError(
-                "Named causal KV v1 requires exactly one homogeneous attention "
-                f"group, got {len(attention_groups)}."
+                f"Named causal KV v1 requires exactly one homogeneous attention group, got {len(attention_groups)}."
             )
         attention_group = attention_groups[0]
         self.backend = attention_group.backend
@@ -135,8 +131,7 @@ class NamedCausalKVBranch:
         if not self.layer_names:
             raise ValueError("Named causal KV branch has no attention layers.")
         self.layers = {
-            name: self.vllm_config.compilation_config.static_forward_context[name]
-            for name in self.layer_names
+            name: self.vllm_config.compilation_config.static_forward_context[name] for name in self.layer_names
         }
 
         kernel_block_size = runner._kernel_block_sizes[request.layer_group]
@@ -147,23 +142,20 @@ class NamedCausalKVBranch:
                 f"{kernel_block_size}."
             )
         self.block_size = int(kernel_block_size)
-        self.max_sequence_tokens = int(
-            self.vllm_config.model_config.max_model_len
-        )
-        self.max_blocks_per_request = ceil(
-            self.max_sequence_tokens / self.block_size
-        )
+        self.max_sequence_tokens = int(self.vllm_config.model_config.max_model_len)
+        self.max_blocks_per_request = ceil(self.max_sequence_tokens / self.block_size)
 
-        bytes_per_block = (
-            len(self.layer_names) * self.kv_cache_spec.page_size_bytes
-        )
+        bytes_per_block = len(self.layer_names) * self.kv_cache_spec.page_size_bytes
         self.num_blocks = request.memory_bytes // bytes_per_block
-        if self.num_blocks < self.max_blocks_per_request:
+        required_blocks = self.max_concurrent_requests * self.max_blocks_per_request
+        if self.num_blocks < required_blocks:
             capacity_tokens = self.num_blocks * self.block_size
+            required_tokens = self.max_concurrent_requests * self.max_sequence_tokens
             raise ValueError(
-                "Named causal KV branch cannot hold one complete request: "
+                "Named causal KV branch cannot hold the complete fixed-concurrency set: "
+                f"max_concurrent_requests={self.max_concurrent_requests}, "
                 f"capacity_tokens={capacity_tokens}, "
-                f"required_tokens={self.max_sequence_tokens}, "
+                f"required_tokens={required_tokens}, "
                 f"memory_bytes={request.memory_bytes}."
             )
         self.allocated_memory_bytes = self.num_blocks * bytes_per_block
@@ -172,9 +164,7 @@ class NamedCausalKVBranch:
         self._raw_caches: list[torch.Tensor] = []
         self.kv_caches = self._allocate_kv_caches()
 
-        builder_spec = self.kv_cache_spec.copy_with_new_block_size(
-            kernel_block_size
-        )
+        builder_spec = self.kv_cache_spec.copy_with_new_block_size(kernel_block_size)
         self._metadata_builder = self.backend.get_builder_cls()(
             builder_spec,
             self.layer_names,
@@ -183,12 +173,14 @@ class NamedCausalKVBranch:
         )
         logger.info(
             "Initialized named causal KV branch %r: layers=%d blocks=%d "
-            "block_size=%d capacity_tokens=%d memory_bytes=%d",
+            "block_size=%d capacity_tokens=%d max_concurrent_requests=%d "
+            "memory_bytes=%d",
             self.name,
             len(self.layer_names),
             self.num_blocks,
             self.block_size,
             self.num_blocks * self.block_size,
+            self.max_concurrent_requests,
             self.allocated_memory_bytes,
         )
 
@@ -197,38 +189,23 @@ class NamedCausalKVBranch:
         request = self.request
         groups = runner.kv_cache_config.kv_cache_groups
         if request.layer_group >= len(groups):
-            raise ValueError(
-                f"Named KV layer_group={request.layer_group} is out of range "
-                f"for {len(groups)} KV groups."
-            )
+            raise ValueError(f"Named KV layer_group={request.layer_group} is out of range for {len(groups)} KV groups.")
         spec = groups[request.layer_group].kv_cache_spec
         if not isinstance(spec, FullAttentionSpec):
-            raise ValueError(
-                "Named causal KV v1 requires FullAttentionSpec, got "
-                f"{type(spec).__name__}."
-            )
+            raise ValueError(f"Named causal KV v1 requires FullAttentionSpec, got {type(spec).__name__}.")
         if getattr(spec, "kv_quant_mode", KVQuantMode.NONE) != KVQuantMode.NONE:
             raise ValueError("Named causal KV v1 does not support quantized KV cache.")
-        if config.scheduler_config.max_num_seqs != 1:
-            raise ValueError(
-                "Named causal KV v1 requires max_num_seqs=1, got "
-                f"{config.scheduler_config.max_num_seqs}."
-            )
+        if config.scheduler_config.max_num_seqs < 1:
+            raise ValueError("Named causal KV requires max_num_seqs to be positive.")
         if config.cache_config.enable_prefix_caching:
-            raise ValueError(
-                "Named causal KV v1 requires enable_prefix_caching=False."
-            )
+            raise ValueError("Named causal KV v1 requires enable_prefix_caching=False.")
         parallel = config.parallel_config
         if parallel.pipeline_parallel_size != 1:
             raise ValueError("Named causal KV v1 requires pipeline_parallel_size=1.")
         if parallel.prefill_context_parallel_size != 1:
-            raise ValueError(
-                "Named causal KV v1 requires prefill_context_parallel_size=1."
-            )
+            raise ValueError("Named causal KV v1 requires prefill_context_parallel_size=1.")
         if parallel.decode_context_parallel_size != 1:
-            raise ValueError(
-                "Named causal KV v1 requires decode_context_parallel_size=1."
-            )
+            raise ValueError("Named causal KV v1 requires decode_context_parallel_size=1.")
         if parallel.use_ubatching:
             raise ValueError("Named causal KV v1 does not support ubatching.")
         if config.model_config.enable_sleep_mode:
@@ -241,26 +218,21 @@ class NamedCausalKVBranch:
         if transfer is not None and transfer.kv_connector is not None:
             raise ValueError("Named causal KV v1 does not support KV connectors.")
 
-        positive_capacity_tokens = (
-            runner.kv_cache_config.num_blocks * spec.block_size
-        )
-        if positive_capacity_tokens < config.model_config.max_model_len:
+        positive_capacity_tokens = runner.kv_cache_config.num_blocks * spec.block_size
+        required_positive_tokens = config.scheduler_config.max_num_seqs * config.model_config.max_model_len
+        if positive_capacity_tokens < required_positive_tokens:
             raise ValueError(
-                "Positive KV pool cannot hold one complete request: "
+                "Positive KV pool cannot hold the complete fixed-concurrency set: "
+                f"max_concurrent_requests={config.scheduler_config.max_num_seqs}, "
                 f"capacity_tokens={positive_capacity_tokens}, "
-                f"required_tokens={config.model_config.max_model_len}."
+                f"required_tokens={required_positive_tokens}."
             )
 
     def _preflight_device_memory(self) -> None:
         if self.device.type != "cuda":
-            raise ValueError(
-                "Named causal KV v1 currently requires a CUDA runner device."
-            )
+            raise ValueError("Named causal KV v1 currently requires a CUDA runner device.")
         free_bytes, _ = torch.cuda.mem_get_info(self.device)
-        required_bytes = (
-            self.allocated_memory_bytes
-            + self.request.activation_margin_bytes
-        )
+        required_bytes = self.allocated_memory_bytes + self.request.activation_margin_bytes
         if free_bytes < required_bytes:
             raise MemoryError(
                 "Insufficient free VRAM for named causal KV branch: "
@@ -270,8 +242,7 @@ class NamedCausalKVBranch:
 
     def _allocate_kv_caches(self) -> dict[str, torch.Tensor]:
         cache_dtype_str = (
-            getattr(self.kv_cache_spec, "cache_dtype_str", None)
-            or self.vllm_config.cache_config.cache_dtype
+            getattr(self.kv_cache_spec, "cache_dtype_str", None) or self.vllm_config.cache_config.cache_dtype
         )
         cache_shape = self.backend.get_kv_cache_shape(
             self.num_blocks,
@@ -281,15 +252,11 @@ class NamedCausalKVBranch:
             cache_dtype_str=cache_dtype_str,
         )
         if self.kv_cache_spec.page_size_padded is not None:
-            raise ValueError(
-                "Named causal KV v1 does not support padded KV cache pages."
-            )
+            raise ValueError("Named causal KV v1 does not support padded KV cache pages.")
         with set_current_vllm_config(self.vllm_config):
             stride_order = self.backend.get_kv_cache_stride_order()
         permuted_shape = tuple(cache_shape[index] for index in stride_order)
-        inverse_order = [
-            stride_order.index(index) for index in range(len(stride_order))
-        ]
+        inverse_order = [stride_order.index(index) for index in range(len(stride_order))]
 
         kv_caches: dict[str, torch.Tensor] = {}
         for layer_name in self.layer_names:
@@ -298,13 +265,8 @@ class NamedCausalKVBranch:
                 dtype=self.kv_cache_spec.dtype,
                 device=self.device,
             )
-            if (
-                raw_cache.numel() * raw_cache.element_size()
-                != self.num_blocks * self.kv_cache_spec.page_size_bytes
-            ):
-                raise AssertionError(
-                    "Named causal KV allocation does not match page-size accounting."
-                )
+            if raw_cache.numel() * raw_cache.element_size() != self.num_blocks * self.kv_cache_spec.page_size_bytes:
+                raise AssertionError("Named causal KV allocation does not match page-size accounting.")
             self._raw_caches.append(raw_cache)
             kv_caches[layer_name] = raw_cache.permute(*inverse_order)
         return kv_caches
@@ -364,13 +326,10 @@ class NamedCausalKVBranch:
             raise RuntimeError("Named causal KV branch contexts cannot be re-entered.")
         state = self._states.get(request_id)
         if state is None:
-            raise RuntimeError(
-                f"Named causal KV request {request_id!r} must be reset before append."
-            )
+            raise RuntimeError(f"Named causal KV request {request_id!r} must be reset before append.")
         if state.num_tokens >= self.max_sequence_tokens:
             raise RuntimeError(
-                f"Named causal KV request {request_id!r} exceeded "
-                f"max_sequence_tokens={self.max_sequence_tokens}."
+                f"Named causal KV request {request_id!r} exceeded max_sequence_tokens={self.max_sequence_tokens}."
             )
 
         position_value = state.num_tokens
@@ -417,18 +376,14 @@ class NamedCausalKVBranch:
             context = create_forward_context(
                 {name: metadata for name in self.layer_names},
                 self.vllm_config,
-                slot_mapping={
-                    name: slot_mapping for name in self.layer_names
-                },
+                slot_mapping={name: slot_mapping for name in self.layer_names},
                 skip_compiled=True,
             )
         except Exception:
             self._cleanup_after_fault(request_id)
             raise
 
-        positive_caches = {
-            name: layer.kv_cache for name, layer in self.layers.items()
-        }
+        positive_caches = {name: layer.kv_cache for name, layer in self.layers.items()}
         self._entered = True
         try:
             for name, layer in self.layers.items():
@@ -467,8 +422,7 @@ class NamedCausalKVBranch:
     def _ensure_not_entered(self, operation: str) -> None:
         if self._entered:
             raise RuntimeError(
-                f"Cannot {operation} named causal KV branch {self.name!r} "
-                "while its forward context is active."
+                f"Cannot {operation} named causal KV branch {self.name!r} while its forward context is active."
             )
 
 

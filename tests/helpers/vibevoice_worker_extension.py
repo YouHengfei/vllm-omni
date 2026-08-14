@@ -348,6 +348,114 @@ class VibeVoiceWorkerExtensionForTest:
             "num_steps": len(trace),
         }
 
+    def vibevoice_test_arm_concurrency_trace(self) -> dict[str, Any]:
+        """Trace multi-request batching without adding production diagnostics."""
+        runner = self.model_runner
+        model = runner.get_model()
+        stateful = model._stateful
+        kernel = model.model
+        negative_branch = model._negative_kv_branch
+        if negative_branch is None:
+            raise RuntimeError("VibeVoice negative branch is not bound")
+        if hasattr(self, "_vibevoice_concurrency_trace"):
+            raise RuntimeError("VibeVoice concurrency trace was armed twice")
+
+        trace: dict[str, Any] = {
+            "negative_batches": [],
+            "diffusion_batches": [],
+            "terminal_batches": [],
+            "cleanup_exclusions": [],
+            "max_active_requests": 0,
+        }
+        original_negative_forward = negative_branch.forward_step
+        original_sample = kernel.sample_audio_latent
+        original_drain = model.drain_terminal_sampled_tokens
+        original_flush = stateful.flush_deferred_cleanup
+
+        def update_peak() -> None:
+            trace["max_active_requests"] = max(
+                int(trace["max_active_requests"]),
+                len(negative_branch.store._states),
+            )
+
+        def traced_negative_forward(request_ids: list[str], input_embeddings: list[Any]) -> list[Any]:
+            update_peak()
+            trace["negative_batches"].append(list(request_ids))
+            return original_negative_forward(request_ids, input_embeddings)
+
+        def traced_sample(
+            positive_condition: Any,
+            negative_condition: Any,
+            noise: Any,
+            **kwargs: Any,
+        ) -> Any:
+            update_peak()
+            trace["diffusion_batches"].append(
+                {
+                    "batch_size": int(positive_condition.shape[0]),
+                    "negative_batch_size": int(negative_condition.shape[0]),
+                    "noise_shape": list(noise.shape),
+                    "guidance_scale": float(kwargs["guidance_scale"]),
+                    "num_inference_steps": int(kwargs["num_inference_steps"]),
+                }
+            )
+            return original_sample(
+                positive_condition,
+                negative_condition,
+                noise,
+                **kwargs,
+            )
+
+        def traced_drain(request_ids: list[str], multimodal_outputs: Any) -> Any:
+            update_peak()
+            trace["terminal_batches"].append(list(request_ids))
+            return original_drain(request_ids, multimodal_outputs)
+
+        def traced_flush(*, exclude_request_ids=frozenset()) -> None:
+            trace["cleanup_exclusions"].append(sorted(exclude_request_ids))
+            original_flush(exclude_request_ids=exclude_request_ids)
+            update_peak()
+
+        negative_branch.forward_step = traced_negative_forward
+        kernel.sample_audio_latent = traced_sample
+        model.drain_terminal_sampled_tokens = traced_drain
+        stateful.flush_deferred_cleanup = traced_flush
+        self._vibevoice_concurrency_trace = trace
+        self._vibevoice_concurrency_trace_originals = (
+            model,
+            original_drain,
+            kernel,
+            original_sample,
+            negative_branch,
+            original_negative_forward,
+            stateful,
+            original_flush,
+        )
+        return {"rank": int(self.rank), "armed": True}
+
+    def vibevoice_test_take_concurrency_trace(self) -> dict[str, Any]:
+        trace = getattr(self, "_vibevoice_concurrency_trace", None)
+        originals = getattr(self, "_vibevoice_concurrency_trace_originals", None)
+        if trace is None or originals is None:
+            raise RuntimeError("VibeVoice concurrency trace is not armed")
+        (
+            model,
+            original_drain,
+            kernel,
+            original_sample,
+            negative_branch,
+            original_negative_forward,
+            stateful,
+            original_flush,
+        ) = originals
+        model.drain_terminal_sampled_tokens = original_drain
+        kernel.sample_audio_latent = original_sample
+        negative_branch.forward_step = original_negative_forward
+        stateful.flush_deferred_cleanup = original_flush
+        del self._vibevoice_concurrency_trace
+        del self._vibevoice_concurrency_trace_originals
+        return {"rank": int(self.rank), **trace}
+
     def vibevoice_test_arm_negative_fault(
         self,
         fail_on_call: int,

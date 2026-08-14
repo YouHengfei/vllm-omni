@@ -10,7 +10,7 @@ from tests.helpers.mark import hardware_test
 from tests.helpers.runtime import OmniRunner
 from tests.helpers.stage_config import get_deploy_config_path
 
-VOXCPM2_MODEL = "openbmb/VoxCPM2"
+VOXCPM2_MODEL = os.getenv("VOXCPM2_TEST_MODEL", "openbmb/VoxCPM2")
 DEPLOY_CONFIG = get_deploy_config_path("voxcpm2.yaml")
 SAMPLE_RATE = 48000
 
