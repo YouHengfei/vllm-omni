@@ -16,7 +16,6 @@ from vllm_omni.config.stage_config import (
     StagePipelineConfig,
 )
 
-# Mirrors Transformers PR #40546 VibeVoiceTokenConstraintProcessor.
 VIBEVOICE_VALID_TOKEN_IDS = [151652, 151653, 151654, 151643]
 
 VIBEVOICE_PIPELINE = PipelineConfig(

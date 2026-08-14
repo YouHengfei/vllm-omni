@@ -1002,9 +1002,42 @@ deploy 默认 seed 不改变官方 waveform RNG；显式 `guidance_scale` 必须
 `num_diffusion_steps` 必须为非 bool 正整数。Adapter 与 stateful runtime 共用同一校验函数，
 runtime 校验仍作为低层防御。非流式 HTTP 音频响应保持 200，并以
 `X-Finish-Reason: stop|length` 暴露最终终止原因；`length` 明确表示 token cap 截断，不能
-解释为内容已完整生成。当前 4-speaker 只完成 CPU contract 验证，真实 checkpoint 自然生成
-覆盖到 2 speaker；约 90 分钟探针验证的是容量、终止和运行稳定性，不代表长程内容准确率或
-speaker consistency 的质量信封，后者需由 opt-in CER/WER/speaker-similarity 评测补齐。
+解释为内容已完整生成。4-speaker CPU contract 和真实 HTTP waveform 路径均已执行，但当前
+四个短 turn 在 `max_new_tokens=512` 与 `1024` 两次受控运行中都精确到达 length cap，尚未
+建立 natural EOS；因此测试保留为动态 xfail，不得把它描述为 4-speaker natural generation
+通过。真实 checkpoint natural EOS 仍只覆盖到 2 speaker。约 90 分钟探针验证的是容量、终止
+和运行稳定性，不代表长程内容准确率或 speaker consistency 的质量信封，后者需由 opt-in
+CER/WER/speaker-similarity 评测补齐。
+
+#### 12.8.1 F6 质量评测状态
+
+第一阶段非阻断评测已接入现有 Seed-TTS judge，而不是复制一套 ASR/SIM 实现：
+
+- `seed-tts-vibevoice` dataset variant 只发送 VibeVoice 支持的 `ref_audio` 和
+  `max_new_tokens`，不发送 Qwen 专用的 `ref_text`、`task_type`、`language`；
+- benchmark client 使用 OpenAI Speech SSE 捕获 PCM 和 `stop|length` terminal metadata，
+  保持 raw HTTP streaming 的拒绝契约；质量请求出现 `length` 时直接判失败，避免把截断音频
+  纳入 CER/WER baseline；
+- `tests/e2e/accuracy/vibevoice/run_vibevoice_quality.py` 支持英文 WER、中文字符级 error
+  rate、WavLM reference similarity、per-item JSON 和 WAV artifact；
+- 阈值默认关闭，必须先取得 Microsoft/Transformers PR 与 Omni baseline 后才能升级为
+  nightly blocking gate。
+
+已有服务运行时可执行：
+
+```bash
+python tests/e2e/accuracy/vibevoice/run_vibevoice_quality.py \
+  --model VibeVoice \
+  --dataset-path /path/to/seed-tts-eval \
+  --locale both \
+  --num-prompts 8 \
+  --max-concurrency 2 \
+  --save-audio-dir /tmp/vibevoice-quality-audio
+```
+
+当前 F6 仍未完成：judge checkpoint revision 尚未在 VibeVoice gate 中独立锁定，阈值尚无
+baseline，Seed-TTS 第一阶段只覆盖单 speaker；2/4-speaker turn-level similarity 仍需要固定
+多说话人 corpus 和离线 alignment/diarization 方案。不得把第一阶段结果描述为完整 F6 通过。
 
 Golden oracle 边界必须明确：Microsoft 官方 Git 历史没有公开发布与 1.5B checkpoint
 匹配的完整非 Realtime `generate()`（usage 因滥用风险关闭；当前仓库中的
@@ -1227,7 +1260,9 @@ C3 默认并发固定：
 
 任一守卫不满足都在启动期明确失败；运行时不以 forward 异常表达普通容量不足。由于
 两个请求的正负完整 working set 都可常驻 GPU，当前实现不需要 victim、arena、swap 或
-embedding replay，也不改变官方 global-device RNG 语义。
+embedding replay，也不改变官方 global-device RNG 语义。测试 worker 的 concurrency trace
+现同时记录每 rank start/end/peak allocated、reserved 和 free bytes；下一次干净 TP=2 默认
+部署回归将把真实双请求 activation peak 固化到验收记录中，该诊断不进入生产 runtime。
 
 **容量扩展顺序**：waveform E2E 和 TP=2 stateful 通过后，先增加 negative GPU pool，并将
 固定并发提高到实际安全值：
@@ -1495,7 +1530,21 @@ Gate  其他真实 AR 模型 GPU 回归：VoxCPM2 与 Qwen3-TTS 为必测门禁�
       权重可用时作为可选对照；本地 checkpoint 可分别通过 `VOXCPM2_TEST_MODEL`、
       `QWEN3_TTS_TEST_MODEL`、`VOXTRAL_TTS_TEST_MODEL` 注入。门禁同时断言未声明模型的
       length-cap terminal drain 是 no-op，非 VibeVoice speech 响应无
-      `X-Finish-Reason`。
+      `X-Finish-Reason`。当前 real online tests 已显式检查 response header；terminal-drain
+      零行为由 shared-runner 单测覆盖，VoxCPM2/Qwen3-TTS offline gate 也已接入通用 test-only
+      worker snapshot，显式检查无 terminal capability、无 named KV 和请求残留，待干净 GPU
+      实跑确认。
+Run-1 本轮已增加真实 4-speaker natural HTTP smoke、其他 AR response-header isolation、
+      concurrency trace 显存峰值采集和 F6 单 speaker 非阻断 runner；均未修改 inference
+      runtime。在其他用户进程稳定 idle、显存固定为 48,090 MiB/rank 的 GPU 4/5 上执行了
+      受控共享卡验证：TP=2 direct runtime `4 passed`；全卡峰值约 64.3 GiB/rank，最低剩余
+      16.2--16.8 GiB/rank，测试后恢复 48,117 MiB 基线，原 PID 显存未上涨且未观测到 SM
+      活动。4-speaker HTTP 两次均成功返回 waveform，但分别在 512/1024 token 达到 `length`，
+      natural EOS 尚未通过；shutdown 仍偶发 `force killing remaining processes count=1`/
+      TCPStore 提前关闭 warning，只涉及本测试进程组。该共享卡结果不能替代干净 GPU 门禁。
+      本机也未发现 Seed-TTS corpus 和固定 judge checkpoint cache，因此 F6 目前只完成
+      client/dataset/SSE wiring 与 CPU 测试。待取得独占 GPU 和评测资产后按 VibeVoice final
+      HTTP/TP=2 → VoxCPM2 → Qwen3-TTS → 4-speaker natural EOS → F6 baseline 顺序执行。
 Next-1 真实 AsyncOmni stateful finish/abort/exception cleanup 已完成：test-only
       worker_extension_cls + collective RPC 覆盖 TP=2；finish/abort 在下一安全请求后释放
       Acoustic/Semantic/waveform state 和全部 negative block，abort 后无新 payload；同步

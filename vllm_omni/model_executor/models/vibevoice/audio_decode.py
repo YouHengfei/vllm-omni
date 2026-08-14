@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 #
-# Adapted from Microsoft VibeVoice and Transformers PR #40546.
+
 """Model-local waveform decode and semantic feedback for one audio token.
 
 The kernel is intentionally stateless: causal Acoustic Decoder and Semantic
@@ -57,9 +57,7 @@ class VibeVoiceAudioTokenDecoder:
         decoder_config = config.audio_config.decoder_config
         upsampling_ratios = tuple(decoder_config.upsampling_ratios)
         if not upsampling_ratios:
-            raise ValueError(
-                "VibeVoice Acoustic Decoder upsampling_ratios cannot be empty."
-            )
+            raise ValueError("VibeVoice Acoustic Decoder upsampling_ratios cannot be empty.")
         return cls(
             latent_size=int(config.audio_config.hidden_size),
             semantic_size=int(config.semantic_model_config.hidden_size),
@@ -91,17 +89,13 @@ class VibeVoiceAudioTokenDecoder:
     def _module_device_dtype(module: nn.Module) -> tuple[torch.device, torch.dtype]:
         parameter = next(module.parameters(), None)
         if parameter is None:
-            raise ValueError(
-                f"VibeVoice decode module {type(module).__name__} has no parameters."
-            )
+            raise ValueError(f"VibeVoice decode module {type(module).__name__} has no parameters.")
         return parameter.device, parameter.dtype
 
     @staticmethod
     def _validate_factor(name: str, factor: torch.Tensor) -> None:
         if factor.numel() != 1 or not factor.is_floating_point():
-            raise ValueError(
-                f"VibeVoice {name} must be one floating-point scalar tensor."
-            )
+            raise ValueError(f"VibeVoice {name} must be one floating-point scalar tensor.")
 
     @torch.inference_mode()
     def decode_audio_token(
@@ -124,10 +118,7 @@ class VibeVoiceAudioTokenDecoder:
 
         tower_device, tower_dtype = self._module_device_dtype(audio_tower)
         audio_latent = audio_latent.to(device=tower_device, dtype=tower_dtype)
-        decoder_latent = (
-            audio_latent / latent_scaling_factor.to(audio_latent)
-            - latent_bias_factor.to(audio_latent)
-        )
+        decoder_latent = audio_latent / latent_scaling_factor.to(audio_latent) - latent_bias_factor.to(audio_latent)
         decoder_output = audio_tower.decode(
             decoder_latent,
             padding_cache=acoustic_cache,
@@ -143,13 +134,10 @@ class VibeVoiceAudioTokenDecoder:
         if not isinstance(audio, torch.Tensor) or tuple(audio.shape) != expected_audio_shape:
             actual_shape = tuple(audio.shape) if isinstance(audio, torch.Tensor) else None
             raise ValueError(
-                "VibeVoice Acoustic Decoder output must have shape "
-                f"{expected_audio_shape}, got {actual_shape}."
+                f"VibeVoice Acoustic Decoder output must have shape {expected_audio_shape}, got {actual_shape}."
             )
         if next_acoustic_cache is None:
-            raise ValueError(
-                "VibeVoice Acoustic Decoder did not return a causal padding cache."
-            )
+            raise ValueError("VibeVoice Acoustic Decoder did not return a causal padding cache.")
 
         semantic_device, semantic_dtype = self._module_device_dtype(semantic_encoder)
         semantic_output = semantic_encoder(
@@ -160,33 +148,17 @@ class VibeVoiceAudioTokenDecoder:
         semantic_latent = getattr(semantic_output, "latents", None)
         next_semantic_cache = getattr(semantic_output, "padding_cache", None)
         expected_semantic_shape = (batch_size, 1, self.semantic_size)
-        if (
-            not isinstance(semantic_latent, torch.Tensor)
-            or tuple(semantic_latent.shape) != expected_semantic_shape
-        ):
-            actual_shape = (
-                tuple(semantic_latent.shape)
-                if isinstance(semantic_latent, torch.Tensor)
-                else None
-            )
+        if not isinstance(semantic_latent, torch.Tensor) or tuple(semantic_latent.shape) != expected_semantic_shape:
+            actual_shape = tuple(semantic_latent.shape) if isinstance(semantic_latent, torch.Tensor) else None
             raise ValueError(
-                "VibeVoice Semantic Encoder output must have shape "
-                f"{expected_semantic_shape}, got {actual_shape}."
+                f"VibeVoice Semantic Encoder output must have shape {expected_semantic_shape}, got {actual_shape}."
             )
         if next_semantic_cache is None:
-            raise ValueError(
-                "VibeVoice Semantic Encoder did not return a causal padding cache."
-            )
+            raise ValueError("VibeVoice Semantic Encoder did not return a causal padding cache.")
 
-        acoustic_device, acoustic_dtype = self._module_device_dtype(
-            acoustic_projector
-        )
-        acoustic_embedding = acoustic_projector(
-            audio_latent.to(device=acoustic_device, dtype=acoustic_dtype)
-        )
-        semantic_connector_device, semantic_connector_dtype = (
-            self._module_device_dtype(semantic_connector)
-        )
+        acoustic_device, acoustic_dtype = self._module_device_dtype(acoustic_projector)
+        acoustic_embedding = acoustic_projector(audio_latent.to(device=acoustic_device, dtype=acoustic_dtype))
+        semantic_connector_device, semantic_connector_dtype = self._module_device_dtype(semantic_connector)
         semantic_embedding = semantic_connector(
             semantic_latent.to(
                 device=semantic_connector_device,

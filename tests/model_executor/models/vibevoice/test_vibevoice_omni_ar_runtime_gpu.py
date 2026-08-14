@@ -354,6 +354,18 @@ def omni_ar_processing_result() -> dict[str, Any]:
     return result
 
 
+def _assert_memory_trace(rank_trace: dict[str, Any]) -> None:
+    memory = rank_trace["memory"]
+    assert 0 < memory["start_allocated_bytes"] <= memory["peak_allocated_bytes"]
+    assert memory["start_allocated_bytes"] <= memory["start_reserved_bytes"]
+    assert memory["peak_allocated_bytes"] <= memory["peak_reserved_bytes"]
+    assert memory["peak_reserved_bytes"] <= memory["total_bytes"]
+    assert 0 < memory["start_free_bytes"] <= memory["total_bytes"]
+    assert 0 < memory["end_free_bytes"] <= memory["total_bytes"]
+    assert memory["end_allocated_bytes"] <= memory["peak_allocated_bytes"]
+    assert memory["end_reserved_bytes"] <= memory["peak_reserved_bytes"]
+
+
 def test_processing_runs_on_official_omni_ar_async_scheduler(
     omni_ar_processing_result: dict[str, Any],
 ) -> None:
@@ -400,6 +412,7 @@ def test_runtime_executes_two_resident_requests_with_batched_terminal_rng(
 
     assert [item["rank"] for item in result["concurrency_trace"]] == [0, 1]
     for rank_trace in result["concurrency_trace"]:
+        _assert_memory_trace(rank_trace)
         assert rank_trace["max_active_requests"] >= 2
         assert any(len(batch) == 2 for batch in rank_trace["negative_batches"]), rank_trace
         assert any(
@@ -435,6 +448,7 @@ def test_aborting_one_resident_request_does_not_interrupt_the_other(
 
     assert [item["rank"] for item in result["abort_trace"]] == [0, 1]
     for rank_trace in result["abort_trace"]:
+        _assert_memory_trace(rank_trace)
         assert rank_trace["max_active_requests"] >= 2
         assert any(len(batch) == 2 for batch in rank_trace["negative_batches"])
 

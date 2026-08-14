@@ -14,11 +14,13 @@ os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
 
 import pytest
 
+from tests.helpers.ar_tts_isolation_worker_extension import assert_non_vibevoice_ar_isolation
 from tests.helpers.mark import hardware_test
 from tests.helpers.media import load_test_audio_data_url
 from tests.helpers.stage_config import get_deploy_config_path, modify_stage_config
 
-MODEL = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+MODEL = os.getenv("QWEN3_TTS_TEST_MODEL", "Qwen/Qwen3-TTS-12Hz-0.6B-Base")
+_WORKER_EXTENSION = "tests.helpers.ar_tts_isolation_worker_extension.ARTTSIsolationWorkerExtensionForTest"
 # See tests/e2e/online_serving/test_qwen3_tts_base.py for the vendored-asset rationale.
 REF_AUDIO_URL = load_test_audio_data_url("qwen3_tts/clone_2.wav")
 REF_TEXT = "Okay. Yeah. I resent you. I love you. I respect you. But you know what? You blew it! And thanks to you."
@@ -55,7 +57,11 @@ def get_cuda_graph_config():
 # Same structure as test_qwen3_omni: models, stage_configs, test_params
 tts_server_params = [
     pytest.param(
-        (MODEL, get_cuda_graph_config()),
+        (
+            MODEL,
+            get_cuda_graph_config(),
+            {"stage_overrides": {"0": {"worker_extension_cls": _WORKER_EXTENSION}}},
+        ),
         id="no_cuda_graph",
     )
 ]
@@ -88,3 +94,10 @@ def test_text_to_audio_001(omni_runner, omni_runner_handler) -> None:
         "ref_text": REF_TEXT,
     }
     omni_runner_handler.send_audio_speech_request(request_config)
+
+    isolation = omni_runner.omni.engine.collective_rpc(
+        method="ar_tts_test_runtime_isolation",
+        timeout=60,
+        stage_ids=[0],
+    )
+    assert_non_vibevoice_ar_isolation(isolation)

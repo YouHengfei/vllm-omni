@@ -69,7 +69,11 @@ def test_text_to_audio_001(omni_server, openai_client) -> None:
         "voice": "default",
         "min_audio_bytes": _MIN_AUDIO_BYTES,
     }
-    openai_client.send_audio_speech_request(request_config, request_num=MAX_CONCURRENT)
+    responses = openai_client.send_audio_speech_request(request_config, request_num=MAX_CONCURRENT)
+    assert len(responses) == MAX_CONCURRENT
+    for response in responses:
+        assert response.response_headers is not None
+        assert "x-finish-reason" not in response.response_headers
 
 
 @pytest.mark.advanced_model

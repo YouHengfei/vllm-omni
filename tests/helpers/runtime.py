@@ -759,6 +759,9 @@ class OmniResponse:
     audio_content: str | None = None
     audio_format: str | None = None
     audio_bytes: bytes | None = None
+    #: Lower-cased response headers for binary Speech API calls. Other helpers
+    #: may leave this unset.
+    response_headers: dict[str, str] | None = None
     #: End-to-end wall time in **seconds** (``perf_counter`` delta), from just before the
     #: OpenAI client call through response parsing and local post-process (e.g. audio decode).
     e2e_latency: float | None = None
@@ -1982,9 +1985,10 @@ class OpenAIClientHandler:
             result.audio_bytes = raw_bytes
             result.e2e_latency = time.perf_counter() - wall_start
             result.success = True
-            result.audio_format = getattr(response, "response", None)
-            if result.audio_format is not None:
-                result.audio_format = result.audio_format.headers.get("content-type", "")
+            raw_response = getattr(response, "response", None)
+            if raw_response is not None:
+                result.response_headers = {str(key).lower(): str(value) for key, value in raw_response.headers.items()}
+                result.audio_format = result.response_headers.get("content-type", "")
 
         except Exception as e:
             msg = f"Audio speech stream processing error: {str(e)}"
@@ -2015,9 +2019,10 @@ class OpenAIClientHandler:
             result.audio_bytes = raw_bytes
             result.e2e_latency = time.perf_counter() - wall_start
             result.success = True
-            result.audio_format = getattr(response, "response", None)
-            if result.audio_format is not None:
-                result.audio_format = result.audio_format.headers.get("content-type", "")
+            raw_response = getattr(response, "response", None)
+            if raw_response is not None:
+                result.response_headers = {str(key).lower(): str(value) for key, value in raw_response.headers.items()}
+                result.audio_format = result.response_headers.get("content-type", "")
 
         except Exception as e:
             msg = f"Audio speech non-stream processing error: {str(e)}"

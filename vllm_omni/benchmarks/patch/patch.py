@@ -44,6 +44,7 @@ from vllm_omni.benchmarks.data_modules.seed_tts_dataset import (
     SeedTTSDesignDataset,
     SeedTTSSampleRequest,
     SeedTTSTextDataset,
+    SeedTTSVibeVoiceDataset,
 )
 from vllm_omni.benchmarks.data_modules.sound_effect_dataset import SoundEffectDataset
 from vllm_omni.benchmarks.data_modules.ttsd_dataset import TTSDDataset
@@ -53,6 +54,7 @@ from vllm_omni.metrics.utils import coerce_positive_int_scalar
 logger = init_logger(__name__)
 
 _AUDIO_CONTINUITY_THRESHOLD_ENV = "VLLM_OMNI_BENCH_AUDIO_CONTINUITY_THRESHOLD_S"
+_SPEECH_STREAM_FORMAT_ENV = "VLLM_OMNI_BENCH_SPEECH_STREAM_FORMAT"
 RETURN_STAGE_METRICS_FIELD = "return_stage_metrics"
 _IMAGE_STAGE_METRICS_BACKENDS = frozenset({"openai-image-edits-omni"})
 _PRINT_STAGE = False
@@ -85,6 +87,19 @@ def set_print_stage(enabled: bool) -> None:
     """Set whether this benchmark run prints the stage benchmark section."""
     global _PRINT_STAGE
     _PRINT_STAGE = bool(enabled)
+
+
+def _speech_stream_format() -> Literal["audio", "sse"]:
+    """Return the benchmark-only Speech streaming transport.
+
+    Raw ``audio`` remains the default for existing TTS benchmarks. Models such
+    as VibeVoice that require terminal metadata can opt into OpenAI Speech SSE
+    without changing their public serving contract.
+    """
+    value = os.environ.get(_SPEECH_STREAM_FORMAT_ENV, "audio").strip().lower() or "audio"
+    if value not in ("audio", "sse"):
+        raise ValueError(f"{_SPEECH_STREAM_FORMAT_ENV} must be 'audio' or 'sse', got {value!r}.")
+    return value
 
 
 def _audio_continuity_threshold_s() -> float:
@@ -230,6 +245,7 @@ def get_samples(args, tokenizer):
         "seed-tts",
         "seed-tts-text",
         "seed-tts-design",
+        "seed-tts-vibevoice",
         "ttsd",
         "sound-effect",
     )
@@ -351,6 +367,7 @@ def get_samples(args, tokenizer):
             "seed-tts": SeedTTSDataset,
             "seed-tts-text": SeedTTSTextDataset,
             "seed-tts-design": SeedTTSDesignDataset,
+            "seed-tts-vibevoice": SeedTTSVibeVoiceDataset,
             "ttsd": TTSDDataset,
             "sound-effect": SoundEffectDataset,
         }
@@ -427,6 +444,8 @@ class MixRequestFuncOutput(RequestFuncOutput):
     #: Number of inter-chunk intervals during which the player buffer went
     #: negative.
     audio_underrun_event_count: int = 0
+    #: Terminal metadata from OpenAI Speech SSE; unavailable for raw audio streams.
+    speech_finish_reason: str | None = None
     #: Raw PCM s16le mono at 24 kHz for Seed-TTS WER: from ``/v1/audio/speech`` stream or
     #: resampled export after ``openai-chat-omni`` audio deltas.
     tts_output_pcm_bytes: bytes | None = None
@@ -1132,25 +1151,29 @@ async def async_request_openai_audio_speech(
 ) -> MixRequestFuncOutput:
     """Streaming request to /v1/audio/speech endpoint.
 
-    Sends ``stream=true`` with ``stream_format=audio`` and ``response_format=pcm``
-    so the server returns raw PCM chunks as they are decoded. This allows measuring
-    TTFP (time to first audio packet) separately from E2EL.
+    Raw PCM streaming is the default. Setting
+    ``VLLM_OMNI_BENCH_SPEECH_STREAM_FORMAT=sse`` consumes OpenAI
+    ``speech.audio.delta`` events instead, allowing quality evaluation of
+    models that intentionally reject raw HTTP audio streaming.
     """
     api_url = request_func_input.api_url
     _validate_api_url(api_url, "OpenAI Audio Speech API", "audio/speech")
 
+    stream_format = _speech_stream_format()
     payload = {
         "model": request_func_input.model_name if request_func_input.model_name else request_func_input.model,
         "input": request_func_input.prompt,
         "stream": True,
-        "stream_format": "audio",
+        "stream_format": stream_format,
         "response_format": "pcm",
     }
     _update_payload_common(payload, request_func_input)
-    # Seed-TTS + WER: ``--extra-body`` may set stream=false / other formats; speech must stream PCM.
+    # Seed-TTS + WER: ``--extra-body`` may set stream=false / other formats;
+    # quality capture still requires PCM, but may use either raw HTTP bytes or
+    # OpenAI Speech SSE according to the benchmark-only transport setting.
     if getattr(request_func_input, "seed_tts_row", False) and _seed_tts_capture_pcm_for_wer():
         payload["stream"] = True
-        payload["stream_format"] = "audio"
+        payload["stream_format"] = stream_format
         payload["response_format"] = "pcm"
 
     headers = {
@@ -1176,19 +1199,48 @@ async def async_request_openai_audio_speech(
     try:
         async with session.post(url=api_url, json=payload, headers=headers) as response:
             if response.status == 200:
+                sse_handler = StreamedResponseHandler() if stream_format == "sse" else None
                 async for chunk in response.content.iter_any():
                     if not chunk:
                         continue
-                    timestamp = time.perf_counter()
-                    if output.audio_ttfp == 0.0:
-                        # TTS speech endpoint emits no text tokens, so TTFT is
-                        # not defined here; only audio TTFP is meaningful.
-                        output.audio_ttfp = timestamp - st
-                    total_pcm_bytes += len(chunk)
-                    chunk_arrival_times_s.append(timestamp - st)
-                    chunk_sizes.append(len(chunk))
-                    if pcm_capture is not None:
-                        pcm_capture.extend(chunk)
+                    pcm_chunks: list[bytes] = []
+                    if sse_handler is None:
+                        pcm_chunks.append(chunk)
+                    else:
+                        for message in sse_handler.add_chunk(chunk):
+                            if isinstance(message, bytes):
+                                message = message.decode("utf-8")
+                            if message.startswith(":"):
+                                continue
+                            data_text = message.removeprefix("data: ")
+                            if data_text == "[DONE]":
+                                continue
+                            event = json.loads(data_text)
+                            event_type = event.get("type")
+                            if event_type == "speech.audio.done":
+                                finish_reason = event.get("finish_reason")
+                                if finish_reason is not None:
+                                    output.speech_finish_reason = str(finish_reason)
+                                continue
+                            if event_type != "speech.audio.delta":
+                                continue
+                            encoded_audio = event.get("audio")
+                            if encoded_audio:
+                                pcm_chunks.append(base64.b64decode(encoded_audio))
+
+                    for pcm_chunk in pcm_chunks:
+                        if not pcm_chunk:
+                            continue
+                        timestamp = time.perf_counter()
+                        if output.audio_ttfp == 0.0:
+                            # TTS speech endpoint emits no text tokens, so TTFT is
+                            # not defined here; only audio TTFP is meaningful.
+                            output.audio_ttfp = timestamp - st
+                        total_pcm_bytes += len(pcm_chunk)
+                        chunk_arrival_times_s.append(timestamp - st)
+                        chunk_sizes.append(len(pcm_chunk))
+                        if pcm_capture is not None:
+                            pcm_capture.extend(pcm_chunk)
 
                 end_time = time.perf_counter()
                 output.latency = end_time - st
@@ -1231,9 +1283,10 @@ async def async_request_openai_audio_speech(
                     ct = response.headers.get("Content-Type", "")
                     logger.warning(
                         "Seed-TTS WER: HTTP 200 but no PCM bytes (Content-Type=%r, url=%s). "
-                        "Check stream=true, stream_format=audio, and response_format=pcm on the server.",
+                        "Check stream=true, stream_format=%s, and response_format=pcm on the server.",
                         ct,
                         api_url,
+                        stream_format,
                     )
                 output.success = True
             else:

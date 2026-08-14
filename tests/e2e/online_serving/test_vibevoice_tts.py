@@ -37,6 +37,12 @@ _MODEL = str(Path(_MODEL_ROOT) / "VibeVoice") if _MODEL_ROOT else "VibeVoice"
 _TOKENIZER = str(Path(_MODEL_ROOT) / "VibeVoice-1.5B-hf") if _MODEL_ROOT else "VibeVoice-1.5B-hf"
 _REFERENCE_DATA_URL = load_test_audio_data_url("cosyvoice3/zero_shot_prompt.wav")
 _REFERENCE_FILE = get_asset_path("cosyvoice3/zero_shot_prompt.wav").resolve()
+_FOUR_SPEAKER_REFERENCE_URLS = [
+    load_test_audio_data_url("cosyvoice3/zero_shot_prompt.wav"),
+    load_test_audio_data_url("glm_tts/jiayan_zh.wav"),
+    load_test_audio_data_url("indextts2/ref_audio.wav"),
+    load_test_audio_data_url("qwen3_tts/clone_2.wav"),
+]
 
 
 def _data_url_for_wav(waveform: np.ndarray, sample_rate: int = 24_000) -> str:
@@ -200,6 +206,44 @@ def test_vibevoice_http_uploaded_audio_voice_lifecycle(omni_server) -> None:
         finally:
             delete_response = client.delete(f"{_voices_url(omni_server)}/{voice_name}")
             assert delete_response.status_code in (200, 404), delete_response.text
+
+
+@pytest.mark.advanced_model
+@hardware_test(res={"cuda": "H100"}, num_cards=2)
+@pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
+def test_vibevoice_http_four_speaker_natural_generation(omni_server) -> None:
+    response = _post(
+        omni_server,
+        {
+            "model": omni_server.model,
+            "input": "\n".join(
+                [
+                    "Speaker 0: Welcome.",
+                    "Speaker 1: It is good to be here.",
+                    "Speaker 2: Let us begin.",
+                    "Speaker 3: Thank you.",
+                ]
+            ),
+            "ref_audio": _FOUR_SPEAKER_REFERENCE_URLS,
+            "response_format": "wav",
+            "max_new_tokens": 1_024,
+        },
+        timeout=900.0,
+    )
+
+    assert response.status_code == 200, response.text
+    finish_reason = response.headers.get("X-Finish-Reason")
+    assert finish_reason in {"stop", "length"}
+    waveform, sample_rate = sf.read(io.BytesIO(response.content), dtype="float32")
+    assert sample_rate == 24_000
+    assert waveform.ndim == 1
+    assert waveform.size >= 4 * 3_200
+    assert waveform.size % 3_200 == 0
+    assert waveform.size < 180 * sample_rate
+    assert np.isfinite(waveform).all()
+    assert float(np.sqrt(np.mean(np.square(waveform, dtype=np.float64)))) > 1e-5
+    if finish_reason == "length":
+        pytest.xfail("VibeVoice four-speaker natural EOS is not yet established within 1,024 generated tokens")
 
 
 @pytest.mark.advanced_model

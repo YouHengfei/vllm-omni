@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 #
-# Adapted from Microsoft VibeVoice and Transformers PR #40546.
+
 """Diffusion Head and per-audio-token sampling for non-Realtime VibeVoice.
 
 The learned Head performs one denoising prediction. The parameter-free sampler
@@ -33,9 +33,7 @@ class VibeVoiceRMSNorm(nn.Module):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.float()
         variance = hidden_states.square().mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(
-            variance + self.variance_epsilon
-        )
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
 
 
@@ -43,11 +41,7 @@ class VibeVoiceDiffusionHeadSinusoidalEmbedding(nn.Module):
     def __init__(self, config: Any) -> None:
         super().__init__()
         dim = config.frequency_embedding_size // 2
-        freq = torch.exp(
-            -math.log(config.diffusion_max_period)
-            * torch.arange(dim, dtype=torch.float32)
-            / dim
-        )
+        freq = torch.exp(-math.log(config.diffusion_max_period) * torch.arange(dim, dtype=torch.float32) / dim)
         self.frequency_embedding_size = config.frequency_embedding_size
         self.register_buffer("freq", freq, persistent=False)
 
@@ -99,10 +93,7 @@ class VibeVoiceDiffusionHeadMLPBlock(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.down_proj(
-            self.act_fn(self.gate_proj(hidden_states))
-            * self.up_proj(hidden_states)
-        )
+        return self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
 
 
 class VibeVoiceDiffusionHeadAdaLayerNorm(nn.Module):
@@ -148,9 +139,7 @@ class VibeVoiceDiffusionHeadFinalLayer(nn.Module):
         condition: torch.Tensor,
     ) -> torch.Tensor:
         shift, scale = self.linear_1(self.act_fn(condition)).chunk(2, dim=-1)
-        hidden_states = hidden_states * torch.rsqrt(
-            hidden_states.square().mean(-1, keepdim=True) + self.norm_eps
-        )
+        hidden_states = hidden_states * torch.rsqrt(hidden_states.square().mean(-1, keepdim=True) + self.norm_eps)
         return self.linear_2(hidden_states * (1 + scale) + shift)
 
 
@@ -171,10 +160,7 @@ class VibeVoiceDiffusionHead(nn.Module):
         )
         self.timestep_embedding = VibeVoiceDiffusionHeadSinusoidalEmbedding(config)
         self.timestep_proj = VibeVoiceDiffusionHeadMLP(config)
-        self.layers = nn.ModuleList(
-            VibeVoiceDiffusionHeadAdaLayerNorm(config)
-            for _ in range(config.num_head_layers)
-        )
+        self.layers = nn.ModuleList(VibeVoiceDiffusionHeadAdaLayerNorm(config) for _ in range(config.num_head_layers))
         self.final_layer = VibeVoiceDiffusionHeadFinalLayer(
             config,
             output_size=config.audio_config.hidden_size,
@@ -216,17 +202,12 @@ class VibeVoiceDiffusionSampler:
         if self.default_num_inference_steps < 1:
             raise ValueError("VibeVoice default_num_inference_steps must be positive.")
         if self.default_num_inference_steps > self.num_train_timesteps:
-            raise ValueError(
-                "VibeVoice default_num_inference_steps cannot exceed "
-                "num_train_timesteps."
-            )
+            raise ValueError("VibeVoice default_num_inference_steps cannot exceed num_train_timesteps.")
 
     @classmethod
     def from_model_config(cls, config: Any) -> "VibeVoiceDiffusionSampler":
         """Build the immutable sampling view from normalized VibeVoice config."""
-        beta_schedule = str(
-            getattr(config, "ddpm_beta_schedule", "squaredcos_cap_v2")
-        )
+        beta_schedule = str(getattr(config, "ddpm_beta_schedule", "squaredcos_cap_v2"))
         # Microsoft's scheduler accepts both spellings. Diffusers, used by the
         # Transformers PR runtime, exposes the canonical spelling only.
         if beta_schedule == "cosine":
@@ -237,9 +218,7 @@ class VibeVoiceDiffusionSampler:
             prediction_type=str(getattr(config, "prediction_type", "v_prediction")),
             condition_size=int(config.hidden_size),
             latent_size=int(config.audio_config.hidden_size),
-            default_num_inference_steps=int(
-                getattr(config, "ddpm_num_inference_steps", 10)
-            ),
+            default_num_inference_steps=int(getattr(config, "ddpm_num_inference_steps", 10)),
         )
 
     def create_scheduler(self) -> Any:
@@ -258,17 +237,12 @@ class VibeVoiceDiffusionSampler:
         self,
         num_inference_steps: int | None,
     ) -> int:
-        steps = (
-            self.default_num_inference_steps
-            if num_inference_steps is None
-            else int(num_inference_steps)
-        )
+        steps = self.default_num_inference_steps if num_inference_steps is None else int(num_inference_steps)
         if steps < 1:
             raise ValueError("VibeVoice num_inference_steps must be positive.")
         if steps > self.num_train_timesteps:
             raise ValueError(
-                "VibeVoice num_inference_steps cannot exceed "
-                f"num_train_timesteps={self.num_train_timesteps}."
+                f"VibeVoice num_inference_steps cannot exceed num_train_timesteps={self.num_train_timesteps}."
             )
         return steps
 
@@ -345,13 +319,11 @@ class VibeVoiceDiffusionSampler:
 
         head_parameter = next(diffusion_head.parameters(), None)
         if head_parameter is not None:
-            condition = torch.cat(
-                [positive_condition, negative_condition], dim=0
-            ).to(device=head_parameter.device, dtype=head_parameter.dtype)
-        else:
-            condition = torch.cat(
-                [positive_condition, negative_condition], dim=0
+            condition = torch.cat([positive_condition, negative_condition], dim=0).to(
+                device=head_parameter.device, dtype=head_parameter.dtype
             )
+        else:
+            condition = torch.cat([positive_condition, negative_condition], dim=0)
         noisy_audio_latent = noise.to(condition).clone()
 
         scheduler = self.create_scheduler()
@@ -362,9 +334,7 @@ class VibeVoiceDiffusionSampler:
         for timestep in scheduler.timesteps:
             shared_latent = noisy_audio_latent[:batch_size]
             combined_latent = torch.cat([shared_latent, shared_latent], dim=0)
-            timestep_batch = timestep.repeat(combined_latent.shape[0]).to(
-                combined_latent
-            )
+            timestep_batch = timestep.repeat(combined_latent.shape[0]).to(combined_latent)
             prediction = diffusion_head(
                 combined_latent,
                 timestep_batch,
@@ -382,9 +352,7 @@ class VibeVoiceDiffusionSampler:
             guided_prediction = unconditional_prediction + float(guidance_scale) * (
                 conditional_prediction - unconditional_prediction
             )
-            solver_prediction = torch.cat(
-                [guided_prediction, guided_prediction], dim=0
-            )
+            solver_prediction = torch.cat([guided_prediction, guided_prediction], dim=0)
             noisy_audio_latent = scheduler.step(
                 solver_prediction,
                 timestep,

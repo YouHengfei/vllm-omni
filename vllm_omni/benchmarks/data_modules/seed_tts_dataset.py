@@ -259,6 +259,44 @@ class SeedTTSDataset(BenchmarkDataset):
         return out
 
 
+class SeedTTSVibeVoiceDataset(SeedTTSDataset):
+    """Seed-TTS rows adapted to VibeVoice's reference-audio-only contract.
+
+    The generic ``seed-tts`` variant sends Qwen-specific ``ref_text``,
+    ``task_type``, and ``language`` fields. VibeVoice intentionally rejects
+    those fields, so this variant keeps only ``ref_audio`` and the generation
+    cap while retaining the local reference path used by the shared WER/SIM
+    evaluator.
+    """
+
+    def sample(
+        self,
+        tokenizer: TokenizerLike,
+        num_requests: int,
+        output_len: int | None = None,
+        request_id_prefix: str = "",
+        no_oversample: bool = False,
+        **kwargs: Any,
+    ) -> list[SampleRequest]:
+        requests = super().sample(
+            tokenizer=tokenizer,
+            num_requests=num_requests,
+            output_len=output_len,
+            request_id_prefix=request_id_prefix,
+            no_oversample=no_oversample,
+            **kwargs,
+        )
+        tokenizer = get_cached_tokenizer(tokenizer)
+        for request in requests:
+            extra = request.seed_tts_speech_extra or {}
+            request.prompt_len = len(tokenizer.encode(request.prompt))
+            request.seed_tts_speech_extra = {
+                "ref_audio": extra["ref_audio"],
+                "max_new_tokens": extra["max_new_tokens"],
+            }
+        return requests
+
+
 @dataclass
 class _SeedTTSDesignRow:
     utterance_id: str

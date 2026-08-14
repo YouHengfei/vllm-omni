@@ -184,6 +184,7 @@ _OMNI_BENCH_DATASET_CHOICES = (
     "seed-tts",
     "seed-tts-text",
     "seed-tts-design",
+    "seed-tts-vibevoice",
     "ttsd",
     "sound-effect",
 )

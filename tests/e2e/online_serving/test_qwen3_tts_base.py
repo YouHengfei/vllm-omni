@@ -83,7 +83,12 @@ def test_text_to_audio_001(omni_server, openai_client) -> None:
         "ref_audio": REF_AUDIO_URL,
         "ref_text": REF_TEXT,
     }
-    openai_client.send_audio_speech_request(request_config, request_num=get_max_batch_size("few"))
+    request_count = get_max_batch_size("few")
+    responses = openai_client.send_audio_speech_request(request_config, request_num=request_count)
+    assert len(responses) == request_count
+    for response in responses:
+        assert response.response_headers is not None
+        assert "x-finish-reason" not in response.response_headers
 
 
 @pytest.mark.advanced_model

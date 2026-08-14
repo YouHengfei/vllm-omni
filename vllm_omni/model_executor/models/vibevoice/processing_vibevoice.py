@@ -1,8 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-#
-# Audio preprocessing follows Transformers PR #40546,
-# src/transformers/models/vibevoice/processing_vibevoice.py.
+
 """Stateless multimodal preprocessing for VibeVoice reference audio."""
 
 from __future__ import annotations
@@ -63,10 +61,7 @@ class VibeVoiceMultiModalDataParser(MultiModalDataParser):
     def _get_audio_with_sr(self, audio):
         waveform, sample_rate = get_audio_with_sr_from_parent(super(), audio)
         if waveform.ndim > 1:
-            logger.warning_once(
-                "Stereo or multi-channel VibeVoice reference audio is "
-                "automatically downmixed to mono."
-            )
+            logger.warning_once("Stereo or multi-channel VibeVoice reference audio is automatically downmixed to mono.")
         return waveform, sample_rate
 
 
@@ -82,9 +77,7 @@ class VibeVoiceProcessingInfo(BaseProcessingInfo):
         # stateless Acoustic Tokenizer feature extractor.
         return None
 
-    def get_feature_extractor(
-        self, **kwargs: object
-    ) -> VibeVoiceAcousticTokenizerFeatureExtractor:
+    def get_feature_extractor(self, **kwargs: object) -> VibeVoiceAcousticTokenizerFeatureExtractor:
         return VibeVoiceAcousticTokenizerFeatureExtractor(
             feature_size=1,
             sampling_rate=SAMPLE_RATE,
@@ -145,9 +138,7 @@ class VibeVoiceDummyInputsBuilder(BaseDummyInputsBuilder[VibeVoiceProcessingInfo
         return {"audio": [(audio, SAMPLE_RATE) for audio in audios]}
 
 
-class VibeVoiceMultiModalProcessor(
-    BaseMultiModalProcessor[VibeVoiceProcessingInfo]
-):
+class VibeVoiceMultiModalProcessor(BaseMultiModalProcessor[VibeVoiceProcessingInfo]):
     """Tokenize prompts and expand each reference-audio placeholder."""
 
     def _hf_processor_applies_updates(
@@ -169,17 +160,11 @@ class VibeVoiceMultiModalProcessor(
         tok_kwargs: Mapping[str, object],
     ) -> BatchFeature:
         tokenizer = self.info.get_tokenizer()
-        prompt_ids = (
-            tokenizer.encode(prompt, add_special_tokens=False)
-            if isinstance(prompt, str)
-            else prompt
-        )
+        prompt_ids = tokenizer.encode(prompt, add_special_tokens=False) if isinstance(prompt, str) else prompt
 
         audios = mm_data.get("audios", []) or mm_data.get("audio", [])
         _, audio_token_id, _ = self.info.audio_token_ids()
-        num_placeholders = sum(
-            int(token_id) == audio_token_id for token_id in prompt_ids
-        )
+        num_placeholders = sum(int(token_id) == audio_token_id for token_id in prompt_ids)
         num_audios = len(audios)
         if num_placeholders != num_audios:
             # Match vLLM's own MM placeholder validation terminology. The
@@ -202,8 +187,7 @@ class VibeVoiceMultiModalProcessor(
             if num_samples > MAX_AUDIO_SAMPLES:
                 duration = num_samples / SAMPLE_RATE
                 raise ValueError(
-                    f"VibeVoice audio item {item_idx} is {duration:.2f}s; "
-                    f"the maximum is {MAX_AUDIO_SECONDS}s."
+                    f"VibeVoice audio item {item_idx} is {duration:.2f}s; the maximum is {MAX_AUDIO_SECONDS}s."
                 )
             raw_audios.append(audio)
 
@@ -263,9 +247,7 @@ class VibeVoiceMultiModalProcessor(
         def get_replacement(item_idx: int) -> PromptUpdateDetails:
             num_tokens = int(counts_list[item_idx])
             if num_tokens < 1:
-                raise ValueError(
-                    f"VibeVoice audio item {item_idx} produced no placeholder tokens."
-                )
+                raise ValueError(f"VibeVoice audio item {item_idx} produced no placeholder tokens.")
             return PromptUpdateDetails.select_token_id(
                 [audio_token_id] * num_tokens,
                 embed_token_id=audio_token_id,

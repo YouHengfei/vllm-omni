@@ -556,6 +556,7 @@ def compute_seed_tts_wer_metrics(
     sim_failed = 0
     sim_skipped_no_ref = 0
     utmos_failed = 0
+    finish_reason_counts: dict[str, int] = {}
     utmos_on = _eval_submetric_enabled("SEED_TTS_UTMOS_EVAL", default=False)
     save_audio_raw = os.environ.get("SEED_TTS_WER_SAVE_AUDIO_DIR", "").strip()
     save_audio_dir = Path(save_audio_raw).expanduser() if save_audio_raw else None
@@ -569,6 +570,10 @@ def compute_seed_tts_wer_metrics(
         row_lang = "zh" if locale.lower().startswith("zh") else "en"
         utmos_v: float | None = None
         audio_path: str | None = None
+        finish_reason_raw = getattr(out, "speech_finish_reason", None)
+        finish_reason = str(finish_reason_raw) if finish_reason_raw is not None else None
+        if finish_reason:
+            finish_reason_counts[finish_reason] = finish_reason_counts.get(finish_reason, 0) + 1
 
         if not out.success:
             request_failed += 1
@@ -755,6 +760,8 @@ def compute_seed_tts_wer_metrics(
                 row["sim"] = sim_v
             if utmos_v is not None:
                 row["utmos"] = utmos_v
+            if finish_reason is not None:
+                row["finish_reason"] = finish_reason
             items.append(row)
 
     result: dict[str, Any] = {
@@ -775,6 +782,8 @@ def compute_seed_tts_wer_metrics(
         "seed_tts_utmos_mean": statistics.fmean(utmos_values) if utmos_values else None,
         "seed_tts_utmos_median": statistics.median(utmos_values) if utmos_values else None,
         "seed_tts_utmos_failed": utmos_failed,
+        "seed_tts_finish_reason_counts": finish_reason_counts,
+        "seed_tts_length_capped": int(finish_reason_counts.get("length", 0)),
         "seed_tts_saved_audio": saved_audio,
         "seed_tts_save_audio_failed": save_audio_failed,
     }

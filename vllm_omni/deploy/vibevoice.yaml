@@ -30,10 +30,12 @@ stages:
     tensor_parallel_size: 2
     max_num_seqs: 2
     gpu_memory_utilization: 0.9
-    # The processor and scheduler contract permits up to eight ordered
-    # reference audios (for example, an eight-speaker prompt). At 60 seconds
-    # each this is 8 * 450 = 3600 MM placeholder tokens, plus text. Both the
-    # 65,536-token model limit and the 8,192-token per-iteration chunked-prefill
+    # The processor/MM infrastructure reserves capacity for up to eight
+    # ordered audio items. This is not the speaker limit: serving accepts at
+    # most four speakers, with exactly one reference audio per speaker. At 60
+    # seconds each, the MM ceiling is 8 * 450 = 3600 placeholder tokens, plus
+    # text. Both the 65,536-token model limit and the 8,192-token per-iteration
+    # chunked-prefill
     # budget can admit that worst-case reference prefill.
     limit_mm_per_prompt:
       audio: 8

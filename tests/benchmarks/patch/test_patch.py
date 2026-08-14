@@ -6,13 +6,18 @@ Unit tests for patch.py
 """
 
 import asyncio
+import base64
 import json
 
 import pytest
 from pytest_mock import MockerFixture
 from vllm.benchmarks.lib.endpoint_request_func import RequestFuncInput
 
-from vllm_omni.benchmarks.patch.patch import MixRequestFuncOutput, async_request_openai_chat_omni_completions
+from vllm_omni.benchmarks.patch.patch import (
+    MixRequestFuncOutput,
+    async_request_openai_audio_speech,
+    async_request_openai_chat_omni_completions,
+)
 
 pytestmark = [pytest.mark.core_model, pytest.mark.benchmark, pytest.mark.cpu]
 
@@ -26,6 +31,7 @@ class MockResponse:
         self._chunks = chunks
         self._delay = delay_between_chunks
         self.content = self
+        self.headers = {}
 
     async def iter_any(self):
         for chunk in self._chunks:
@@ -43,6 +49,47 @@ class MockResponse:
 def create_sse_chunk(data_dict):
     """Helper to create SSE formatted chunk"""
     return f"data: {json.dumps(data_dict)}\n\n".encode()
+
+
+@pytest.mark.asyncio
+async def test_audio_speech_sse_transport_captures_pcm_for_quality_eval(monkeypatch, mocker: MockerFixture):
+    pcm = b"\x01\x00\x02\x00\x03\x00\x04\x00"
+    delta = create_sse_chunk(
+        {
+            "type": "speech.audio.delta",
+            "audio": base64.b64encode(pcm).decode("ascii"),
+        }
+    )
+    chunks = [
+        delta[:7],
+        delta[7:],
+        create_sse_chunk({"type": "speech.audio.done", "finish_reason": "stop"}),
+    ]
+    response = MockResponse(200, chunks)
+    session = mocker.AsyncMock()
+    session.post = mocker.MagicMock(return_value=response)
+    request_input = RequestFuncInput(
+        model="test-model",
+        model_name="test-model",
+        prompt="hello",
+        api_url="http://test.com/v1/audio/speech",
+        prompt_len=1,
+        output_len=4,
+    )
+    setattr(request_input, "seed_tts_row", True)
+    monkeypatch.setenv("SEED_TTS_WER_EVAL", "1")
+    monkeypatch.setenv("VLLM_OMNI_BENCH_SPEECH_STREAM_FORMAT", "sse")
+
+    output = await async_request_openai_audio_speech(request_input, session)
+
+    assert output.success is True
+    assert output.audio_frames == 4
+    assert output.tts_output_pcm_bytes == pcm
+    assert output.speech_finish_reason == "stop"
+    payload = session.post.call_args.kwargs["json"]
+    assert payload["stream"] is True
+    assert payload["stream_format"] == "sse"
+    assert payload["response_format"] == "pcm"
 
 
 # ============================================================================

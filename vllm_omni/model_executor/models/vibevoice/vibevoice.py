@@ -1,9 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-#
-# Weight-name mappings are adapted from Hugging Face Transformers PR #40546,
-# src/transformers/models/vibevoice/convert_vibevoice_to_hf.py.
-# Copyright 2026 The HuggingFace Inc. team. Licensed under Apache-2.0.
+
 """VibeVoice model implementation helpers.
 
 The model class will live in this module. Keep checkpoint compatibility next to

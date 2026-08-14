@@ -350,6 +350,8 @@ class VibeVoiceWorkerExtensionForTest:
 
     def vibevoice_test_arm_concurrency_trace(self) -> dict[str, Any]:
         """Trace multi-request batching without adding production diagnostics."""
+        import torch
+
         runner = self.model_runner
         model = runner.get_model()
         stateful = model._stateful
@@ -360,12 +362,22 @@ class VibeVoiceWorkerExtensionForTest:
         if hasattr(self, "_vibevoice_concurrency_trace"):
             raise RuntimeError("VibeVoice concurrency trace was armed twice")
 
+        device = torch.device(runner.device)
+        torch.accelerator.synchronize(device)
+        torch.accelerator.reset_peak_memory_stats(device)
+        free_bytes, total_bytes = torch.cuda.mem_get_info(device)
         trace: dict[str, Any] = {
             "negative_batches": [],
             "diffusion_batches": [],
             "terminal_batches": [],
             "cleanup_exclusions": [],
             "max_active_requests": 0,
+            "memory": {
+                "start_allocated_bytes": int(torch.accelerator.memory_allocated(device)),
+                "start_reserved_bytes": int(torch.accelerator.memory_reserved(device)),
+                "start_free_bytes": int(free_bytes),
+                "total_bytes": int(total_bytes),
+            },
         }
         original_negative_forward = negative_branch.forward_step
         original_sample = kernel.sample_audio_latent
@@ -434,6 +446,8 @@ class VibeVoiceWorkerExtensionForTest:
         return {"rank": int(self.rank), "armed": True}
 
     def vibevoice_test_take_concurrency_trace(self) -> dict[str, Any]:
+        import torch
+
         trace = getattr(self, "_vibevoice_concurrency_trace", None)
         originals = getattr(self, "_vibevoice_concurrency_trace_originals", None)
         if trace is None or originals is None:
@@ -452,6 +466,18 @@ class VibeVoiceWorkerExtensionForTest:
         kernel.sample_audio_latent = original_sample
         negative_branch.forward_step = original_negative_forward
         stateful.flush_deferred_cleanup = original_flush
+        device = torch.device(self.model_runner.device)
+        torch.accelerator.synchronize(device)
+        free_bytes, _ = torch.cuda.mem_get_info(device)
+        trace["memory"].update(
+            {
+                "end_allocated_bytes": int(torch.accelerator.memory_allocated(device)),
+                "end_reserved_bytes": int(torch.accelerator.memory_reserved(device)),
+                "end_free_bytes": int(free_bytes),
+                "peak_allocated_bytes": int(torch.accelerator.max_memory_allocated(device)),
+                "peak_reserved_bytes": int(torch.accelerator.max_memory_reserved(device)),
+            }
+        )
         del self._vibevoice_concurrency_trace
         del self._vibevoice_concurrency_trace_originals
         return {"rank": int(self.rank), **trace}
