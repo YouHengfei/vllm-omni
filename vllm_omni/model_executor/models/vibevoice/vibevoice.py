@@ -35,6 +35,7 @@ from vllm_omni.worker.named_kv_branch import (
     NamedKVBranchRequest,
 )
 
+from . import perf_timing
 from .audio_decode import (
     VibeVoiceAudioTokenDecodeOutput,
     VibeVoiceAudioTokenDecoder,
@@ -527,6 +528,15 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         input_embeds: torch.Tensor | None,
         **info_dict: Any,
     ) -> tuple[torch.Tensor, torch.Tensor, dict[str, Any]]:
+        with perf_timing.record("preprocess"):
+            return self._preprocess_impl(input_ids, input_embeds, **info_dict)
+
+    def _preprocess_impl(
+        self,
+        input_ids: torch.Tensor,
+        input_embeds: torch.Tensor | None,
+        **info_dict: Any,
+    ) -> tuple[torch.Tensor, torch.Tensor, dict[str, Any]]:
         """Apply control-token transitions and continuous feedback embeddings."""
         request_id = info_dict.get("request_id")
         if not isinstance(request_id, str) or not request_id:
@@ -583,10 +593,11 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         request_id = info_dict.get("request_id")
         if not isinstance(request_id, str) or not request_id:
             return {}
-        if hidden_states.numel() > 0:
-            condition = hidden_states[-1].detach().reshape(1, -1).contiguous()
-            self._stateful.record_positive_condition(request_id, condition)
-        self._stateful.finish_postprocess(request_id)
+        with perf_timing.record("postprocess"):
+            if hidden_states.numel() > 0:
+                condition = hidden_states[-1].detach().reshape(1, -1).contiguous()
+                self._stateful.record_positive_condition(request_id, condition)
+            self._stateful.finish_postprocess(request_id)
         return {"request_id": request_id}
 
     def on_requests_finished(self, finished_req_ids: set[str] | list[str]) -> None:
@@ -840,10 +851,11 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
                             f"input embedding for request {request_id!r}."
                         )
                     negative_inputs.append(negative_input)
-                negative_conditions = self._negative_kv_branch.forward_step(
-                    negative_request_ids,
-                    negative_inputs,
-                )
+                with perf_timing.record("negative_forward"):
+                    negative_conditions = self._negative_kv_branch.forward_step(
+                        negative_request_ids,
+                        negative_inputs,
+                    )
                 if len(negative_conditions) != len(negative_request_ids):
                     raise RuntimeError(
                         "VibeVoice negative Qwen branch returned a condition batch with the wrong length."
@@ -877,21 +889,22 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
                 request_ids = [item[0] for item in transitions]
                 offsets = [item[1] for item in transitions]
                 token_embeddings = [inputs_embeds[offset : offset + 1] for offset in offsets]
-                next_embeddings, _ = self._stateful.process_audio_tokens_batch(
-                    request_ids=request_ids,
-                    token_embeddings=token_embeddings,
-                    kernel=self.model,
-                )
-                offset_tensor = torch.tensor(
-                    offsets,
-                    device=inputs_embeds.device,
-                    dtype=torch.long,
-                )
-                inputs_embeds.index_copy_(
-                    0,
-                    offset_tensor,
-                    torch.cat(next_embeddings, dim=0).to(inputs_embeds),
-                )
+                with perf_timing.record("transition"):
+                    next_embeddings, _ = self._stateful.process_audio_tokens_batch(
+                        request_ids=request_ids,
+                        token_embeddings=token_embeddings,
+                        kernel=self.model,
+                    )
+                    offset_tensor = torch.tensor(
+                        offsets,
+                        device=inputs_embeds.device,
+                        dtype=torch.long,
+                    )
+                    inputs_embeds.index_copy_(
+                        0,
+                        offset_tensor,
+                        torch.cat(next_embeddings, dim=0).to(inputs_embeds),
+                    )
 
         # Save the exact embedding consumed by the current positive Qwen step.
         # If that step samples audio_token, the bound negative branch advances
@@ -905,12 +918,13 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
                         inputs_embeds[span_end - 1 : span_end],
                     )
 
-        return self.model(
-            input_ids=input_ids,
-            positions=positions,
-            intermediate_tensors=intermediate_tensors,
-            inputs_embeds=inputs_embeds,
-        )
+        with perf_timing.record("positive_forward"):
+            return self.model(
+                input_ids=input_ids,
+                positions=positions,
+                intermediate_tensors=intermediate_tensors,
+                inputs_embeds=inputs_embeds,
+            )
 
     def compute_logits(
         self,

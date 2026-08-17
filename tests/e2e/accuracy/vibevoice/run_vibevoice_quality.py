@@ -73,6 +73,7 @@ def _validate_result(
     max_mean_content_error: float | None,
     min_mean_sim: float | None,
     sim_enabled: bool,
+    utmos_enabled: bool = False,
 ) -> list[str]:
     errors: list[str] = []
     if setup_error := result.get("seed_tts_eval_setup_error"):
@@ -87,9 +88,28 @@ def _validate_result(
             errors.append(f"{key}={count}")
 
     finish_reason_counts = result.get("seed_tts_finish_reason_counts") or {}
-    terminal_count = sum(int(count) for count in finish_reason_counts.values())
-    if terminal_count < min_evaluated:
-        errors.append(f"terminal finish reasons={terminal_count} < required {min_evaluated}")
+    terminal_stop_required = int(
+        result.get(
+            "seed_tts_terminal_stop_required",
+            result.get("seed_tts_total_requests", evaluated),
+        )
+        or 0
+    )
+    required_stop_count = int(
+        result.get(
+            "seed_tts_required_stop_count",
+            finish_reason_counts.get("stop", 0),
+        )
+        or 0
+    )
+    if required_stop_count != terminal_stop_required:
+        errors.append(f"terminal stops={required_stop_count} != required {terminal_stop_required}")
+    missing_finish_reason = int(result.get("seed_tts_missing_finish_reason", 0) or 0)
+    if missing_finish_reason:
+        errors.append(f"missing finish reasons={missing_finish_reason}")
+    non_stop_excluded = int(result.get("seed_tts_non_stop_excluded", 0) or 0)
+    if non_stop_excluded:
+        errors.append(f"non-stop samples excluded={non_stop_excluded}")
     length_capped = int(result.get("seed_tts_length_capped", 0) or 0)
     if length_capped:
         errors.append(f"length-capped quality requests={length_capped}")
@@ -106,11 +126,24 @@ def _validate_result(
 
     if sim_enabled:
         sim_evaluated = int(result.get("seed_tts_sim_evaluated", 0) or 0)
-        if sim_evaluated < min_evaluated:
-            errors.append(f"speaker similarity evaluated={sim_evaluated} < required {min_evaluated}")
+        if sim_evaluated != evaluated:
+            errors.append(f"speaker similarity evaluated={sim_evaluated} != content evaluated {evaluated}")
+        sim_failed = int(result.get("seed_tts_sim_failed", 0) or 0)
+        if sim_failed:
+            errors.append(f"speaker similarity failures={sim_failed}")
+        sim_skipped = int(result.get("seed_tts_sim_skipped_no_ref", 0) or 0)
+        if sim_skipped:
+            errors.append(f"speaker similarity missing references={sim_skipped}")
         mean_sim = result.get("seed_tts_sim_mean")
         if min_mean_sim is not None and (mean_sim is None or float(mean_sim) < min_mean_sim):
             errors.append(f"mean speaker similarity={mean_sim!r} < {min_mean_sim:.6f}")
+    if utmos_enabled:
+        utmos_evaluated = int(result.get("seed_tts_utmos_evaluated", 0) or 0)
+        if utmos_evaluated != evaluated:
+            errors.append(f"UTMOS evaluated={utmos_evaluated} != content evaluated {evaluated}")
+        utmos_failed = int(result.get("seed_tts_utmos_failed", 0) or 0)
+        if utmos_failed:
+            errors.append(f"UTMOS failures={utmos_failed}")
     return errors
 
 
@@ -200,6 +233,7 @@ def _run_locale(args: argparse.Namespace, locale: str, vllm_cli: str) -> tuple[P
         max_mean_content_error=args.max_mean_content_error,
         min_mean_sim=args.min_mean_sim,
         sim_enabled=not args.disable_sim,
+        utmos_enabled=args.enable_utmos,
     )
     metric_name = "CER" if locale == "zh" else "WER"
     print(

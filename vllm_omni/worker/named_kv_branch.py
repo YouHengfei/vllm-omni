@@ -161,6 +161,14 @@ class NamedCausalKVBranch:
         self.allocated_memory_bytes = self.num_blocks * bytes_per_block
         self._preflight_device_memory()
         self._allocator = _FixedBlockAllocator(self.num_blocks)
+        # Phase A perf: every append schedules exactly one token for one
+        # request, so query_start_loc is the constant [0, 1] on both sides.
+        # Hoist the two allocations+H2D out of the per-step path. The dynamic
+        # scalars (slot_mapping/seq_lens/position) stay per-append: pinned
+        # staging would need ring-buffer hazard handling that the Phase B
+        # batched-metadata rewrite replaces anyway.
+        self._query_start_cpu = torch.tensor([0, 1], dtype=torch.int32)
+        self._query_start_gpu = self._query_start_cpu.to(self.device)
         self._raw_caches: list[torch.Tensor] = []
         self.kv_caches = self._allocate_kv_caches()
 
@@ -347,8 +355,6 @@ class NamedCausalKVBranch:
                 dtype=torch.int64,
                 device=self.device,
             )
-            query_start_cpu = torch.tensor([0, 1], dtype=torch.int32)
-            query_start = query_start_cpu.to(self.device)
             seq_lens = torch.tensor(
                 [state.num_tokens],
                 dtype=torch.int32,
@@ -360,8 +366,8 @@ class NamedCausalKVBranch:
                 device=self.device,
             )
             common = CommonAttentionMetadata(
-                query_start_loc=query_start,
-                query_start_loc_cpu=query_start_cpu,
+                query_start_loc=self._query_start_gpu,
+                query_start_loc_cpu=self._query_start_cpu,
                 seq_lens=seq_lens,
                 num_reqs=1,
                 num_actual_tokens=1,

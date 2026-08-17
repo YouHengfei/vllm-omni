@@ -12,9 +12,9 @@ from typing import Any
 import numpy as np
 import torch
 from transformers import BatchFeature, VibeVoiceAcousticTokenizerFeatureExtractor
-from vllm.logger import init_logger
 from vllm.config.multimodal import BaseDummyOptions
 from vllm.inputs import MultiModalDataDict
+from vllm.logger import init_logger
 from vllm.multimodal.inputs import MultiModalFieldConfig, MultiModalKwargsItems
 from vllm.multimodal.parse import MultiModalDataItems, MultiModalDataParser
 from vllm.multimodal.processing import (

@@ -181,6 +181,12 @@ class VibeVoiceDiffusionHead(nn.Module):
         return self.final_layer(hidden_states, condition)
 
 
+# Module-level so every VibeVoiceDiffusionSampler instance (one per model
+# instance per rank) shares the resettable scheduler pool. Keyed by the full
+# schedule contract to stay correct if multiple configs coexist in tests.
+_SCHEDULER_STATE_CACHE: dict[tuple[int, int, str, str], tuple[Any, Any, Any]] = {}
+
+
 @dataclass(frozen=True, slots=True)
 class VibeVoiceDiffusionSampler:
     """Immutable configuration for one VibeVoice latent denoising loop."""
@@ -205,7 +211,7 @@ class VibeVoiceDiffusionSampler:
             raise ValueError("VibeVoice default_num_inference_steps cannot exceed num_train_timesteps.")
 
     @classmethod
-    def from_model_config(cls, config: Any) -> "VibeVoiceDiffusionSampler":
+    def from_model_config(cls, config: Any) -> VibeVoiceDiffusionSampler:
         """Build the immutable sampling view from normalized VibeVoice config."""
         beta_schedule = str(getattr(config, "ddpm_beta_schedule", "squaredcos_cap_v2"))
         # Microsoft's scheduler accepts both spellings. Diffusers, used by the
@@ -232,6 +238,46 @@ class VibeVoiceDiffusionSampler:
             beta_schedule=self.beta_schedule,
             prediction_type=self.prediction_type,
         )
+
+    def acquire_scheduler(self, num_inference_steps: int) -> Any:
+        """Return a scheduler reset to the exact post-``set_timesteps`` state.
+
+        ``create_scheduler`` + ``set_timesteps`` costs ~0.5 ms per audio token
+        in numpy schedule recomputation. The computed schedule is a
+        deterministic function of the immutable sampler config and the step
+        count, and this diffusers version's ``set_timesteps`` fully resets
+        every mutable field (verified: ``sigmas``, ``timesteps``,
+        ``num_inference_steps``, ``model_outputs``, ``lower_order_nums``,
+        ``_step_index``, ``_begin_index``; ``flow_shift`` is only written
+        when ``mu`` is passed, which this model never does). Restoring that
+        exact state is bitwise identical to a fresh construction; the parity
+        unit test pins this contract against the fresh-scheduler path.
+        """
+        key = (
+            int(num_inference_steps),
+            self.num_train_timesteps,
+            self.beta_schedule,
+            self.prediction_type,
+        )
+        entry = _SCHEDULER_STATE_CACHE.get(key)
+        if entry is None:
+            scheduler = self.create_scheduler()
+            scheduler.set_timesteps(num_inference_steps=num_inference_steps)
+            _SCHEDULER_STATE_CACHE[key] = (
+                scheduler,
+                scheduler.sigmas,
+                scheduler.timesteps,
+            )
+            return scheduler
+        scheduler, sigmas, timesteps = entry
+        scheduler.sigmas = sigmas
+        scheduler.timesteps = timesteps
+        scheduler.num_inference_steps = len(timesteps)
+        scheduler.model_outputs = [None] * scheduler.config.solver_order
+        scheduler.lower_order_nums = 0
+        scheduler._step_index = None
+        scheduler._begin_index = None
+        return scheduler
 
     def _resolve_num_inference_steps(
         self,
@@ -326,11 +372,11 @@ class VibeVoiceDiffusionSampler:
             condition = torch.cat([positive_condition, negative_condition], dim=0)
         noisy_audio_latent = noise.to(condition).clone()
 
-        scheduler = self.create_scheduler()
         # Match Microsoft/Transformers: timesteps and solver history start
-        # fresh for every audio token; timestep batches are moved to the model
+        # fresh for every audio token (acquire_scheduler restores the exact
+        # post-set_timesteps state); timestep batches are moved to the model
         # device only for the Diffusion Head invocation.
-        scheduler.set_timesteps(num_inference_steps=steps)
+        scheduler = self.acquire_scheduler(steps)
         for timestep in scheduler.timesteps:
             shared_latent = noisy_audio_latent[:batch_size]
             combined_latent = torch.cat([shared_latent, shared_latent], dim=0)

@@ -55,6 +55,10 @@ class SeedTTSSampleRequest(SampleRequest):
     seed_tts_system_prompt: str = ""
     #: Local path to reference prompt WAV (for SIM vs. synthesized PCM in ``seed_tts_eval``).
     seed_tts_ref_wav_path: str = ""
+    #: Require structured terminal metadata and exclude every non-stop sample
+    #: from quality aggregates. Generic Seed-TTS transports predate terminal
+    #: metadata, so only model variants with that contract enable this flag.
+    seed_tts_require_terminal_stop: bool = False
 
 
 @dataclass
@@ -294,6 +298,7 @@ class SeedTTSVibeVoiceDataset(SeedTTSDataset):
                 "ref_audio": extra["ref_audio"],
                 "max_new_tokens": extra["max_new_tokens"],
             }
+            request.seed_tts_require_terminal_stop = True
         return requests
 
 

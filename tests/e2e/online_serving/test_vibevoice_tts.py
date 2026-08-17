@@ -67,6 +67,7 @@ _SERVER_PARAMS = [
             env_dict={"VLLM_USE_FLASHINFER_SAMPLER": "0"},
             init_timeout=900,
             stage_init_timeout=600,
+            require_real_weights=True,
         ),
         id="official-vibevoice",
     )
@@ -233,7 +234,7 @@ def test_vibevoice_http_four_speaker_natural_generation(omni_server) -> None:
 
     assert response.status_code == 200, response.text
     finish_reason = response.headers.get("X-Finish-Reason")
-    assert finish_reason in {"stop", "length"}
+    assert finish_reason == "stop"
     waveform, sample_rate = sf.read(io.BytesIO(response.content), dtype="float32")
     assert sample_rate == 24_000
     assert waveform.ndim == 1
@@ -242,8 +243,6 @@ def test_vibevoice_http_four_speaker_natural_generation(omni_server) -> None:
     assert waveform.size < 180 * sample_rate
     assert np.isfinite(waveform).all()
     assert float(np.sqrt(np.mean(np.square(waveform, dtype=np.float64)))) > 1e-5
-    if finish_reason == "length":
-        pytest.xfail("VibeVoice four-speaker natural EOS is not yet established within 1,024 generated tokens")
 
 
 @pytest.mark.advanced_model

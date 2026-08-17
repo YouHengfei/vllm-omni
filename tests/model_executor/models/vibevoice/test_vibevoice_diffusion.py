@@ -27,11 +27,7 @@ class _DeterministicDiffusionHead(nn.Module):
         condition: torch.Tensor,
     ) -> torch.Tensor:
         latent_size = noisy_latents.shape[-1]
-        return (
-            noisy_latents * 0.125
-            + condition[:, :latent_size] * 0.0625
-            + timesteps[:, None] * 1e-4
-        )
+        return noisy_latents * 0.125 + condition[:, :latent_size] * 0.0625 + timesteps[:, None] * 1e-4
 
 
 def _sampler() -> VibeVoiceDiffusionSampler:
@@ -148,6 +144,85 @@ def test_diffusion_kernel_matches_an_independent_reference_loop() -> None:
     assert torch.equal(actual, expected)
     assert torch.equal(noise, original_noise)
     assert torch.isfinite(actual).all()
+
+
+def test_cached_scheduler_state_is_bitwise_identical_to_fresh() -> None:
+    """Phase A scheduler cache: consecutive cached runs must match fresh ones.
+
+    This pins the diffusers reset contract that acquire_scheduler relies on:
+    every mutable field is restored to the post-set_timesteps state, and a
+    previous token's solve must not leak history into the next one.
+    """
+    sampler = _sampler()
+    head = _DeterministicDiffusionHead()
+    positive, negative, noise = _inputs()
+
+    fresh_first = sampler.create_scheduler()
+    fresh_second = sampler.create_scheduler()
+    expected_first = _reference_sample(
+        fresh_first,
+        head,
+        positive,
+        negative,
+        noise,
+        guidance_scale=1.3,
+        num_inference_steps=10,
+    )
+    expected_second = _reference_sample(
+        fresh_second,
+        head,
+        positive,
+        negative,
+        noise,
+        guidance_scale=1.3,
+        num_inference_steps=10,
+    )
+
+    actual_first = sampler.sample_audio_latent(
+        head,
+        positive,
+        negative,
+        noise,
+        guidance_scale=1.3,
+        num_inference_steps=10,
+    )
+    actual_second = sampler.sample_audio_latent(
+        head,
+        positive,
+        negative,
+        noise,
+        guidance_scale=1.3,
+        num_inference_steps=10,
+    )
+
+    assert torch.equal(actual_first, expected_first)
+    assert torch.equal(actual_second, expected_second)
+
+
+def test_cached_scheduler_handles_alternating_step_counts() -> None:
+    sampler = _sampler()
+    head = _DeterministicDiffusionHead()
+    positive, negative, noise = _inputs()
+
+    for steps in (10, 5, 10, 7, 5):
+        actual = sampler.sample_audio_latent(
+            head,
+            positive,
+            negative,
+            noise,
+            guidance_scale=1.3,
+            num_inference_steps=steps,
+        )
+        expected = _reference_sample(
+            sampler.create_scheduler(),
+            head,
+            positive,
+            negative,
+            noise,
+            guidance_scale=1.3,
+            num_inference_steps=steps,
+        )
+        assert torch.equal(actual, expected)
 
 
 def test_diffusers_scheduler_is_step_exact_with_microsoft_solver() -> None:

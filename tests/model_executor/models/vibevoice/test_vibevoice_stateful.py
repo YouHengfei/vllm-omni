@@ -665,7 +665,48 @@ def test_request_cleanup_drops_unpublished_waveform_after_abort() -> None:
     assert state.waveform_chunks_cpu == []
     assert state.acoustic_cache is None
     assert state.semantic_cache is None
+    assert state._waveform_events == {}
+    assert state._pinned_pool == []
     assert negative_branch.freed_ids == ["aborted"]
+
+
+def test_drain_recycles_pinned_buffers_and_publishes_owning_copies() -> None:
+    """Phase A pinned-D2H contract, exercised with host-pinned tensors."""
+    stateful = _stateful()
+    state = stateful.get_or_create("request-a")
+
+    pinned = torch.empty(4, dtype=torch.float32, pin_memory=True)
+    pinned.copy_(torch.arange(4, dtype=torch.float32))
+    # Record requires CUDA; emulate an already-completed event with a shim.
+
+    class _CompletedEvent:
+        def synchronize(self) -> None:
+            return None
+
+    state._waveform_events[id(pinned)] = (_CompletedEvent(), pinned)
+    state.waveform_chunks_cpu.append(pinned)
+
+    published = stateful.drain_waveform_chunks("request-a")
+
+    assert published is not None
+    assert torch.equal(published, torch.arange(4, dtype=torch.float32))
+    # The published tensor must be an owning copy: the pinned buffer returned
+    # to the pool may be reused by later tokens.
+    assert published.data_ptr() != pinned.data_ptr()
+    assert state._pinned_pool == [pinned]
+    assert state._waveform_events == {}
+
+
+def test_drain_plain_cpu_chunks_keep_identity_and_touch_no_pool() -> None:
+    stateful = _stateful()
+    state = stateful.get_or_create("request-a")
+    plain = torch.ones(4, dtype=torch.float32)
+    state.waveform_chunks_cpu.append(plain)
+
+    published = stateful.drain_waveform_chunks("request-a")
+
+    assert published is plain
+    assert state._pinned_pool == []
 
 
 def test_request_cleanup_is_deferred_around_the_final_scheduled_forward() -> None:

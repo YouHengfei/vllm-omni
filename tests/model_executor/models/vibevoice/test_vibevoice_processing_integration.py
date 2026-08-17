@@ -110,9 +110,7 @@ def _real_components():
 
     engine_client = SimpleNamespace(
         engine=SimpleNamespace(
-            input_processor=SimpleNamespace(
-                renderer=SimpleNamespace(get_tokenizer=lambda: tokenizer)
-            )
+            input_processor=SimpleNamespace(renderer=SimpleNamespace(get_tokenizer=lambda: tokenizer))
         )
     )
     adapter = VibeVoiceTTSAdapter(
@@ -137,6 +135,41 @@ def _real_components():
         db_normalize=False,
     )
     return tokenizer, adapter, info, processor, official
+
+
+def test_hf_chat_template_matches_four_speaker_adapter_prompt_and_tokens() -> None:
+    tokenizer_path, _ = _fixture_paths()
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, trust_remote_code=False)
+    texts = [
+        "Welcome.",
+        "It is good to be here.",
+        "Let us begin.",
+        "Thank you.",
+    ]
+    messages = [
+        {
+            "role": str(speaker_id),
+            "content": [
+                {"type": "audio", "url": f"test-only-{speaker_id}.wav"},
+                {"type": "text", "text": text},
+            ],
+        }
+        for speaker_id, text in enumerate(texts)
+    ]
+    hf_prompt = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=False,
+    )
+    omni_prompt = VibeVoiceTTSAdapter._render_prompt(
+        list(enumerate(texts)),
+        len(texts),
+    )
+
+    assert omni_prompt == hf_prompt
+    hf_token_ids = tokenizer.encode(hf_prompt, add_special_tokens=False)
+    assert tokenizer.encode(omni_prompt, add_special_tokens=False) == hf_token_ids
+    assert len(hf_token_ids) == 94
 
 
 def _build_adapter_request(
@@ -178,9 +211,7 @@ def test_adapter_and_mm_processor_token_ids_match_microsoft_processor(
         monkeypatch,
     )
 
-    mm_items = info.parse_mm_data(
-        {"audio": [(waveform, SAMPLE_RATE) for waveform in waveforms]}
-    )
+    mm_items = info.parse_mm_data({"audio": [(waveform, SAMPLE_RATE) for waveform in waveforms]})
     omni = processor(
         prepared.prompt["prompt_token_ids"],
         mm_items=mm_items,

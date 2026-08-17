@@ -146,10 +146,7 @@ def _negative_kv_conformance_worker(port: int, queue: Any) -> None:
                 spec.head_size,
                 cache_dtype_str=config.cache_config.cache_dtype,
             )
-            positive_caches = {
-                layer_name: layer.kv_cache
-                for layer_name, layer in layers.items()
-            }
+            positive_caches = {layer_name: layer.kv_cache for layer_name, layer in layers.items()}
             negative_caches: dict[str, torch.Tensor] = {}
             negative_raw_caches: list[torch.Tensor] = []
             for layer_name in layer_names:
@@ -236,9 +233,7 @@ def _negative_kv_conformance_worker(port: int, queue: Any) -> None:
                     negative_context = create_forward_context(
                         {name: metadata for name in layer_names},
                         config,
-                        slot_mapping={
-                            name: slot_mapping for name in layer_names
-                        },
+                        slot_mapping={name: slot_mapping for name in layer_names},
                         skip_compiled=True,
                     )
 
@@ -259,16 +254,11 @@ def _negative_kv_conformance_worker(port: int, queue: Any) -> None:
                             layer.kv_cache = positive_caches[layer_name]
 
                     restored_after_every_step &= all(
-                        layer.kv_cache is positive_caches[layer_name]
-                        for layer_name, layer in layers.items()
+                        layer.kv_cache is positive_caches[layer_name] for layer_name, layer in layers.items()
                     )
                     assert get_forward_context() is outer_context
                     hf_hidden = hf_output.last_hidden_state.reshape(1, -1)
-                    diff = float(
-                        (vllm_hidden.float() - hf_hidden.float())
-                        .abs()
-                        .max()
-                    )
+                    diff = float((vllm_hidden.float() - hf_hidden.float()).abs().max())
                     max_abs_diff = max(max_abs_diff, diff)
                     torch.testing.assert_close(
                         vllm_hidden.float(),
@@ -309,9 +299,7 @@ def _negative_kv_conformance_worker(port: int, queue: Any) -> None:
                 ],
                 _kernel_block_sizes=[spec.block_size],
             )
-            branch_memory_bytes = (
-                num_blocks * len(layer_names) * spec.page_size_bytes
-            )
+            branch_memory_bytes = num_blocks * len(layer_names) * spec.page_size_bytes
             bound_branches = []
             fake_runner.model = SimpleNamespace(
                 named_kv_branch_request=NamedKVBranchRequest(
@@ -346,11 +334,7 @@ def _negative_kv_conformance_worker(port: int, queue: Any) -> None:
                             inputs_embeds=embedding.reshape(1, -1),
                         )
                     hf_hidden = hf_output.last_hidden_state.reshape(1, -1)
-                    store_diff = float(
-                        (store_hidden.float() - hf_hidden.float())
-                        .abs()
-                        .max()
-                    )
+                    store_diff = float((store_hidden.float() - hf_hidden.float()).abs().max())
                     store_max_abs_diff = max(
                         store_max_abs_diff,
                         store_diff,
@@ -375,15 +359,12 @@ def _negative_kv_conformance_worker(port: int, queue: Any) -> None:
                     except RuntimeError as exc:
                         assert "forward context is active" in str(exc)
                     else:
-                        raise AssertionError(
-                            "External named-KV mutation was accepted in context"
-                        )
+                        raise AssertionError("External named-KV mutation was accepted in context")
                 assert branch.get_sequence_length("active-guard") == active_length
                 assert branch.num_free_blocks == active_num_free_blocks
             branch.free("active-guard")
             active_context_guard = (
-                branch.get_sequence_length("active-guard") == 0
-                and branch.num_free_blocks == branch.num_blocks
+                branch.get_sequence_length("active-guard") == 0 and branch.num_free_blocks == branch.num_blocks
             )
 
             branch.reset("fault")
@@ -394,10 +375,7 @@ def _negative_kv_conformance_worker(port: int, queue: Any) -> None:
                 assert str(exc) == "injected failure"
             else:
                 raise AssertionError("Injected named-KV failure was swallowed")
-            fault_cleanup = (
-                branch.get_sequence_length("fault") == 0
-                and branch.num_free_blocks == branch.num_blocks
-            )
+            fault_cleanup = branch.get_sequence_length("fault") == 0 and branch.num_free_blocks == branch.num_blocks
             branch.close()
 
             queue.put(
@@ -416,7 +394,7 @@ def _negative_kv_conformance_worker(port: int, queue: Any) -> None:
             del negative_raw_caches, negative_caches
             del vllm_model, hf_model
             gc.collect()
-            torch.cuda.empty_cache()
+            torch.accelerator.empty_cache()
     except Exception:
         queue.put({"error": traceback.format_exc()})
     finally:
@@ -446,10 +424,7 @@ def test_manual_negative_paged_kv_matches_transformers_cached_qwen() -> None:
     try:
         result = queue.get(timeout=5)
     except Empty:
-        pytest.fail(
-            "Negative-KV conformance subprocess exited without a result: "
-            f"exitcode={process.exitcode}"
-        )
+        pytest.fail(f"Negative-KV conformance subprocess exited without a result: exitcode={process.exitcode}")
     assert "error" not in result, result.get("error")
     assert process.exitcode == 0
     assert result["steps"] == 4

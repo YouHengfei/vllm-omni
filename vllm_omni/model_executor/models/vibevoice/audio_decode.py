@@ -53,7 +53,7 @@ class VibeVoiceAudioTokenDecoder:
                 raise ValueError(f"VibeVoice {name} must be positive.")
 
     @classmethod
-    def from_model_config(cls, config: Any) -> "VibeVoiceAudioTokenDecoder":
+    def from_model_config(cls, config: Any) -> VibeVoiceAudioTokenDecoder:
         decoder_config = config.audio_config.decoder_config
         upsampling_ratios = tuple(decoder_config.upsampling_ratios)
         if not upsampling_ratios:

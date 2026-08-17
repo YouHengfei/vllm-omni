@@ -16,6 +16,7 @@ from typing import Any, Protocol
 
 import torch
 
+from . import perf_timing
 from .audio_decode import VibeVoiceAudioTokenDecodeOutput
 
 
@@ -104,6 +105,13 @@ class VibeVoiceRequestState:
     in_audio_segment: bool = False
     negative_reset_pending: bool = False
     audio_token_count: int = 0
+    # Pinned-D2H bookkeeping (Phase A perf): id(buffer) -> (event, buffer)
+    # for chunks copied off-device without stalling the decode pipeline, and
+    # the free pool of reusable pinned buffers. Entries are consumed and the
+    # buffers recycled only by drain_waveform_chunks after the copy event has
+    # completed. Tests that append plain CPU tensors simply have no entry.
+    _waveform_events: dict[int, tuple[Any, torch.Tensor]] = field(default_factory=dict)
+    _pinned_pool: list[torch.Tensor] = field(default_factory=list)
 
     def clear(self) -> None:
         self.acoustic_cache = None
@@ -113,6 +121,8 @@ class VibeVoiceRequestState:
         self.negative_input_embedding = None
         self.next_embedding = None
         self.waveform_chunks_cpu.clear()
+        self._waveform_events.clear()
+        self._pinned_pool.clear()
         self.in_audio_segment = False
         self.negative_reset_pending = False
         self.audio_token_count = 0
@@ -388,20 +398,21 @@ class VibeVoiceStatefulInference:
         positive_batch = torch.cat(positive_conditions, dim=0)
         negative_batch = torch.cat(negative_conditions, dim=0)
         batch_size = len(states)
-        # Preserve official active-subset RNG ordering: one [2B, latent] draw,
-        # not B independent [2, latent] draws interleaved per request.
-        noise = torch.randn(
-            (2 * batch_size, self.latent_size),
-            device=positive_batch.device,
-            dtype=positive_batch.dtype,
-        )
-        audio_latents = kernel.sample_audio_latent(
-            positive_batch,
-            negative_batch,
-            noise,
-            guidance_scale=guidance_scale,
-            num_inference_steps=num_diffusion_steps,
-        )
+        with perf_timing.record("diffusion"):
+            # Preserve official active-subset RNG ordering: one [2B, latent] draw,
+            # not B independent [2, latent] draws interleaved per request.
+            noise = torch.randn(
+                (2 * batch_size, self.latent_size),
+                device=positive_batch.device,
+                dtype=positive_batch.dtype,
+            )
+            audio_latents = kernel.sample_audio_latent(
+                positive_batch,
+                negative_batch,
+                noise,
+                guidance_scale=guidance_scale,
+                num_inference_steps=num_diffusion_steps,
+            )
         expected_latent_shape = (batch_size, 1, self.latent_size)
         if tuple(audio_latents.shape) != expected_latent_shape:
             raise ValueError(
@@ -412,17 +423,16 @@ class VibeVoiceStatefulInference:
         next_embeddings: list[torch.Tensor] = []
         audio_chunks: list[torch.Tensor] = []
         for index, state in enumerate(states):
-            decoded = kernel.decode_audio_token(
-                audio_latents[index : index + 1],
-                acoustic_cache=state.acoustic_cache,
-                semantic_cache=state.semantic_cache,
-            )
+            with perf_timing.record("m4a_decode"):
+                decoded = kernel.decode_audio_token(
+                    audio_latents[index : index + 1],
+                    acoustic_cache=state.acoustic_cache,
+                    semantic_cache=state.semantic_cache,
+                )
             state.acoustic_cache = decoded.acoustic_cache
             state.semantic_cache = decoded.semantic_cache
             state.next_embedding = decoded.next_embedding.reshape(1, -1)
-            state.waveform_chunks_cpu.append(
-                decoded.audio.detach().reshape(-1).to(device="cpu", dtype=torch.float32).contiguous()
-            )
+            state.waveform_chunks_cpu.append(self._stage_waveform_chunk(state, decoded.audio))
             state.audio_token_count += 1
             # Conditions are one-step values. Keeping either one would allow a
             # desynchronized branch to be reused silently on the next token.
@@ -431,6 +441,37 @@ class VibeVoiceStatefulInference:
             next_embeddings.append(state.next_embedding)
             audio_chunks.append(decoded.audio)
         return next_embeddings, audio_chunks
+
+    def _stage_waveform_chunk(
+        self,
+        state: VibeVoiceRequestState,
+        audio: torch.Tensor,
+    ) -> torch.Tensor:
+        """Move one decoded chunk to CPU without stalling the decode pipeline.
+
+        CUDA path: cast to float32 on device, async-copy into a recycled
+        pinned buffer, and record an event; ``drain_waveform_chunks`` is the
+        only consumer and synchronizes the event before publishing. CPU/test
+        path keeps the previous synchronous semantics.
+        """
+        chunk = audio.detach().reshape(-1)
+        if not chunk.is_cuda:
+            return chunk.to(device="cpu", dtype=torch.float32).contiguous()
+        numel = chunk.numel()
+        buffer = None
+        for candidate in state._pinned_pool:
+            if candidate.numel() == numel:
+                buffer = candidate
+                break
+        if buffer is None:
+            buffer = torch.empty(numel, dtype=torch.float32, pin_memory=True)
+        else:
+            state._pinned_pool.remove(buffer)
+        buffer.copy_(chunk.float(), non_blocking=True)
+        event = torch.cuda.Event()
+        event.record()
+        state._waveform_events[id(buffer)] = (event, buffer)
+        return buffer
 
     def drain_waveform_chunks(self, request_id: str) -> torch.Tensor | None:
         """Transfer unpublished CPU waveform chunks to the output channel.
@@ -445,8 +486,19 @@ class VibeVoiceStatefulInference:
             return None
         chunks = state.waveform_chunks_cpu
         state.waveform_chunks_cpu = []
+        for chunk in chunks:
+            entry = state._waveform_events.pop(id(chunk), None)
+            if entry is not None:
+                event, buffer = entry
+                event.synchronize()
+                state._pinned_pool.append(buffer)
         if len(chunks) == 1:
-            return chunks[0]
+            chunk = chunks[0]
+            # A single chunk may be a recycled pinned buffer; publish an
+            # owning copy so later tokens cannot overwrite published audio.
+            if chunk.is_pinned():
+                return chunk.clone()
+            return chunk
         return torch.cat(chunks, dim=0).contiguous()
 
     def on_requests_finished(

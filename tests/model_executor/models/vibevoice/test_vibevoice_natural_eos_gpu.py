@@ -41,6 +41,7 @@ def _run_natural_eos_generation(
         os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
 
         import numpy as np
+        import soundfile as sf
         from vllm import SamplingParams
         from vllm.sampling_params import RequestOutputKind
 
@@ -88,7 +89,28 @@ def _run_natural_eos_generation(
                 server._validate_ref_audio_format = lambda _source: None
                 adapter = VibeVoiceTTSAdapter(SpeechServingContext(server=server, engine_client=engine.engine))
 
-                async def resolve_reference(_source: str):
+                asset_root = Path(__file__).parents[3] / "assets"
+                four_speaker_sources = {
+                    f"test-only-four-speaker-{index}": asset_root / relative
+                    for index, relative in enumerate(
+                        (
+                            "cosyvoice3/zero_shot_prompt.wav",
+                            "glm_tts/jiayan_zh.wav",
+                            "indextts2/ref_audio.wav",
+                            "qwen3_tts/clone_2.wav",
+                        )
+                    )
+                }
+
+                async def resolve_reference(source: str):
+                    path = four_speaker_sources.get(source)
+                    if path is not None:
+                        waveform, sample_rate = sf.read(
+                            path,
+                            dtype="float32",
+                            always_2d=False,
+                        )
+                        return np.asarray(waveform, dtype=np.float32), int(sample_rate)
                     return (
                         np.linspace(-0.2, 0.2, 3_200, dtype=np.float32),
                         24_000,
@@ -170,6 +192,19 @@ def _run_natural_eos_generation(
                     ),
                     max_tokens=512,
                 )
+                four_speaker = await generate_request(
+                    "vibevoice-natural-eos-four-speaker",
+                    OpenAICreateSpeechRequest(
+                        input=(
+                            "Speaker 0: Welcome.\n"
+                            "Speaker 1: It is good to be here.\n"
+                            "Speaker 2: Let us begin.\n"
+                            "Speaker 3: Thank you."
+                        ),
+                        ref_audio=list(four_speaker_sources),
+                    ),
+                    max_tokens=1_024,
+                )
 
                 lifecycle = await engine.collective_rpc(
                     method="vibevoice_test_take_natural_lifecycle_trace",
@@ -184,6 +219,7 @@ def _run_natural_eos_generation(
                 return {
                     "short": short,
                     "dialogue": dialogue,
+                    "four_speaker": four_speaker,
                     "lifecycle": lifecycle[0],
                     "runtime_state": runtime_state[0],
                 }
@@ -235,25 +271,35 @@ def natural_eos_result() -> dict[str, Any]:
     return result
 
 
-@pytest.mark.parametrize("case", ["short", "dialogue"])
+@pytest.mark.parametrize(
+    ("case", "expected_segments"),
+    [("short", 1), ("dialogue", 2), ("four_speaker", None)],
+)
 def test_natural_generation_reaches_audio_eos_then_model_eos(
     natural_eos_result: dict[str, Any],
     case: str,
+    expected_segments: int | None,
 ) -> None:
     result = natural_eos_result[case]
     token_ids = result["token_ids"]
     assert result["finished"] is True
     assert result["finish_reason"] == "stop"
     assert token_ids[-2:] == [_AUDIO_EOS, _EOS]
-    expected_segments = 1 if case == "short" else 2
-    assert token_ids.count(_AUDIO_EOS) == expected_segments
-    assert token_ids.count(_AUDIO_BOS) == expected_segments - 1
+    segment_count = token_ids.count(_AUDIO_EOS)
+    assert segment_count >= 1
+    if expected_segments is not None:
+        assert segment_count == expected_segments
+    # Output audio segments are model-selected and are not specified to map
+    # one-to-one to input speaker turns. Every generated segment after the
+    # prompt's initial BOS must still have a generated BOS, and all segments
+    # must close before model EOS.
+    assert token_ids.count(_AUDIO_BOS) == segment_count - 1
     assert token_ids.count(_EOS) == 1
-    assert token_ids.count(_AUDIO_TOKEN) >= expected_segments
+    assert token_ids.count(_AUDIO_TOKEN) >= segment_count
     assert set(token_ids) <= {_AUDIO_BOS, _AUDIO_EOS, _AUDIO_TOKEN, _EOS}
 
 
-@pytest.mark.parametrize("case", ["short", "dialogue"])
+@pytest.mark.parametrize("case", ["short", "dialogue", "four_speaker"])
 def test_natural_generation_publishes_every_audio_transition(
     natural_eos_result: dict[str, Any],
     case: str,
@@ -274,7 +320,12 @@ def test_natural_audio_eos_frees_segment_negative_branch_on_both_tp_ranks(
     assert [item["rank"] for item in lifecycle] == [0, 1]
     for rank_payload in lifecycle:
         events = rank_payload["events"]
-        for case, expected_segments in (("short", 1), ("dialogue", 2)):
+        for case, result_key in (
+            ("short", "short"),
+            ("dialogue", "dialogue"),
+            ("four-speaker", "four_speaker"),
+        ):
+            expected_segments = natural_eos_result[result_key]["token_ids"].count(_AUDIO_EOS)
             request_events = [event for event in events if f"natural-eos-{case}" in event["request_id"]]
             initial_starts = [event for event in request_events if event["event"] == "start_audio_segment"]
             generated_starts = [

@@ -7,15 +7,12 @@ import torch
 from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
 from tokenizers.pre_tokenizers import WhitespaceSplit
-from transformers import PreTrainedTokenizerFast, PretrainedConfig
+from transformers import PretrainedConfig, PreTrainedTokenizerFast
 from vllm.config.multimodal import MultiModalConfig
 from vllm.multimodal.parse import MultiModalDataParser
 from vllm.multimodal.processing import InputProcessingContext
 
 from vllm_omni.model_executor.models.registry import _OMNI_MODELS
-from vllm_omni.model_executor.models.vibevoice.vibevoice import (
-    VibeVoiceForConditionalGeneration,
-)
 from vllm_omni.model_executor.models.vibevoice.processing_vibevoice import (
     AUDIO_BOS_TOKEN,
     AUDIO_EOS_TOKEN,
@@ -27,6 +24,9 @@ from vllm_omni.model_executor.models.vibevoice.processing_vibevoice import (
     VibeVoiceDummyInputsBuilder,
     VibeVoiceMultiModalProcessor,
     VibeVoiceProcessingInfo,
+)
+from vllm_omni.model_executor.models.vibevoice.vibevoice import (
+    VibeVoiceForConditionalGeneration,
 )
 from vllm_omni.model_executor.models.vibevoice.vllm_compat import (
     get_audio_with_sr_from_parent,
@@ -76,9 +76,7 @@ def _make_processor(
     hf_config.audio_eos_token_id = tokenizer.convert_tokens_to_ids(AUDIO_EOS_TOKEN)
     hf_config.audio_token_id = tokenizer.convert_tokens_to_ids(AUDIO_TOKEN)
 
-    multimodal_config = MultiModalConfig(
-        limit_per_prompt={"audio": user_audio_limit}
-    )
+    multimodal_config = MultiModalConfig(limit_per_prompt={"audio": user_audio_limit})
     model_config = SimpleNamespace(
         model="test-vibevoice",
         hf_config=hf_config,
@@ -124,9 +122,7 @@ def test_single_prompt_multiple_reference_audios_preserves_item_order():
         f"then Speaker 1: {AUDIO_BOS_TOKEN}{AUDIO_TOKEN}{AUDIO_EOS_TOKEN}"
     )
     first_audio = np.linspace(-0.25, 0.25, 3_201, dtype=np.float32)
-    second_audio = np.sin(
-        np.linspace(0, 20 * np.pi, 8_001, dtype=np.float32)
-    ).astype(np.float32)
+    second_audio = np.sin(np.linspace(0, 20 * np.pi, 8_001, dtype=np.float32)).astype(np.float32)
     mm_items = info.parse_mm_data(
         {
             "audio": [
@@ -150,11 +146,7 @@ def test_single_prompt_multiple_reference_audios_preserves_item_order():
     placeholder_ranges = result["mm_placeholders"]["audio"]
     assert [item.length for item in placeholder_ranges] == [2, 3]
     audio_token_id = tokenizer.convert_tokens_to_ids(AUDIO_TOKEN)
-    expected_offsets = [
-        idx
-        for idx, token_id in enumerate(result["prompt_token_ids"])
-        if token_id == audio_token_id
-    ]
+    expected_offsets = [idx for idx, token_id in enumerate(result["prompt_token_ids"]) if token_id == audio_token_id]
     assert [item.offset for item in placeholder_ranges] == [
         expected_offsets[0],
         expected_offsets[2],
@@ -192,9 +184,7 @@ def test_reference_audio_and_placeholder_counts_must_match(
     ):
         processor(
             prompt,
-            mm_items=info.parse_mm_data(
-                {"audio": [(audio, SAMPLE_RATE)] * num_audios}
-            ),
+            mm_items=info.parse_mm_data({"audio": [(audio, SAMPLE_RATE)] * num_audios}),
         )
 
 
@@ -218,9 +208,7 @@ def test_processing_limits_match_scheduler_budget():
     _, info = _make_processor()
 
     assert info.get_supported_mm_limits() == {"audio": MAX_AUDIO_ITEMS}
-    assert info.get_mm_max_tokens_per_item(65_536) == {
-        "audio": MAX_AUDIO_TOKENS
-    }
+    assert info.get_mm_max_tokens_per_item(65_536) == {"audio": MAX_AUDIO_TOKENS}
     assert MAX_AUDIO_TOKENS == 450
 
 
@@ -283,9 +271,7 @@ def test_bare_2d_audio_is_rejected_as_ambiguous(stereo):
 
 
 def test_vllm_private_multimodal_compatibility_smoke():
-    upstream_signature = inspect.signature(
-        MultiModalDataParser._get_audio_with_sr
-    )
+    upstream_signature = inspect.signature(MultiModalDataParser._get_audio_with_sr)
     assert list(upstream_signature.parameters) == ["self", "audio"]
 
     parser = MultiModalDataParser()
@@ -309,9 +295,7 @@ def test_vllm_private_multimodal_compatibility_smoke():
     tokenizer = object()
     engine_client = SimpleNamespace(
         engine=SimpleNamespace(
-            input_processor=SimpleNamespace(
-                renderer=SimpleNamespace(get_tokenizer=lambda: tokenizer)
-            )
+            input_processor=SimpleNamespace(renderer=SimpleNamespace(get_tokenizer=lambda: tokenizer))
         )
     )
     assert get_stage0_tokenizer(engine_client) is tokenizer

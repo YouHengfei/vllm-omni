@@ -26,8 +26,15 @@ def _scored_result() -> dict:
         "seed_tts_asr_failed": 0,
         "seed_tts_sim_evaluated": 2,
         "seed_tts_sim_mean": 0.8,
+        "seed_tts_sim_failed": 0,
+        "seed_tts_sim_skipped_no_ref": 0,
         "seed_tts_finish_reason_counts": {"stop": 2},
         "seed_tts_length_capped": 0,
+        "seed_tts_terminal_stop_required": 2,
+        "seed_tts_required_stop_count": 2,
+        "seed_tts_missing_finish_reason": 0,
+        "seed_tts_non_stop_excluded": 0,
+        "seed_tts_total_requests": 2,
     }
 
 
@@ -56,6 +63,8 @@ def test_validate_result_applies_locale_metrics_and_thresholds() -> None:
     length_result = _scored_result()
     length_result["seed_tts_finish_reason_counts"] = {"stop": 1, "length": 1}
     length_result["seed_tts_length_capped"] = 1
+    length_result["seed_tts_required_stop_count"] = 1
+    length_result["seed_tts_non_stop_excluded"] = 1
     errors = _validate_result(
         length_result,
         locale="en",
@@ -64,8 +73,27 @@ def test_validate_result_applies_locale_metrics_and_thresholds() -> None:
         min_mean_sim=None,
         sim_enabled=False,
     )
+    assert "terminal stops=1 != required 2" in errors
+    assert "non-stop samples excluded=1" in errors
     assert "length-capped quality requests=1" in errors
     assert "unexpected finish reasons=['length']" in errors
+
+    incomplete_result = _scored_result()
+    incomplete_result["seed_tts_required_stop_count"] = 1
+    incomplete_result["seed_tts_missing_finish_reason"] = 1
+    incomplete_result["seed_tts_sim_evaluated"] = 1
+    incomplete_result["seed_tts_sim_failed"] = 1
+    errors = _validate_result(
+        incomplete_result,
+        locale="en",
+        min_evaluated=2,
+        max_mean_content_error=None,
+        min_mean_sim=None,
+        sim_enabled=True,
+    )
+    assert "missing finish reasons=1" in errors
+    assert "speaker similarity evaluated=1 != content evaluated 2" in errors
+    assert "speaker similarity failures=1" in errors
 
 
 def test_run_locale_selects_vibevoice_schema_and_sse_transport(tmp_path: Path, monkeypatch) -> None:

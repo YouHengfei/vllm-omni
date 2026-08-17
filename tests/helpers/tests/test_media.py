@@ -32,6 +32,31 @@ def _stub_transcribe(monkeypatch) -> dict:
     return captured
 
 
+def test_english_text_preprocessing_does_not_require_opencc(monkeypatch):
+    monkeypatch.setitem(sys.modules, "opencc", None)
+
+    assert media.preprocess_text("The weather is nice today!") == ("the weather is nice today")
+
+
+def test_ffmpeg_fallback_exposes_imageio_binary(monkeypatch, tmp_path):
+    target = tmp_path / "ffmpeg-imageio"
+    target.write_bytes(b"test-only")
+    monkeypatch.setattr(media.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(media.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setenv("PATH", "")
+    monkeypatch.setitem(
+        sys.modules,
+        "imageio_ffmpeg",
+        SimpleNamespace(get_ffmpeg_exe=lambda: str(target)),
+    )
+
+    media._ensure_test_ffmpeg_on_path()
+
+    link = tmp_path / "vllm_omni_test_bin" / "ffmpeg"
+    assert link.resolve() == target.resolve()
+    assert str(link.parent) == media.os.environ["PATH"].split(media.os.pathsep)[0]
+
+
 def test_transcribe_forwards_requested_language(monkeypatch):
     captured = _stub_transcribe(monkeypatch)
 

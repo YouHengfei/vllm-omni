@@ -717,9 +717,18 @@ def stage_config_path_for_run_level(stage_config_path: str | None, run_level: st
     return _add_dummy_load_format(stage_config_path, run_level)
 
 
+def stage_config_uses_dummy_load_format(stage_config_path: str) -> bool:
+    """Return whether any stage explicitly selects dummy weight loading."""
+    stage_key, load_format_path, _stage_ids = _stage_load_format_paths(stage_config_path)
+    with open(stage_config_path, encoding="utf-8") as file:
+        config = yaml.safe_load(file) or {}
+    return any(_get_config_value_by_path(stage, load_format_path) == "dummy" for stage in config.get(stage_key, []))
+
+
 __all__ = [
     "get_deploy_config_path",
     "get_deploy_config_stage",
     "modify_stage_config",
     "stage_config_path_for_run_level",
+    "stage_config_uses_dummy_load_format",
 ]
