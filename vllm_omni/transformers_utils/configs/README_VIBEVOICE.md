@@ -1721,7 +1721,26 @@ HTTP/lifecycle + RTF/TTFA 对比写入本节。
     env，错误信息与可达性依赖宿主代理状态（`rejects_invalid_requests` 首跑因此 flake）；
     留待 serving robustness 工作评估。测试侧修复（test-only）：测试服务器 env 注入
     `NO_PROXY=127.0.0.1,localhost`，localhost 抓取错误信息确定后复跑全绿。
-- Phase B（negative batched forward）：待执行。预期 negative_forward 8.5→~4-5ms。
+  - 记录的既有 lint 问题（计划外，不就地修复）：GPU 测试文件
+    `test_vibevoice_processing_gpu.py`（I001、TID251×5、**F821 undefined name `model`——
+    真实测试 bug，执行到该行会 NameError**）、`test_vibevoice_tp2_gpu.py`（TID251×3）、
+    `test_vibevoice_weight_loading_gpu.py`（TID251×1）在原始提交中即未过 ruff；
+    属独立测试清理工作，不影响 runtime。
+- Phase B（negative batched forward）完成：
+  - `NamedCausalKVBranch.append_and_enter_batch`：一次批量 slot bookkeeping（先全量校验再
+    变更，bookkeeping 失败 fault-free 整个 logical batch）、一次 metadata build（堆叠
+    block table、arange query_start、批量 seq_lens/positions/slot_mapping）、一次
+    kv_cache 交换、一次 B-token varlen decode forward。原 `append_and_enter` 保留，
+    与批量路径共享 `_append_slots`。
+  - `VibeVoiceNegativeBranch.forward_step` 改为单次批量 forward；批量 clone 一次后
+    unbind 行视图（消除逐请求双重 clone）；校验逻辑不变。
+  - 数值门禁：conformance GPU 测试新增批量段——两个错位请求（batch-a 先行 4 步）共享
+    批量 attention context，逐行对拍独立 HF cached 参考，跨 16-token 页边界，
+    batch_max_abs_diff ≤ 0.04 通过；17-step 单请求段保持通过。
+  - 全量门禁：CPU 177 passed；TP2 lifecycle 8 passed；HTTP 4 并发 6 passed。
+  - 性能（B=4，441 transition 均值）：**negative_forward 22.3→9.9ms（-55%）**；
+    C4 聚合吞吐 **4.35→5.60 audio-s/wall-s（+29%）**；C4 per-request RTF
+    0.86-0.91→0.66-0.70；4 并发 wall 30.3→23.0s。B=1 RTF 0.479（共享卡基线噪声内）。
 - Phase C1（diffusion graph）：预期 10.8→~4ms。
 - Phase C2（M4a per-slot graph）：预期 13.2→~3-4ms。
 - Phase C3（positive FULL decode graph）：预期 11.8→<2ms（收益上修）。

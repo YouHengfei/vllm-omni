@@ -105,6 +105,62 @@ def test_named_kv_internal_fault_cleanup_remains_legal_in_context() -> None:
     assert branch.num_free_blocks == 1
 
 
+def test_append_slots_validates_batch_before_mutating_any_request() -> None:
+    branch = object.__new__(NamedCausalKVBranch)
+    branch.name = "negative"
+    branch.device = "cpu"
+    branch._entered = False
+    branch._closed = False
+    branch.block_size = 2
+    branch.max_sequence_tokens = 4
+    branch.max_blocks_per_request = 4
+    branch._allocator = _FixedBlockAllocator(8)
+    branch._states = {}
+    branch.reset("request-a")
+    branch.reset("request-b")
+
+    # Advance request-a by two slots (crossing one block boundary).
+    states, positions, slots = branch._append_slots(["request-a", "request-b"])
+    assert positions == [0, 0]
+    assert [state.num_tokens for state in states] == [1, 1]
+    states, positions, slots = branch._append_slots(["request-a"])
+    assert positions == [1]
+    # Second block for request-a at the boundary, request-b untouched.
+    state_a = branch._states["request-a"]
+    assert len(state_a.block_ids) == 1
+    states, positions, slots = branch._append_slots(["request-a"])
+    assert positions == [2]
+    assert len(state_a.block_ids) == 2
+
+    # Batch validation failure must not advance the valid request.
+    branch._states.pop("request-b")
+    with pytest.raises(RuntimeError, match="must be reset before append"):
+        branch._append_slots(["request-a", "request-b"])
+    assert branch._states["request-a"].num_tokens == 3
+
+
+def test_append_slots_fault_frees_whole_batch_on_bookkeeping_failure() -> None:
+    branch = object.__new__(NamedCausalKVBranch)
+    branch.name = "negative"
+    branch.device = "cpu"
+    branch._entered = False
+    branch._closed = False
+    branch.block_size = 1
+    branch.max_sequence_tokens = 8
+    branch.max_blocks_per_request = 4
+    branch._allocator = _FixedBlockAllocator(1)
+    branch._states = {}
+    branch.reset("request-a")
+    branch.reset("request-b")
+
+    # One block total: request-a takes it, request-b exhausts the pool and
+    # the whole logical batch is fault-freed.
+    with pytest.raises(RuntimeError, match="exhausted its fixed GPU block pool"):
+        branch._append_slots(["request-a", "request-b"])
+    assert branch._states == {}
+    assert branch.num_free_blocks == 1
+
+
 def test_named_kv_fault_cleanup_does_not_mask_original_exception(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

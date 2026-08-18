@@ -349,6 +349,95 @@ def _negative_kv_conformance_worker(port: int, queue: Any) -> None:
             branch.free("request")
             all_blocks_freed = branch.num_free_blocks == branch.num_blocks
 
+            # Phase B batched-path conformance: two staggered requests share
+            # one batched attention context per step; every row is compared
+            # against its own Transformers cached reference.
+            branch.reset("batch-a")
+            hf_past_a = None
+            with torch.inference_mode():
+                for step in range(4):
+                    embedding = embeddings[step]
+                    hf_output = hf_model.model(
+                        inputs_embeds=embedding,
+                        past_key_values=hf_past_a,
+                        use_cache=True,
+                        position_ids=torch.tensor([[step]], device="cuda"),
+                        cache_position=torch.tensor([step], device="cuda"),
+                        return_dict=True,
+                    )
+                    hf_past_a = hf_output.past_key_values
+                    with branch.append_and_enter("batch-a") as branch_step:
+                        language_model(
+                            input_ids=None,
+                            positions=branch_step.position,
+                            inputs_embeds=embedding.reshape(1, -1),
+                        )
+            branch.reset("batch-b")
+            hf_past_b = None
+            batch_embeddings_b = [
+                torch.randn(
+                    1,
+                    1,
+                    hf_config.hidden_size,
+                    device="cuda",
+                    dtype=torch.bfloat16,
+                )
+                for _ in range(13)
+            ]
+            batch_max_abs_diff = 0.0
+            with torch.inference_mode():
+                for index in range(13):
+                    step_a = 4 + index
+                    step_b = index
+                    embedding_a = embeddings[step_a]
+                    embedding_b = batch_embeddings_b[step_b]
+                    hf_output_a = hf_model.model(
+                        inputs_embeds=embedding_a,
+                        past_key_values=hf_past_a,
+                        use_cache=True,
+                        position_ids=torch.tensor([[step_a]], device="cuda"),
+                        cache_position=torch.tensor([step_a], device="cuda"),
+                        return_dict=True,
+                    )
+                    hf_past_a = hf_output_a.past_key_values
+                    hf_output_b = hf_model.model(
+                        inputs_embeds=embedding_b,
+                        past_key_values=hf_past_b,
+                        use_cache=True,
+                        position_ids=torch.tensor([[step_b]], device="cuda"),
+                        cache_position=torch.tensor([step_b], device="cuda"),
+                        return_dict=True,
+                    )
+                    hf_past_b = hf_output_b.past_key_values
+                    with branch.append_and_enter_batch(["batch-a", "batch-b"]) as branch_step:
+                        batched_hidden = language_model(
+                            input_ids=None,
+                            positions=branch_step.position,
+                            inputs_embeds=torch.cat(
+                                [embedding_a.reshape(1, -1), embedding_b.reshape(1, -1)],
+                                dim=0,
+                            ),
+                        )
+                    for row, hf_hidden in (
+                        (batched_hidden[0:1], hf_output_a.last_hidden_state.reshape(1, -1)),
+                        (batched_hidden[1:2], hf_output_b.last_hidden_state.reshape(1, -1)),
+                    ):
+                        batch_max_abs_diff = max(
+                            batch_max_abs_diff,
+                            float((row.float() - hf_hidden.float()).abs().max()),
+                        )
+                        torch.testing.assert_close(
+                            row.float(),
+                            hf_hidden.float(),
+                            rtol=0.04,
+                            atol=0.04,
+                        )
+            assert branch.get_sequence_length("batch-a") == 17
+            assert branch.get_sequence_length("batch-b") == 13
+            branch.free("batch-a")
+            branch.free("batch-b")
+            all_blocks_freed = all_blocks_freed and branch.num_free_blocks == branch.num_blocks
+
             branch.reset("active-guard")
             with branch.append_and_enter("active-guard"):
                 active_length = branch.get_sequence_length("active-guard")
@@ -385,6 +474,7 @@ def _negative_kv_conformance_worker(port: int, queue: Any) -> None:
                     "layers": len(layer_names),
                     "max_abs_diff": max_abs_diff,
                     "store_max_abs_diff": store_max_abs_diff,
+                    "batch_max_abs_diff": batch_max_abs_diff,
                     "restored_after_every_step": restored_after_every_step,
                     "all_blocks_freed": all_blocks_freed,
                     "active_context_guard": active_context_guard,
@@ -432,6 +522,7 @@ def test_manual_negative_paged_kv_matches_transformers_cached_qwen() -> None:
     assert result["layers"] == 28
     assert result["max_abs_diff"] <= 0.04
     assert result["store_max_abs_diff"] <= 0.04
+    assert result["batch_max_abs_diff"] <= 0.04
     assert result["restored_after_every_step"] is True
     assert result["all_blocks_freed"] is True
     assert result["active_context_guard"] is True

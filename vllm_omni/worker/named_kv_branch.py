@@ -323,6 +323,47 @@ class NamedCausalKVBranch:
         state = self._states.get(request_id)
         return state.num_tokens if state is not None else 0
 
+    def _append_slots(
+        self,
+        request_ids: list[str],
+    ) -> tuple[list[_NamedKVRequestState], list[int], list[int]]:
+        """Bookkeep one causal slot per request before any context is built.
+
+        Validates the complete batch first so a mid-batch failure cannot leave
+        some requests advanced and others untouched. On any bookkeeping
+        failure every touched request is fault-freed, matching the logical
+        batch contract of the model-side caller.
+        """
+        states: list[_NamedKVRequestState] = []
+        for request_id in request_ids:
+            state = self._states.get(request_id)
+            if state is None:
+                raise RuntimeError(f"Named causal KV request {request_id!r} must be reset before append.")
+            if state.num_tokens >= self.max_sequence_tokens:
+                raise RuntimeError(
+                    f"Named causal KV request {request_id!r} exceeded max_sequence_tokens={self.max_sequence_tokens}."
+                )
+            states.append(state)
+
+        positions: list[int] = []
+        slot_values: list[int] = []
+        try:
+            for state in states:
+                position_value = state.num_tokens
+                if position_value % self.block_size == 0:
+                    block_id = self._allocator.allocate()
+                    state.block_ids.append(block_id)
+                    state.block_table[0, len(state.block_ids) - 1] = block_id
+                block_id = state.block_ids[position_value // self.block_size]
+                slot_values.append(block_id * self.block_size + position_value % self.block_size)
+                state.num_tokens += 1
+                positions.append(position_value)
+        except Exception:
+            for request_id in request_ids:
+                self._cleanup_after_fault(request_id)
+            raise
+        return states, positions, slot_values
+
     @contextmanager
     def append_and_enter(
         self,
@@ -332,22 +373,10 @@ class NamedCausalKVBranch:
         self._ensure_open()
         if self._entered:
             raise RuntimeError("Named causal KV branch contexts cannot be re-entered.")
-        state = self._states.get(request_id)
-        if state is None:
-            raise RuntimeError(f"Named causal KV request {request_id!r} must be reset before append.")
-        if state.num_tokens >= self.max_sequence_tokens:
-            raise RuntimeError(
-                f"Named causal KV request {request_id!r} exceeded max_sequence_tokens={self.max_sequence_tokens}."
-            )
-
-        position_value = state.num_tokens
-        if position_value % self.block_size == 0:
-            block_id = self._allocator.allocate()
-            state.block_ids.append(block_id)
-            state.block_table[0, len(state.block_ids) - 1] = block_id
-        block_id = state.block_ids[position_value // self.block_size]
-        slot_value = block_id * self.block_size + position_value % self.block_size
-        state.num_tokens += 1
+        states, positions, slot_values = self._append_slots([request_id])
+        state = states[0]
+        position_value = positions[0]
+        slot_value = slot_values[0]
 
         try:
             slot_mapping = torch.tensor(
@@ -404,6 +433,95 @@ class NamedCausalKVBranch:
             # entire request branch so stale KV is never reused. This internal
             # path must remain legal while the forward context is entered.
             self._cleanup_after_fault(request_id)
+            raise
+        finally:
+            for name, layer in self.layers.items():
+                layer.kv_cache = positive_caches[name]
+            self._entered = False
+
+    @contextmanager
+    def append_and_enter_batch(
+        self,
+        request_ids: list[str],
+    ) -> Iterator[NamedKVBranchStep]:
+        """Append one causal slot per request and enter one shared context.
+
+        Phase B of the performance plan: the negative Qwen branch advances
+        every active request in ONE varlen decode forward instead of B
+        sequential forwards. One metadata build, one kv_cache swap, one
+        forward-context override. Fault handling drops the whole logical
+        batch, matching the model-side caller contract.
+        """
+        self._ensure_open()
+        if self._entered:
+            raise RuntimeError("Named causal KV branch contexts cannot be re-entered.")
+        if not request_ids or len(request_ids) != len(set(request_ids)):
+            raise ValueError("Named causal KV batch append requires distinct, non-empty request IDs.")
+
+        states, positions, slot_values = self._append_slots(request_ids)
+        batch_size = len(request_ids)
+        seq_lens_list = [state.num_tokens for state in states]
+        try:
+            slot_mapping = torch.tensor(
+                slot_values,
+                dtype=torch.int64,
+                device=self.device,
+            )
+            query_start_cpu = torch.arange(
+                0,
+                batch_size + 1,
+                dtype=torch.int32,
+            )
+            query_start = query_start_cpu.to(self.device)
+            seq_lens_cpu = torch.tensor(seq_lens_list, dtype=torch.int32)
+            seq_lens = seq_lens_cpu.to(self.device)
+            position = torch.tensor(
+                positions,
+                dtype=torch.long,
+                device=self.device,
+            )
+            block_table = torch.cat(
+                [state.block_table for state in states],
+                dim=0,
+            )
+            common = CommonAttentionMetadata(
+                query_start_loc=query_start,
+                query_start_loc_cpu=query_start_cpu,
+                seq_lens=seq_lens,
+                num_reqs=batch_size,
+                num_actual_tokens=batch_size,
+                max_query_len=1,
+                max_seq_len=max(seq_lens_list),
+                block_table_tensor=block_table,
+                slot_mapping=slot_mapping,
+                causal=True,
+                positions=position,
+            )
+            metadata = self._metadata_builder.build(0, common)
+            context = create_forward_context(
+                {name: metadata for name in self.layer_names},
+                self.vllm_config,
+                slot_mapping={name: slot_mapping for name in self.layer_names},
+                skip_compiled=True,
+            )
+        except Exception:
+            for request_id in request_ids:
+                self._cleanup_after_fault(request_id)
+            raise
+
+        positive_caches = {name: layer.kv_cache for name, layer in self.layers.items()}
+        self._entered = True
+        try:
+            for name, layer in self.layers.items():
+                layer.kv_cache = self.kv_caches[name]
+            with override_forward_context(context):
+                yield NamedKVBranchStep(
+                    position=position,
+                    sequence_length=max(seq_lens_list),
+                )
+        except Exception:
+            for request_id in request_ids:
+                self._cleanup_after_fault(request_id)
             raise
         finally:
             for name, layer in self.layers.items():

@@ -44,53 +44,50 @@ class VibeVoiceNegativeBranch:
         if len(request_ids) != len(set(request_ids)):
             raise ValueError("VibeVoice negative KV batch contains duplicate request IDs.")
 
-        conditions: list[torch.Tensor] = []
-        try:
-            # The store owns one independent block table per request. Enter its
-            # attention context sequentially so the shared Qwen layer objects
-            # never expose two negative kv_cache bindings at once.
-            for request_id, embedding in zip(
-                request_ids,
-                input_embeddings,
-                strict=True,
-            ):
-                if not isinstance(embedding, torch.Tensor):
-                    raise TypeError("VibeVoice negative input embedding must be a tensor.")
-                if tuple(embedding.shape) != (1, self.hidden_size):
-                    raise ValueError(
-                        "VibeVoice negative input embedding must have shape "
-                        f"(1, {self.hidden_size}), got {tuple(embedding.shape)}."
-                    )
-                if not embedding.is_floating_point():
-                    raise TypeError("VibeVoice negative input embedding must be floating-point.")
+        for embedding in input_embeddings:
+            if not isinstance(embedding, torch.Tensor):
+                raise TypeError("VibeVoice negative input embedding must be a tensor.")
+            if tuple(embedding.shape) != (1, self.hidden_size):
+                raise ValueError(
+                    "VibeVoice negative input embedding must have shape "
+                    f"(1, {self.hidden_size}), got {tuple(embedding.shape)}."
+                )
+            if not embedding.is_floating_point():
+                raise TypeError("VibeVoice negative input embedding must be floating-point.")
 
-                with self.store.append_and_enter(request_id) as step:
-                    hidden_states: Any = self.language_model(
-                        input_ids=None,
-                        positions=step.position,
-                        inputs_embeds=embedding,
+        try:
+            # Phase B: advance the whole logical batch in ONE varlen decode
+            # forward. The store owns one independent block table per request;
+            # a single batched attention context never exposes two negative
+            # kv_cache bindings at once, identical to the sequential path.
+            with self.store.append_and_enter_batch(request_ids) as step:
+                stacked_inputs = torch.cat(input_embeddings, dim=0)
+                hidden_states: Any = self.language_model(
+                    input_ids=None,
+                    positions=step.position,
+                    inputs_embeds=stacked_inputs,
+                )
+                if isinstance(hidden_states, IntermediateTensors):
+                    raise RuntimeError(
+                        "VibeVoice negative Qwen returned pipeline intermediate tensors; PP=1 is required."
                     )
-                    if isinstance(hidden_states, IntermediateTensors):
-                        raise RuntimeError(
-                            "VibeVoice negative Qwen returned pipeline intermediate tensors; PP=1 is required."
-                        )
-                    if isinstance(hidden_states, tuple):
-                        hidden_states = hidden_states[0]
-                    if not isinstance(hidden_states, torch.Tensor):
-                        raise TypeError("VibeVoice negative Qwen must return hidden-state tensor output.")
-                    if tuple(hidden_states.shape) != (1, self.hidden_size):
-                        raise ValueError(
-                            "VibeVoice negative Qwen hidden state must have shape "
-                            f"(1, {self.hidden_size}), got {tuple(hidden_states.shape)}."
-                        )
-                    # The shared Qwen may reuse output storage on the next
-                    # sequential request. Own this row until the caller binds
-                    # every condition to request-local state.
-                    conditions.append(
-                        hidden_states.detach().clone(
-                            memory_format=torch.contiguous_format,
-                        )
+                if isinstance(hidden_states, tuple):
+                    hidden_states = hidden_states[0]
+                if not isinstance(hidden_states, torch.Tensor):
+                    raise TypeError("VibeVoice negative Qwen must return hidden-state tensor output.")
+                expected_shape = (len(request_ids), self.hidden_size)
+                if tuple(hidden_states.shape) != expected_shape:
+                    raise ValueError(
+                        "VibeVoice negative Qwen hidden state must have shape "
+                        f"{expected_shape}, got {tuple(hidden_states.shape)}."
                     )
+                # The shared Qwen may reuse output storage on a later forward.
+                # Own the batch until the caller binds every row to
+                # request-local state (which clones again per request).
+                owned = hidden_states.detach().clone(
+                    memory_format=torch.contiguous_format,
+                )
+                conditions = [row.reshape(1, self.hidden_size) for row in owned.unbind(0)]
         except Exception:
             # A model-forward exception is fatal to the current engine. Drop
             # every request touched by this logical batch so no partially

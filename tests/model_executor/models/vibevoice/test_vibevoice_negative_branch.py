@@ -24,18 +24,21 @@ class _FakeStore:
         self.reset_ids: list[str] = []
         self.free_ids: list[str] = []
         self.steps: dict[str, int] = {}
+        self.batch_contexts: int = 0
 
     def reset(self, request_id: str) -> None:
         self.reset_ids.append(request_id)
         self.steps[request_id] = 0
 
     @contextmanager
-    def append_and_enter(self, request_id: str):
-        position = torch.tensor([self.steps.get(request_id, 0)])
-        self.steps[request_id] = int(position.item()) + 1
+    def append_and_enter_batch(self, request_ids: list[str]):
+        self.batch_contexts += 1
+        position = torch.tensor([self.steps.get(request_id, 0) for request_id in request_ids])
+        for request_id in request_ids:
+            self.steps[request_id] = self.steps.get(request_id, 0) + 1
         yield SimpleNamespace(
             position=position,
-            sequence_length=self.steps[request_id],
+            sequence_length=max(self.steps[request_id] for request_id in request_ids),
         )
 
     def free(self, request_id: str) -> None:
@@ -48,9 +51,11 @@ class _FailingQwen(nn.Module):
 
 
 class _ReusingQwen(nn.Module):
+    """Simulates a Qwen whose output storage is overwritten by later forwards."""
+
     def __init__(self) -> None:
         super().__init__()
-        self.register_buffer("output", torch.empty(1, 4))
+        self.register_buffer("output", torch.empty(2, 4))
 
     def forward(
         self,
@@ -61,8 +66,10 @@ class _ReusingQwen(nn.Module):
     ) -> torch.Tensor:
         del input_ids, intermediate_tensors
         assert inputs_embeds is not None
-        self.output.copy_(inputs_embeds + positions.reshape(-1, 1).to(inputs_embeds))
-        return self.output
+        batch = inputs_embeds.shape[0]
+        output = self.output[:batch]
+        output.copy_(inputs_embeds + positions.reshape(-1, 1).to(inputs_embeds))
+        return output
 
 
 class _FakeQwen(nn.Module):
@@ -117,7 +124,7 @@ def test_negative_executor_frees_branch_after_model_exception() -> None:
     assert store.free_ids == ["request-a"]
 
 
-def test_negative_executor_advances_multiple_requests_sequentially() -> None:
+def test_negative_executor_advances_multiple_requests_in_one_batched_forward() -> None:
     store = _FakeStore()
     branch = VibeVoiceNegativeBranch(
         store=store,  # type: ignore[arg-type]
@@ -136,13 +143,15 @@ def test_negative_executor_advances_multiple_requests_sequentially() -> None:
         [torch.full((1, 4), 2.0), torch.ones(1, 4)],
     )
 
+    # One shared attention context per logical batch, not one per request.
+    assert store.batch_contexts == 2
     assert torch.equal(first[0], torch.ones(1, 4))
     assert torch.equal(first[1], torch.full((1, 4), 2.0))
     assert torch.equal(second[0], torch.full((1, 4), 3.0))
     assert torch.equal(second[1], torch.full((1, 4), 2.0))
 
 
-def test_negative_executor_owns_each_condition_across_sequential_requests() -> None:
+def test_negative_executor_owns_the_batch_across_later_forwards() -> None:
     store = _FakeStore()
     branch = VibeVoiceNegativeBranch(
         store=store,  # type: ignore[arg-type]
@@ -155,6 +164,12 @@ def test_negative_executor_owns_each_condition_across_sequential_requests() -> N
     conditions = branch.forward_step(
         ["request-a", "request-b"],
         [torch.ones(1, 4), torch.full((1, 4), 2.0)],
+    )
+    # A later forward overwrites the model's reusable output buffer; the
+    # returned conditions must still hold the first batch's values.
+    branch.forward_step(
+        ["request-a"],
+        [torch.full((1, 4), 9.0)],
     )
 
     assert torch.equal(conditions[0], torch.ones(1, 4))
