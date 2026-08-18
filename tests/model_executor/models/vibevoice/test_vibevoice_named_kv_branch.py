@@ -292,6 +292,43 @@ def test_runtime_config_uses_additional_config_without_touching_hf_config() -> N
     )
 
 
+def test_runtime_config_parses_diffusion_graph_bool() -> None:
+    default = VibeVoiceRuntimeConfig.from_vllm_config(SimpleNamespace(additional_config={}))
+    assert default.diffusion_cuda_graph is True
+
+    disabled = VibeVoiceRuntimeConfig.from_vllm_config(
+        SimpleNamespace(
+            additional_config={
+                "vibevoice_runtime_config": {
+                    "diffusion_cuda_graph": False,
+                }
+            }
+        )
+    )
+    assert disabled.diffusion_cuda_graph is False
+
+    with pytest.raises(ValueError, match="diffusion_cuda_graph must be a bool"):
+        VibeVoiceRuntimeConfig.from_vllm_config(
+            SimpleNamespace(
+                additional_config={
+                    "vibevoice_runtime_config": {
+                        "diffusion_cuda_graph": 0,
+                    }
+                }
+            )
+        )
+    with pytest.raises(ValueError, match="must be an integer, not bool"):
+        VibeVoiceRuntimeConfig.from_vllm_config(
+            SimpleNamespace(
+                additional_config={
+                    "vibevoice_runtime_config": {
+                        "negative_kv_cache_memory_bytes": True,
+                    }
+                }
+            )
+        )
+
+
 @pytest.mark.parametrize(
     ("key", "value", "message"),
     [

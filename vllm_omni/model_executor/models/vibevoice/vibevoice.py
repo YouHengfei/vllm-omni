@@ -231,6 +231,12 @@ class VibeVoiceModel(nn.Module):
         # Pure model-side numerical helper. It creates a fresh DPM solver for
         # each audio token and owns no request/KV/cache state.
         self.diffusion_sampler = VibeVoiceDiffusionSampler.from_model_config(config)
+        # Phase C1: lazily-created CUDA-graph replay of the denoising loop.
+        # The flag is set by the outer model from the deployment runtime
+        # config; the executor itself falls back to eager on any capture
+        # failure or non-CUDA input.
+        self.diffusion_graph_enabled = False
+        self._diffusion_graph_executor = None
         # Like the diffusion sampler, this kernel receives and returns caches;
         # it never owns mutable request state.
         self.audio_token_decoder = VibeVoiceAudioTokenDecoder.from_model_config(config)
@@ -261,6 +267,28 @@ class VibeVoiceModel(nn.Module):
         num_inference_steps: int | None = None,
     ) -> torch.Tensor:
         """Run the model-local diffusion numerical kernel for one AR step."""
+        steps = (
+            self.diffusion_sampler.default_num_inference_steps
+            if num_inference_steps is None
+            else int(num_inference_steps)
+        )
+        if self.diffusion_graph_enabled and noise.is_cuda:
+            from .diffusion import VibeVoiceDiffusionGraphExecutor
+
+            if self._diffusion_graph_executor is None:
+                self._diffusion_graph_executor = VibeVoiceDiffusionGraphExecutor(
+                    self.diffusion_sampler,
+                    self.diffusion_head,
+                )
+            replayed = self._diffusion_graph_executor.sample(
+                positive_condition,
+                negative_condition,
+                noise,
+                guidance_scale=guidance_scale,
+                num_inference_steps=steps,
+            )
+            if replayed is not None:
+                return replayed
         return self.diffusion_sampler.sample_audio_latent(
             self.diffusion_head,
             positive_condition,
@@ -350,6 +378,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         )
         self._negative_kv_branch: VibeVoiceNegativeKVBranch | None = None
         runtime_config = VibeVoiceRuntimeConfig.from_vllm_config(vllm_config)
+        self.model.diffusion_graph_enabled = runtime_config.diffusion_cuda_graph
         self.named_kv_branch_request = NamedKVBranchRequest(
             name="negative",
             memory_bytes=runtime_config.negative_kv_cache_memory_bytes,

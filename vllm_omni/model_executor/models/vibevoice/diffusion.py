@@ -19,6 +19,9 @@ from typing import Any
 import torch
 from torch import nn
 from transformers.activations import ACT2FN
+from vllm.logger import init_logger
+
+logger = init_logger(__name__)
 
 
 class VibeVoiceRMSNorm(nn.Module):
@@ -172,10 +175,29 @@ class VibeVoiceDiffusionHead(nn.Module):
         timesteps: torch.Tensor,
         condition: torch.Tensor,
     ) -> torch.Tensor:
+        return self.forward_with_projected_condition(
+            noisy_latents,
+            timesteps,
+            self.cond_proj(condition),
+        )
+
+    def forward_with_projected_condition(
+        self,
+        noisy_latents: torch.Tensor,
+        timesteps: torch.Tensor,
+        projected_condition: torch.Tensor,
+    ) -> torch.Tensor:
+        """Forward with ``cond_proj`` already applied to the condition.
+
+        ``cond_proj(condition)`` is invariant across the fixed-step denoising
+        loop, so the graph executor hoists it out of the loop. The projection
+        is deterministic on the same input, making the hoisted sequence
+        bitwise identical to calling ``forward`` every step.
+        """
         hidden_states = self.noisy_images_proj(noisy_latents)
-        timestep_embedding = self.timestep_embedding(timesteps).to(condition.dtype)
+        timestep_embedding = self.timestep_embedding(timesteps).to(projected_condition.dtype)
         timestep_features = self.timestep_proj(timestep_embedding)
-        condition = self.cond_proj(condition) + timestep_features
+        condition = projected_condition + timestep_features
         for layer in self.layers:
             hidden_states = layer(hidden_states, condition)
         return self.final_layer(hidden_states, condition)
@@ -408,7 +430,188 @@ class VibeVoiceDiffusionSampler:
         return noisy_audio_latent[:batch_size].unsqueeze(1)
 
 
+class VibeVoiceDiffusionGraphExecutor:
+    """Manual CUDA-graph replay of the fixed-step DPM denoising loop.
+
+    Phase C1 of the performance plan. The capture replays exactly the eager
+    kernel sequence of ``sample_audio_latent`` (plus a step-invariant
+    ``cond_proj`` hoist, which is bitwise identical because the projection is
+    deterministic), so replay output is bitwise equal to eager for the same
+    inputs. No torch.compile/inductor involvement.
+
+    Graph key: ``(batch_size, num_inference_steps, guidance_scale)``.
+    ``guidance_scale`` stays a Python float baked at capture because eager
+    scalar-multiplication semantics cannot be reproduced bitwise by a device
+    tensor (a bf16 scalar would round e.g. 1.3). Any key that is not yet
+    captured is captured on first use; if capture itself fails the executor
+    disables itself and the caller falls back to eager permanently.
+    """
+
+    def __init__(
+        self,
+        sampler: VibeVoiceDiffusionSampler,
+        diffusion_head: VibeVoiceDiffusionHead,
+    ) -> None:
+        self._sampler = sampler
+        self._head = diffusion_head
+        self._entries: dict[tuple[int, int, float], _DiffusionGraphEntry] = {}
+        self._pool = None
+        self._disabled = False
+
+    def sample(
+        self,
+        positive_condition: torch.Tensor,
+        negative_condition: torch.Tensor,
+        noise: torch.Tensor,
+        *,
+        guidance_scale: float,
+        num_inference_steps: int,
+    ) -> torch.Tensor | None:
+        """Return the denoised latents via graph replay, or None for eager."""
+        if self._disabled or not noise.is_cuda:
+            return None
+        key = (
+            int(positive_condition.shape[0]),
+            int(num_inference_steps),
+            float(guidance_scale),
+        )
+        entry = self._entries.get(key)
+        if entry is None:
+            try:
+                entry = self._capture(key, positive_condition, negative_condition, noise)
+            except Exception:
+                self._disabled = True
+                logger.warning(
+                    "VibeVoice diffusion CUDA-graph capture failed; falling back to eager diffusion permanently.",
+                    exc_info=True,
+                )
+                return None
+            self._entries[key] = entry
+        with torch.inference_mode():
+            entry.positive.copy_(positive_condition)
+            entry.negative.copy_(negative_condition)
+            entry.noise.copy_(noise)
+            entry.graph.replay()
+        return entry.latent_out[: entry.batch_size].unsqueeze(1)
+
+    def _capture(
+        self,
+        key: tuple[int, int, float],
+        positive_condition: torch.Tensor,
+        negative_condition: torch.Tensor,
+        noise: torch.Tensor,
+    ) -> _DiffusionGraphEntry:
+        batch_size, steps, guidance_scale = key
+        head_parameter = next(self._head.parameters(), None)
+        if head_parameter is None or not head_parameter.is_cuda:
+            raise RuntimeError("VibeVoice diffusion graph capture requires a CUDA diffusion head.")
+        device = head_parameter.device
+        dtype = head_parameter.dtype
+
+        entry = _DiffusionGraphEntry(
+            batch_size=batch_size,
+            positive=torch.empty_like(positive_condition, device=device, dtype=dtype),
+            negative=torch.empty_like(negative_condition, device=device, dtype=dtype),
+            noise=torch.empty_like(noise, device=device, dtype=dtype),
+        )
+        entry.positive.copy_(positive_condition)
+        entry.negative.copy_(negative_condition)
+        entry.noise.copy_(noise)
+
+        # Fresh dedicated scheduler. The schedule stays on CPU: every
+        # schedule-scalar computation (log/exp in the DPM update) runs on the
+        # CPU exactly like the eager path — verified bitwise, because CPU and
+        # GPU transcendental kernels are not identically rounded. Zero-dim
+        # CPU scalars consumed by GPU elementwise ops are baked as kernel
+        # arguments at capture time (no H2D), so replay reuses the exact
+        # capture-time values, which are constant per (steps) schedule. The
+        # only capture-illegal op is the per-step timestep H2D via ``.to()``;
+        # precompute those GPU tensors once before capture.
+        scheduler = self._sampler.create_scheduler()
+        scheduler.set_timesteps(num_inference_steps=steps)
+
+        def reset_solver_state() -> None:
+            # Same mutable-state reset as the eager acquire_scheduler path.
+            scheduler.model_outputs = [None] * scheduler.config.solver_order
+            scheduler.lower_order_nums = 0
+            scheduler._step_index = 0
+            scheduler._begin_index = None
+
+        reset_solver_state()
+        timestep_batches = [t.repeat(2 * batch_size).to(device=device, dtype=dtype) for t in scheduler.timesteps]
+
+        def run_loop() -> torch.Tensor:
+            condition = torch.cat([entry.positive, entry.negative], dim=0)
+            projected_condition = self._head.cond_proj(condition)
+            latent = entry.noise.clone()
+            for timestep, timestep_batch in zip(scheduler.timesteps, timestep_batches, strict=True):
+                shared_latent = latent[:batch_size]
+                combined_latent = torch.cat([shared_latent, shared_latent], dim=0)
+                prediction = self._head.forward_with_projected_condition(
+                    combined_latent,
+                    timestep_batch,
+                    projected_condition,
+                )
+                conditional_prediction = prediction[:batch_size]
+                unconditional_prediction = prediction[batch_size:]
+                guided_prediction = unconditional_prediction + float(guidance_scale) * (
+                    conditional_prediction - unconditional_prediction
+                )
+                solver_prediction = torch.cat([guided_prediction, guided_prediction], dim=0)
+                latent = scheduler.step(
+                    solver_prediction,
+                    timestep,
+                    latent,
+                ).prev_sample
+            return latent
+
+        with torch.inference_mode():
+            # Warm up allocator/cuBLAS on a side stream, then capture. The
+            # warmup consumes the solver's Python state (step_index advances
+            # to `steps`), so reset before the capture run unrolls the exact
+            # same order/kernel sequence as a fresh eager token.
+            side_stream = torch.cuda.Stream(device)
+            side_stream.wait_stream(torch.cuda.current_stream(device))
+            with torch.cuda.stream(side_stream):
+                run_loop()
+            torch.cuda.current_stream(device).wait_stream(side_stream)
+            reset_solver_state()
+
+            if self._pool is None:
+                self._pool = torch.cuda.graph_pool_handle()
+            graph = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(graph, pool=self._pool):
+                latent_out = run_loop()
+        entry.graph = graph
+        entry.latent_out = latent_out
+        # Keep the precomputed per-step timestep tensors alive: the captured
+        # head kernels read their GPU addresses on every replay.
+        entry.timestep_batches = timestep_batches
+        return entry
+
+
+class _DiffusionGraphEntry:
+    """Static buffers and the captured graph for one diffusion loop key."""
+
+    def __init__(
+        self,
+        *,
+        batch_size: int,
+        positive: torch.Tensor,
+        negative: torch.Tensor,
+        noise: torch.Tensor,
+    ) -> None:
+        self.batch_size = batch_size
+        self.positive = positive
+        self.negative = negative
+        self.noise = noise
+        self.graph: torch.cuda.CUDAGraph | None = None
+        self.latent_out: torch.Tensor | None = None
+        self.timestep_batches: list[torch.Tensor] = []
+
+
 __all__ = [
+    "VibeVoiceDiffusionGraphExecutor",
     "VibeVoiceDiffusionHead",
     "VibeVoiceDiffusionSampler",
     "VibeVoiceRMSNorm",

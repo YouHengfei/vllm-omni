@@ -16,6 +16,9 @@ logger = init_logger(__name__)
 class VibeVoiceRuntimeConfig:
     negative_kv_cache_memory_bytes: int = 4 * 1024**3
     negative_kv_activation_margin_bytes: int = 512 * 1024**2
+    # Phase C1: replay the fixed-step DPM denoising loop through manual CUDA
+    # graphs (bitwise identical to eager). Disable to force the eager loop.
+    diffusion_cuda_graph: bool = True
 
     @classmethod
     def from_vllm_config(cls, vllm_config: Any) -> VibeVoiceRuntimeConfig:
@@ -34,14 +37,19 @@ class VibeVoiceRuntimeConfig:
             )
             return cls()
 
-        known_fields = {field.name for field in dataclasses.fields(cls)}
-        values: dict[str, int] = {}
+        field_types = {field.name: type(field.default) for field in dataclasses.fields(cls)}
+        values: dict[str, Any] = {}
         for key, value in raw.items():
-            if key not in known_fields:
+            if key not in field_types:
                 logger.warning(
                     "Ignoring unknown VibeVoice runtime config key: %s",
                     key,
                 )
+                continue
+            if field_types[key] is bool:
+                if not isinstance(value, bool):
+                    raise ValueError(f"VibeVoice runtime config {key} must be a bool, got {value!r}.")
+                values[key] = value
                 continue
             if isinstance(value, bool):
                 raise ValueError(f"VibeVoice runtime config {key} must be an integer, not bool.")

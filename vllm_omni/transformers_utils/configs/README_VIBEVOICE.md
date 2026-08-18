@@ -1741,7 +1741,25 @@ HTTP/lifecycle + RTF/TTFA 对比写入本节。
   - 性能（B=4，441 transition 均值）：**negative_forward 22.3→9.9ms（-55%）**；
     C4 聚合吞吐 **4.35→5.60 audio-s/wall-s（+29%）**；C4 per-request RTF
     0.86-0.91→0.66-0.70；4 并发 wall 30.3→23.0s。B=1 RTF 0.479（共享卡基线噪声内）。
-- Phase C1（diffusion graph）：预期 10.8→~4ms。
+- Phase C1（diffusion loop 手动 CUDA graph）完成：
+  - `VibeVoiceDiffusionGraphExecutor`：手动 capture 整个 10-step DPM loop（含
+    `cond_proj` 外提——逐位一致），graph key=`(B_active, steps, guidance)`；
+    guidance 保持 Python float 烘焙（device 标量会 bf16 舍入 1.3，无法逐位复刻
+    eager 的 python-float 乘法语义）。capture 失败永久回退 eager。
+  - 关键技术发现：diffusers 在 **CPU 上算 schedule 标量**（log/exp），CPU 与 GPU
+    超越函数 kernel 非同舍入——把 sigmas 移到 GPU 会引入 ~0.03 bf16 漂移（> golden
+    atol=0.03）。解法：schedule 留 CPU；0-dim CPU 标量被 GPU elementwise op 消费时
+    **作为 kernel 参数烘焙**（无 H2D），replay 复用 capture 时的精确值（schedule
+    按 steps 恒定）。唯一 capture 非法 op 是每步 timestep 的 `.to()` H2D——
+    capture 前预计算 10 个 GPU timestep_batch 一次解决。无需 pinning mode、
+    无需重写 solver。
+  - 数值门禁：graph-vs-eager 逐位对照（B∈{1,2,4}、连续 token、guidance/steps 变体、
+    capture 失败回退）5 passed；golden 3-step cached PR parity 7 passed/1 skipped。
+  - 性能（B=4，441 transition 均值）：**diffusion 11.3→3.2ms（-72%）**；
+    B=1 RTF 0.431→0.343（-20%）；B=4 聚合 5.60→6.01 audio-s/wall-s；
+    transition 44→36ms。m4a_decode（13.3ms）与 negative_forward（9.7ms）不变
+    （分别是 C2 与已完成的 B 的目标）。
+  - runtime config 开关 `diffusion_cuda_graph: bool = True`（默认开，可回退 eager）。
 - Phase C2（M4a per-slot graph）：预期 13.2→~3-4ms。
 - Phase C3（positive FULL decode graph）：预期 11.8→<2ms（收益上修）。
 - 预期合计：~44ms → ~12-15ms/token，RTF 0.44→~0.10。

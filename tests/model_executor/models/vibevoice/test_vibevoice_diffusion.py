@@ -225,6 +225,39 @@ def test_cached_scheduler_handles_alternating_step_counts() -> None:
         assert torch.equal(actual, expected)
 
 
+def test_forward_with_projected_condition_is_bitwise_identical() -> None:
+    """cond_proj hoist used by the graph executor must not change values."""
+    from vllm_omni.model_executor.models.vibevoice.diffusion import (
+        VibeVoiceDiffusionHead,
+    )
+
+    config = SimpleNamespace(
+        audio_config=SimpleNamespace(hidden_size=64),
+        hidden_size=96,
+        intermediate_size=128,
+        hidden_act="silu",
+        mlp_bias=False,
+        rms_norm_eps=1e-6,
+        num_head_layers=3,
+        frequency_embedding_size=32,
+        diffusion_max_period=10_000,
+    )
+    torch.manual_seed(0)
+    head = VibeVoiceDiffusionHead(config).eval()
+    noisy = torch.randn(4, 64)
+    timesteps = torch.full((4,), 500.0)
+    condition = torch.randn(4, 96)
+
+    with torch.inference_mode():
+        expected = head(noisy, timesteps, condition)
+        actual = head.forward_with_projected_condition(
+            noisy,
+            timesteps,
+            head.cond_proj(condition),
+        )
+    assert torch.equal(actual, expected)
+
+
 def test_diffusers_scheduler_is_step_exact_with_microsoft_solver() -> None:
     microsoft_scheduler_cls = _load_microsoft_scheduler()
     sampler = _sampler()
