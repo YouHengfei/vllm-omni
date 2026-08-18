@@ -237,6 +237,9 @@ class VibeVoiceModel(nn.Module):
         # failure or non-CUDA input.
         self.diffusion_graph_enabled = False
         self._diffusion_graph_executor = None
+        # Phase C2: lazily-created CUDA-graph replay of the M4a decode path.
+        self.decode_graph_enabled = False
+        self._decode_graph_executor = None
         # Like the diffusion sampler, this kernel receives and returns caches;
         # it never owns mutable request state.
         self.audio_token_decoder = VibeVoiceAudioTokenDecoder.from_model_config(config)
@@ -306,6 +309,24 @@ class VibeVoiceModel(nn.Module):
         semantic_cache: Any = None,
     ) -> VibeVoiceAudioTokenDecodeOutput:
         """Decode one acoustic latent and produce semantic AR feedback."""
+        if self.decode_graph_enabled and audio_latent.is_cuda and acoustic_cache is not None:
+            from .audio_decode import VibeVoiceDecodeGraphExecutor
+
+            if self._decode_graph_executor is None:
+                self._decode_graph_executor = VibeVoiceDecodeGraphExecutor(self.audio_token_decoder)
+            replayed = self._decode_graph_executor.decode(
+                audio_tower=self.audio_tower,
+                semantic_encoder=self.semantic_tokenizer_encoder,
+                acoustic_projector=self.multi_modal_projector,
+                semantic_connector=self.semantic_connector,
+                latent_scaling_factor=self.latent_scaling_factor,
+                latent_bias_factor=self.latent_bias_factor,
+                audio_latent=audio_latent,
+                acoustic_cache=acoustic_cache,
+                semantic_cache=semantic_cache,
+            )
+            if replayed is not None:
+                return replayed
         return self.audio_token_decoder.decode_audio_token(
             audio_tower=self.audio_tower,
             semantic_encoder=self.semantic_tokenizer_encoder,
@@ -379,6 +400,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         self._negative_kv_branch: VibeVoiceNegativeKVBranch | None = None
         runtime_config = VibeVoiceRuntimeConfig.from_vllm_config(vllm_config)
         self.model.diffusion_graph_enabled = runtime_config.diffusion_cuda_graph
+        self.model.decode_graph_enabled = runtime_config.decode_cuda_graph
         self.named_kv_branch_request = NamedKVBranchRequest(
             name="negative",
             memory_bytes=runtime_config.negative_kv_cache_memory_bytes,

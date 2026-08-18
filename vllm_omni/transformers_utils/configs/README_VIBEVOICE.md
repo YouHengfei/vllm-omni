@@ -1779,6 +1779,20 @@ HTTP/lifecycle + RTF/TTFA 对比写入本节。
     （所有 GPU 的 `torch.cuda.is_available()` 均失败，`nvidia-smi` 正常——疑似先前进程被强杀
     导致 CUDA runtime 上下文损坏）。CPU 回归中 `pin_memory()` 测试因此 flake。待驱动恢复后
     补跑 GPU 门禁（conv cache reset + golden + HTTP + C2 probe）。代码已 lint/compile 通过。
-- Phase C2（M4a per-slot graph）：预期 13.2→~3-4ms。
+- Phase C2（M4a per-slot 手动 CUDA graph）：代码已实现但**默认关闭**。
+  - `VibeVoiceDecodeGraphExecutor`：per-request graph（挂在 acoustic_cache 对象上），
+    save/restore cache 协议（capture/warmup 消费 cache 状态，clone+copy_ 保护），
+    bitwise 已验证（standalone probe：14.6→4.6ms，5 token 逐位一致；GPU 验收 3 passed）。
+  - **EngineCore 集成受阻**：C2 graph 的 pool 与 C1 diffusion graph 的 pool 在同一 worker
+    进程内冲突——`capture_begin` 报 `it->second->use_count > 0`（PyTorch CUDACachingAllocator
+    内部断言），capture 失败后 CUDA runtime 状态损坏导致后续 `torch.randn` 报
+    `Offset increment outside graph capture`。根因是两个独立 graph pool 在同一 device/context
+    下的 use_count 交互；standalone 测试不触发（无 C1 graph 共存）。
+  - **决策**：`decode_cuda_graph: bool = False`（默认关闭），代码保留为 experimental。
+    C1 diffusion graph 默认开（已验证无冲突）。C2 的 14.6→4.6ms 收益已 standalone 验证，
+    EngineCore 集成需后续解决 pool 交互（选项：合并 C1+C2 为单一 graph、独立 CUDA stream/
+    context、或 C2 改用 vLLM 的 graph capture 机制而非裸 torch.cuda.graph）——记入 Phase D。
+  - 全量门禁（C2 关闭）：golden 7 passed/1 skipped；HTTP 6 passed；perf 2 passed。
+    B=1 RTF 0.331；B=4 聚合 7.14 audio-s/wall-s（共享卡噪声内，C1 贡献）。
 - Phase C3（positive FULL decode graph）：预期 11.8→<2ms（收益上修）。
 - 预期合计：~44ms → ~12-15ms/token，RTF 0.44→~0.10。

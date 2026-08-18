@@ -18,6 +18,9 @@ from typing import Any
 
 import torch
 from torch import nn
+from vllm.logger import init_logger
+
+logger = init_logger(__name__)
 
 
 @dataclass(slots=True)
@@ -188,7 +191,163 @@ class VibeVoiceAudioTokenDecoder:
         )
 
 
+class _DecodeGraphEntry:
+    """Static I/O buffers and the captured graph for one request's decode loop."""
+
+    def __init__(self, latent_in: torch.Tensor) -> None:
+        self.latent_in = latent_in
+        self.graph: torch.cuda.CUDAGraph | None = None
+        self.audio_out: torch.Tensor | None = None
+        self.next_embedding: torch.Tensor | None = None
+
+
+class VibeVoiceDecodeGraphExecutor:
+    """Manual CUDA-graph replay of ``decode_audio_token`` for one request.
+
+    Phase C2 of the performance plan. The decode path is stateful: every
+    causal Conv1d layer updates its padding cache in place, so the cache is
+    both an input and an output of the graph. Capture/warmup consume cache
+    state; a save/restore protocol (clone before, copy_ after) keeps the
+    cache at the correct token boundary so replay advances it exactly like
+    eager. Replay is bitwise identical to eager (same kernels, same order).
+
+    The graph is per-request: it is captured against the request's own
+    acoustic/semantic cache buffer addresses and stored on the acoustic cache
+    object (``_vv_decode_graph``) so it lives exactly as long as the cache.
+    Segment boundaries zero the caches in place (``_reset_conv_caches``),
+    keeping addresses stable so the graph stays valid across segments.
+    """
+
+    def __init__(self, decoder: VibeVoiceAudioTokenDecoder) -> None:
+        self._decoder = decoder
+        self._pool: Any = None
+        self._disabled = False
+
+    def decode(
+        self,
+        *,
+        audio_tower: nn.Module,
+        semantic_encoder: nn.Module,
+        acoustic_projector: nn.Module,
+        semantic_connector: nn.Module,
+        latent_scaling_factor: torch.Tensor,
+        latent_bias_factor: torch.Tensor,
+        audio_latent: torch.Tensor,
+        acoustic_cache: Any,
+        semantic_cache: Any,
+    ) -> VibeVoiceAudioTokenDecodeOutput | None:
+        """Replay the captured decode graph, or None to fall back to eager."""
+        if self._disabled or not audio_latent.is_cuda or acoustic_cache is None:
+            return None
+        entry = getattr(acoustic_cache, "_vv_decode_graph", None)
+        if entry is None:
+            try:
+                entry = self._capture(
+                    audio_tower=audio_tower,
+                    semantic_encoder=semantic_encoder,
+                    acoustic_projector=acoustic_projector,
+                    semantic_connector=semantic_connector,
+                    latent_scaling_factor=latent_scaling_factor,
+                    latent_bias_factor=latent_bias_factor,
+                    audio_latent=audio_latent,
+                    acoustic_cache=acoustic_cache,
+                    semantic_cache=semantic_cache,
+                )
+            except Exception:
+                self._disabled = True
+                logger.warning(
+                    "VibeVoice decode CUDA-graph capture failed; falling back to eager decode permanently.",
+                    exc_info=True,
+                )
+                return None
+            acoustic_cache._vv_decode_graph = entry
+        entry.latent_in.copy_(audio_latent)
+        entry.graph.replay()
+        return VibeVoiceAudioTokenDecodeOutput(
+            audio=entry.audio_out,
+            semantic_latent=None,
+            next_embedding=entry.next_embedding,
+            acoustic_cache=acoustic_cache,
+            semantic_cache=semantic_cache,
+        )
+
+    def _capture(
+        self,
+        *,
+        audio_tower: nn.Module,
+        semantic_encoder: nn.Module,
+        acoustic_projector: nn.Module,
+        semantic_connector: nn.Module,
+        latent_scaling_factor: torch.Tensor,
+        latent_bias_factor: torch.Tensor,
+        audio_latent: torch.Tensor,
+        acoustic_cache: Any,
+        semantic_cache: Any,
+    ) -> _DecodeGraphEntry:
+        device = audio_latent.device
+        latent_in = audio_latent.clone()
+        entry = _DecodeGraphEntry(latent_in)
+
+        def run() -> VibeVoiceAudioTokenDecodeOutput:
+            return self._decoder.decode_audio_token(
+                audio_tower=audio_tower,
+                semantic_encoder=semantic_encoder,
+                acoustic_projector=acoustic_projector,
+                semantic_connector=semantic_connector,
+                latent_scaling_factor=latent_scaling_factor,
+                latent_bias_factor=latent_bias_factor,
+                audio_latent=latent_in,
+                acoustic_cache=acoustic_cache,
+                semantic_cache=semantic_cache,
+            )
+
+        with torch.inference_mode():
+            snap = self._snapshot(acoustic_cache, semantic_cache)
+            side = torch.cuda.Stream(device=device)
+            side.wait_stream(torch.cuda.current_stream(device))
+            with torch.cuda.stream(side):
+                run()
+            torch.cuda.current_stream(device).wait_stream(side)
+            self._restore(snap, acoustic_cache, semantic_cache)
+
+            if self._pool is None:
+                self._pool = torch.cuda.graph_pool_handle()
+            graph = torch.cuda.CUDAGraph()
+            snap2 = self._snapshot(acoustic_cache, semantic_cache)
+            with torch.cuda.graph(graph, pool=self._pool):
+                out = run()
+            self._restore(snap2, acoustic_cache, semantic_cache)
+
+        entry.graph = graph
+        entry.audio_out = out.audio
+        entry.next_embedding = out.next_embedding
+        return entry
+
+    @staticmethod
+    def _snapshot(acoustic_cache: Any, semantic_cache: Any) -> tuple[list, list]:
+        snaps: list[list] = []
+        for cache in (acoustic_cache, semantic_cache):
+            layers = getattr(cache, "layers", None)
+            snaps.append([layer.cache.clone() for layer in layers.values()] if isinstance(layers, dict) else [])
+        return snaps[0], snaps[1]
+
+    @staticmethod
+    def _restore(
+        snap: tuple[list, list],
+        acoustic_cache: Any,
+        semantic_cache: Any,
+    ) -> None:
+        for cache, layers_snap in zip((acoustic_cache, semantic_cache), snap, strict=True):
+            layers = getattr(cache, "layers", None)
+            if not isinstance(layers, dict):
+                continue
+            for layer, saved in zip(layers.values(), layers_snap, strict=True):
+                if getattr(layer, "is_initialized", False) and layer.cache is not None:
+                    layer.cache.copy_(saved)
+
+
 __all__ = [
     "VibeVoiceAudioTokenDecodeOutput",
     "VibeVoiceAudioTokenDecoder",
+    "VibeVoiceDecodeGraphExecutor",
 ]
