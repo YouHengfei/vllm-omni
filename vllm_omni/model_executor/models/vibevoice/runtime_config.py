@@ -21,12 +21,9 @@ class VibeVoiceRuntimeConfig:
     diffusion_cuda_graph: bool = True
     # Phase C2: replay the M4a decode (acoustic decoder + semantic encoder +
     # projectors) through a per-request manual CUDA graph (bitwise identical
-    # to eager). Experimental: the decode graph's pool currently conflicts
-    # with the Phase C1 diffusion graph pool inside the EngineCore worker
-    # (PyTorch CUDACachingAllocator use_count assertion). Disabled by default
-    # until the pool interaction is resolved; the standalone probe verified
-    # 14.6 -> 4.6 ms with bitwise-equal replay.
-    decode_cuda_graph: bool = False
+    # to eager). Shares a graph pool with the C1 diffusion graph executor to
+    # satisfy PyTorch's CUDACachingAllocator co-residency requirement.
+    decode_cuda_graph: bool = True
 
     @classmethod
     def from_vllm_config(cls, vllm_config: Any) -> VibeVoiceRuntimeConfig:

@@ -240,6 +240,11 @@ class VibeVoiceModel(nn.Module):
         # Phase C2: lazily-created CUDA-graph replay of the M4a decode path.
         self.decode_graph_enabled = False
         self._decode_graph_executor = None
+        # Shared graph pool for C1 (diffusion) and C2 (decode): PyTorch's
+        # CUDACachingAllocator requires co-resident graphs to share one pool
+        # (capture_begin checks global pool use_count; separate pools trigger
+        # the ``use_count > 0`` assertion). See make_graphed_callables.
+        self._shared_graph_pool = None
         # Like the diffusion sampler, this kernel receives and returns caches;
         # it never owns mutable request state.
         self.audio_token_decoder = VibeVoiceAudioTokenDecoder.from_model_config(config)
@@ -283,6 +288,9 @@ class VibeVoiceModel(nn.Module):
                     self.diffusion_sampler,
                     self.diffusion_head,
                 )
+                if self._shared_graph_pool is None:
+                    self._shared_graph_pool = torch.cuda.graph_pool_handle()
+                self._diffusion_graph_executor._pool = self._shared_graph_pool
             replayed = self._diffusion_graph_executor.sample(
                 positive_condition,
                 negative_condition,
@@ -314,6 +322,9 @@ class VibeVoiceModel(nn.Module):
 
             if self._decode_graph_executor is None:
                 self._decode_graph_executor = VibeVoiceDecodeGraphExecutor(self.audio_token_decoder)
+                if self._shared_graph_pool is None:
+                    self._shared_graph_pool = torch.cuda.graph_pool_handle()
+                self._decode_graph_executor._pool = self._shared_graph_pool
             replayed = self._decode_graph_executor.decode(
                 audio_tower=self.audio_tower,
                 semantic_encoder=self.semantic_tokenizer_encoder,

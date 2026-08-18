@@ -1779,7 +1779,19 @@ HTTP/lifecycle + RTF/TTFA 对比写入本节。
     （所有 GPU 的 `torch.cuda.is_available()` 均失败，`nvidia-smi` 正常——疑似先前进程被强杀
     导致 CUDA runtime 上下文损坏）。CPU 回归中 `pin_memory()` 测试因此 flake。待驱动恢复后
     补跑 GPU 门禁（conv cache reset + golden + HTTP + C2 probe）。代码已 lint/compile 通过。
-- Phase C2（M4a per-slot 手动 CUDA graph）：代码已实现但**默认关闭**。
+- Phase C2（M4a per-slot 手动 CUDA graph）完成（共享 pool 解法）：
+  - `VibeVoiceDecodeGraphExecutor`：per-request graph（挂在 acoustic_cache 对象上），
+    save/restore cache 协议，bitwise 已验证。
+  - **pool 冲突根因与解法**：C1（diffusion）和 C2（decode）用不同 `graph_pool_handle()`
+    时，CUDACachingAllocator 在 `capture_begin` 做全局 pool use_count 检查——C1 的 pool
+    有 tensor 被 C1 的 CUDAGraph 永久持有（use_count > 0）→ 断言。`torch.cuda.graph.__enter__`
+    已做 `synchronize()` + `empty_cache()`，无效。**解法：C1 和 C2 共享同一个 graph pool**
+    （`make_graphed_callables` 的官方设计模式——"All captures share a mempool"）。
+    `VibeVoiceModel._shared_graph_pool` lazy 创建，传给两个 executor 的 `_pool`。
+  - `decode_cuda_graph: bool = True`（默认开）。
+  - 数值门禁：graph-vs-eager 逐位 3 passed；golden 7 passed/1 skipped；HTTP 6 passed。
+  - 性能（C1+C2+C3 全开）：B=1 RTF 0.310；B=4 聚合 **8.94 audio-s/wall-s**（基线 4.35→8.94，
+    +105%）；B=4 per-req RTF 0.43-0.45。
   - `VibeVoiceDecodeGraphExecutor`：per-request graph（挂在 acoustic_cache 对象上），
     save/restore cache 协议（capture/warmup 消费 cache 状态，clone+copy_ 保护），
     bitwise 已验证（standalone probe：14.6→4.6ms，5 token 逐位一致；GPU 验收 3 passed）。
