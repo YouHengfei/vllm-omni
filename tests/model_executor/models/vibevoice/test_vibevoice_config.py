@@ -347,7 +347,7 @@ def test_single_stage_deploy_defaults_match_vibevoice_generation_contract():
     assert stage.enforce_eager is True
     assert stage.async_scheduling is True
     assert stage.max_model_len == 65536
-    assert stage.max_num_seqs == 2
+    assert stage.max_num_seqs == 4
     assert stage.engine_extras["kv_cache_memory_bytes"] == 6 * 1024**3
     assert stage.engine_extras["additional_config"] == {
         "vibevoice_runtime_config": {

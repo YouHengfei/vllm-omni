@@ -1708,7 +1708,19 @@ HTTP/lifecycle + RTF/TTFA 对比写入本节。
     `test_vibevoice_negative_kv_conformance_gpu.py` TID251（`torch.cuda.empty_cache`→`torch.accelerator.empty_cache`）。
   - CPU 回归：175 passed / 5 skipped（VibeVoice 全量 CPU 套件）。
   - 真实权重 correctness：baseline 测试 `1 passed`（finish=stop，232 tokens，finite audio）。
-- Phase A+（max_num_seqs 2→4）：待执行。
+- Phase A+（max_num_seqs 2→4）完成：
+  - yaml `max_num_seqs=4` + config 断言同步；KV 容量由 startup guard 自动复核通过
+    （negative 实测 18,724 blocks / 299,584 tokens ≥ 4×65,536=262,144）。
+  - HTTP 4 并发门禁 `6 passed`；B=1 基线复测 RTF=0.431（与 Phase A 一致）。
+  - 4 并发长文本 SSE：4/4 finish=stop，per-request RTF 0.86-0.91，wall=30.3s，
+    total_audio=132.0s，**aggregate_x=4.35**（B=1 单流为 2.32x）。
+  - B=4 阶段分解（441 transition 均值）：diffusion=11.3ms（跨请求已 batch，平稳）、
+    m4a_decode=13.5ms×逐请求串行、**negative_forward=22.3ms**（~2.4 活性请求×串行，
+    Phase B 目标）、positive_forward=9.4ms（vLLM 已 batch）。
+  - 记录的问题（计划外，不就地改 runtime）：serving 层抓取用户 URL 时继承宿主代理
+    env，错误信息与可达性依赖宿主代理状态（`rejects_invalid_requests` 首跑因此 flake）；
+    留待 serving robustness 工作评估。测试侧修复（test-only）：测试服务器 env 注入
+    `NO_PROXY=127.0.0.1,localhost`，localhost 抓取错误信息确定后复跑全绿。
 - Phase B（negative batched forward）：待执行。预期 negative_forward 8.5→~4-5ms。
 - Phase C1（diffusion graph）：预期 10.8→~4ms。
 - Phase C2（M4a per-slot graph）：预期 13.2→~3-4ms。

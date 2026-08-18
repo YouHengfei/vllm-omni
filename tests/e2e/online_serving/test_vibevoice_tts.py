@@ -64,7 +64,14 @@ _SERVER_PARAMS = [
                 str(get_asset_path("").resolve()),
                 "--disable-log-stats",
             ],
-            env_dict={"VLLM_USE_FLASHINFER_SAMPLER": "0"},
+            env_dict={
+                "VLLM_USE_FLASHINFER_SAMPLER": "0",
+                # Deterministic media-fetch errors: the server-side fetch must
+                # bypass the host proxy for localhost URLs, otherwise the
+                # rejection message depends on whether the proxy is running.
+                "NO_PROXY": "127.0.0.1,localhost",
+                "no_proxy": "127.0.0.1,localhost",
+            },
             init_timeout=900,
             stage_init_timeout=600,
             require_real_weights=True,

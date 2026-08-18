@@ -1,7 +1,8 @@
-# Phase A baseline: long-form VibeVoice generation via SSE, measure RTF/TTFA.
+# Phase A/A+ baseline: long-form VibeVoice generation via SSE, measure RTF/TTFA.
 import base64
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import httpx
@@ -29,7 +30,11 @@ _SERVER = pytest.param(
             str(get_asset_path("").resolve()),
             "--disable-log-stats",
         ],
-        env_dict={"VLLM_USE_FLASHINFER_SAMPLER": "0"},
+        env_dict={
+            "VLLM_USE_FLASHINFER_SAMPLER": "0",
+            "NO_PROXY": "127.0.0.1,localhost",
+            "no_proxy": "127.0.0.1,localhost",
+        },
         init_timeout=900,
         stage_init_timeout=600,
         require_real_weights=True,
@@ -97,3 +102,62 @@ def test_vibevoice_perf_baseline_long_form_sse(omni_server) -> None:
     )
     assert n_tokens > 5
     assert rtf < 1.0
+
+
+def _stream_one_long_form(url: str, model: str, index: int) -> dict:
+    """Drive one SSE long-form request; return timing/audio counters."""
+    payload = {
+        "model": model,
+        "input": f"{LONG_TEXT} Variation number {index}.",
+        "ref_audio": _REF,
+        "response_format": "pcm",
+        "stream": True,
+        "timeout": 300.0,
+    }
+    t0 = time.perf_counter()
+    total_pcm = bytearray()
+    finish_reason = None
+    with httpx.Client(trust_env=False, timeout=300) as client, client.stream("POST", url, json=payload) as resp:
+        assert resp.status_code == 200, resp.read().decode(errors="replace")
+        for line in resp.iter_lines():
+            if not line.startswith("data: "):
+                continue
+            event = json.loads(line.removeprefix("data: "))
+            if event["type"] == "speech.audio.delta":
+                total_pcm.extend(base64.b64decode(event["audio"]))
+            elif event["type"] == "speech.audio.done":
+                finish_reason = event.get("finish_reason")
+    total = time.perf_counter() - t0
+    return {
+        "total_s": total,
+        "audio_s": (len(total_pcm) // 2) / 24000.0,
+        "n_tokens": (len(total_pcm) // 2) // 3200,
+        "finish_reason": finish_reason,
+    }
+
+
+@pytest.mark.parametrize("omni_server", [_SERVER], indirect=True)
+def test_vibevoice_perf_concurrent4_sse(omni_server) -> None:
+    """Phase A+ gate: four concurrent long-form SSE streams on max_num_seqs=4.
+
+    Reports per-request RTF and aggregate audio throughput (audio seconds
+    produced per wall second). All four requests must finish naturally.
+    """
+    url = f"http://{omni_server.host}:{omni_server.port}/v1/audio/speech"
+    t0 = time.perf_counter()
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(lambda i: _stream_one_long_form(url, omni_server.model, i), range(4)))
+    wall = time.perf_counter() - t0
+    total_audio = sum(r["audio_s"] for r in results)
+    aggregate_x = total_audio / wall
+    for i, r in enumerate(results):
+        rtf = r["total_s"] / r["audio_s"] if r["audio_s"] > 0 else float("inf")
+        print(
+            f"\n[VIBEVOICE PERF C4] req{i} finish={r['finish_reason']} "
+            f"total={r['total_s'] * 1000:.0f}ms audio={r['audio_s']:.3f}s "
+            f"rtf={rtf:.3f} tokens={r['n_tokens']}"
+        )
+        assert r["finish_reason"] == "stop"
+        assert r["n_tokens"] > 5
+    print(f"\n[VIBEVOICE PERF C4] wall={wall:.2f}s total_audio={total_audio:.2f}s aggregate_x={aggregate_x:.2f}")
+    assert aggregate_x > 1.0

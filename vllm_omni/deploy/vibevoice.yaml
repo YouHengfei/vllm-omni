@@ -25,10 +25,13 @@ enable_chunked_prefill: true
 stages:
   - stage_id: 0
     devices: "0,1"
-    # Correctness-first fixed concurrency: two complete positive and negative
+    # Fixed safe concurrency (Phase A+): four complete positive and negative
     # sequences must remain resident, so KV-pressure preemption is unreachable.
+    # Capacity per rank (TP=2 shards the 2 KV heads): 4 x 65,536 tokens x
+    # 14 KiB/token = 3.5 GiB, within the 6 GiB positive / 4 GiB negative
+    # pools below; the startup guards re-verify both pools.
     tensor_parallel_size: 2
-    max_num_seqs: 2
+    max_num_seqs: 4
     gpu_memory_utilization: 0.9
     # The processor/MM infrastructure reserves capacity for up to eight
     # ordered audio items. This is not the speaker limit: serving accepts at
