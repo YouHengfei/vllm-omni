@@ -288,7 +288,11 @@ def test_natural_generation_reaches_audio_eos_then_model_eos(
     segment_count = token_ids.count(_AUDIO_EOS)
     assert segment_count >= 1
     if expected_segments is not None:
-        assert segment_count == expected_segments
+        # Output segment count is model-selected (see comment below); the
+        # expected value is a lower bound (>= one segment per speaker turn),
+        # not an exact count — the conv-cache reset at audio_bos changes the
+        # AR token path and may yield more segments than the leaky baseline.
+        assert segment_count >= expected_segments
     # Output audio segments are model-selected and are not specified to map
     # one-to-one to input speaker turns. Every generated segment after the
     # prompt's initial BOS must still have a generated BOS, and all segments
