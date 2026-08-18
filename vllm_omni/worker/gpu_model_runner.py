@@ -107,19 +107,13 @@ class OmniGPUModelRunner(GPUModelRunner):
 
         if not isinstance(request, NamedKVBranchRequest):
             raise TypeError(
-                "model.named_kv_branch_request must be a "
-                f"NamedKVBranchRequest, got {type(request).__name__}."
+                f"model.named_kv_branch_request must be a NamedKVBranchRequest, got {type(request).__name__}."
             )
         if request.name in self.named_kv_branches:
-            raise RuntimeError(
-                f"Named KV branch {request.name!r} was initialized twice."
-            )
+            raise RuntimeError(f"Named KV branch {request.name!r} was initialized twice.")
         bind = getattr(self.model, "bind_named_kv_branch", None)
         if not callable(bind):
-            raise TypeError(
-                "A model declaring named_kv_branch_request must implement "
-                "bind_named_kv_branch(store)."
-            )
+            raise TypeError("A model declaring named_kv_branch_request must implement bind_named_kv_branch(store).")
 
         branch = NamedCausalKVBranch(runner=self, request=request)
         try:
@@ -1864,6 +1858,24 @@ class OmniGPUModelRunner(GPUModelRunner):
                 input_ids = preprocess_input_ids
 
             flush_decode_batch()
+
+            # Phase C3: models that declare preprocess_finalize move their
+            # audio-token transition work out of forward() so forward() is a
+            # pure model call that vLLM can capture as a FULL decode graph.
+            finalize = getattr(self.model, "preprocess_finalize", None)
+            if callable(finalize):
+                extra_args_list: list[dict] = []
+                if getattr(self.model_config, "has_sampling_extra_args", False):
+                    for req_id in self.input_batch.req_ids:
+                        req = self.requests.get(req_id)
+                        sp = req.sampling_params if req else None
+                        extra_args_list.append(sp.extra_args if sp and sp.extra_args else {})
+                input_ids, inputs_embeds = finalize(
+                    input_ids=input_ids if input_ids is not None else preprocess_input_ids,
+                    inputs_embeds=inputs_embeds,
+                    req_ids=list(self.input_batch.req_ids),
+                    sampling_extra_args=extra_args_list,
+                )
 
             # run talker mtp decode
             if self.has_talker_mtp:

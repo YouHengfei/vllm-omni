@@ -1794,5 +1794,23 @@ HTTP/lifecycle + RTF/TTFA 对比写入本节。
     context、或 C2 改用 vLLM 的 graph capture 机制而非裸 torch.cuda.graph）——记入 Phase D。
   - 全量门禁（C2 关闭）：golden 7 passed/1 skipped；HTTP 6 passed；perf 2 passed。
     B=1 RTF 0.331；B=4 聚合 7.14 audio-s/wall-s（共享卡噪声内，C1 贡献）。
-- Phase C3（positive FULL decode graph）：预期 11.8→<2ms（收益上修）。
+- Phase C3（positive FULL decode graph + preprocess_finalize hook）完成：
+  - `VibeVoiceForConditionalGeneration.preprocess_finalize`：把全部 audio-token
+    transition（negative branch、diffusion、M4a、embed splice、negative-input 记录）
+    从 `forward()` 移出。`forward()` 退化为纯 `self.model(...)` → vLLM 可 capture。
+  - `gpu_model_runner._preprocess`：capability-gated 调用 `preprocess_finalize`（在逐请求
+    preprocess 循环后、capture 区前），传入 `sampling_extra_args`。未声明的模型零开销。
+  - `NamedCausalKVBranch` 放宽 `enforce_eager`：negative branch 自身仍 eager
+    （`override_forward_context` + 动态 metadata 不可 capture），positive forward 走 vLLM
+    FULL decode graph。两者不冲突（negative 在 capture 区外执行）。
+  - `vibevoice.yaml` `enforce_eager: false`；vLLM 自动配置 `cudagraph_mode=FULL_AND_PIECEWISE`、
+    `cudagraph_capture_sizes=[1,2,4,8]`。
+  - 数值门禁：golden 3-step cached PR parity 7 passed/1 skipped；HTTP 6 passed；perf 2 passed。
+  - 性能：B=1 RTF 0.331→0.326（TTFA 从 ~2800ms 降到 1368ms——graph 也加速了 prefill）；
+    B=4 聚合 6.57 audio-s/wall-s（共享卡噪声内）。
+  - 记录：`perf_timing` 的 `positive_forward` 计时在 compiled forward 中不触发（torch.compile
+    跳过 Python context manager）；`preprocess_finalize` 的 eager 阶段计时仍有效。harness 的
+    summary 触发条件（依赖 positive_forward 计数）需改用 transition 计数——记为 minor。
+  - 与 C2 的对比：C3 成功因为 positive forward 是 vLLM 原生 capture 路径（无自定义 graph pool）；
+    C2 失败因为用了裸 `torch.cuda.graph` + 自定义 pool 与 C1 冲突。
 - 预期合计：~44ms → ~12-15ms/token，RTF 0.44→~0.10。

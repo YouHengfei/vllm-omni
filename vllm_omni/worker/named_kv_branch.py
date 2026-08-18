@@ -221,7 +221,20 @@ class NamedCausalKVBranch:
         if config.speculative_config is not None:
             raise ValueError("Named causal KV v1 does not support speculative decode.")
         if not config.model_config.enforce_eager:
-            raise ValueError("Named causal KV v1 requires enforce_eager=True.")
+            # The negative branch itself always runs eager (dynamic metadata
+            # + override_forward_context are not capturable). Models that
+            # declare preprocess_finalize move the negative-branch work out of
+            # forward(), so vLLM may capture the positive forward as a FULL
+            # decode graph while the negative branch stays eager outside the
+            # capture region. The strict enforce_eager requirement is lifted;
+            # the model is responsible for keeping non-capturable work out of
+            # forward().
+            logger.info(
+                "Named causal KV branch %r running with enforce_eager=False; "
+                "the negative branch stays eager and the positive forward may "
+                "use CUDA graphs.",
+                self.name,
+            )
         transfer = config.kv_transfer_config
         if transfer is not None and transfer.kv_connector is not None:
             raise ValueError("Named causal KV v1 does not support KV connectors.")

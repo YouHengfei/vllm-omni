@@ -59,10 +59,11 @@ stages:
     max_model_len: 65536
     max_num_batched_tokens: 8192
 
-    # First-version correctness setting. Stateful diffusion and causal Conv1d
-    # padding caches are not safe to place under the generic vLLM CUDA graph
-    # path until dedicated capture/replay support is implemented.
-    enforce_eager: true
+    # Phase C3: the positive Qwen forward is now graph-capturable (audio-token
+    # transition work moved to preprocess_finalize). The negative branch and
+    # diffusion/M4a stay eager outside the capture region. FULL decode graphs
+    # eliminate per-layer FA3 metadata build + launch overhead.
+    enforce_eager: false
     async_scheduling: true
     # The pinned v1 profiler first runs the dummy placeholder text without MM
     # data, which intentionally trips VibeVoice's symmetric placeholder check.

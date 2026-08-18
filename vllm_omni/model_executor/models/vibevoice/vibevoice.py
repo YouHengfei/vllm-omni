@@ -854,24 +854,26 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
             multimodal_outputs=multimodal_outputs,
         )
 
-    def forward(
+    def preprocess_finalize(
         self,
-        input_ids: torch.Tensor | None,
-        positions: torch.Tensor,
-        intermediate_tensors: IntermediateTensors | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        sampling_extra_args: list[dict[str, Any]] | None = None,
-        **_: Any,
-    ) -> torch.Tensor | IntermediateTensors:
-        self._warn_if_named_kv_capability_unavailable()
+        *,
+        input_ids: torch.Tensor,
+        inputs_embeds: torch.Tensor | None,
+        req_ids: list[str],
+        sampling_extra_args: list[dict[str, Any]] | None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Run audio-token transitions before the graph-capturable forward.
+
+        Phase C3: moving the negative-branch advance, diffusion, M4a decode,
+        embed splice, and negative-input recording out of ``forward()`` makes
+        ``forward()`` a pure ``self.model(...)`` call that vLLM can capture as a
+        FULL decode CUDA graph. The deferred-RNG ordering is preserved because
+        the runner calls this hook after every per-request ``preprocess``
+        call, so the complete scheduled set is known.
+        """
         pending_request_ids = self._pending_request_ids
         pending_request_spans = self._pending_request_spans
         pending_audio_transitions = self._pending_audio_transitions
-        # preprocess() is invoked once per scheduled request. Flushing there
-        # lets request A delete a deferred request C that is also scheduled in
-        # the same multi-request forward before C reaches postprocess. At this
-        # point the complete scheduled set is known, so preserve all of it and
-        # clean only idle finished/aborted requests.
         self._stateful.flush_deferred_cleanup(
             exclude_request_ids=set(pending_request_ids),
         )
@@ -887,9 +889,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
             ):
                 self._stateful.set_runtime_controls(request_id, extra_args)
 
-        if pending_audio_transitions:
-            if inputs_embeds is None:
-                raise RuntimeError("VibeVoice audio-token feedback requires inputs_embeds.")
+        if pending_audio_transitions and inputs_embeds is not None:
             if self._negative_kv_branch is not None:
                 negative_request_ids = [request_id for request_id, _ in pending_audio_transitions]
                 negative_inputs: list[torch.Tensor] = []
@@ -921,8 +921,6 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
                         condition,
                     )
 
-            # Different request controls imply different DPM loops. Group by
-            # loop contract while preserving first-seen request order.
             transition_groups: dict[
                 tuple[float, int],
                 list[tuple[str, int]],
@@ -957,9 +955,6 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
                         torch.cat(next_embeddings, dim=0).to(inputs_embeds),
                     )
 
-        # Save the exact embedding consumed by the current positive Qwen step.
-        # If that step samples audio_token, the bound negative branch advances
-        # this embedding before M4a on the next runner iteration.
         if inputs_embeds is not None:
             for request_id, span_start, span_end in pending_request_spans:
                 state = self._stateful.get(request_id)
@@ -968,14 +963,37 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
                         request_id,
                         inputs_embeds[span_end - 1 : span_end],
                     )
+        return input_ids, inputs_embeds
 
-        with perf_timing.record("positive_forward"):
-            return self.model(
-                input_ids=input_ids,
-                positions=positions,
-                intermediate_tensors=intermediate_tensors,
+    def forward(
+        self,
+        input_ids: torch.Tensor | None,
+        positions: torch.Tensor,
+        intermediate_tensors: IntermediateTensors | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        sampling_extra_args: list[dict[str, Any]] | None = None,
+        **_: Any,
+    ) -> torch.Tensor | IntermediateTensors:
+        self._warn_if_named_kv_capability_unavailable()
+        # Phase C3: all audio-token transition work (negative branch,
+        # diffusion, M4a decode, embed splice, negative-input recording) has
+        # moved to preprocess_finalize, which the runner calls before this
+        # forward. sampling_extra_args is now consumed there; it is accepted
+        # here only for backward compatibility with runners that have not
+        # adopted the hook yet.
+        if self._pending_request_ids:
+            self.preprocess_finalize(
+                input_ids=input_ids if input_ids is not None else torch.empty(0),
                 inputs_embeds=inputs_embeds,
+                req_ids=self._pending_request_ids,
+                sampling_extra_args=sampling_extra_args,
             )
+        return self.model(
+            input_ids=input_ids,
+            positions=positions,
+            intermediate_tensors=intermediate_tensors,
+            inputs_embeds=inputs_embeds,
+        )
 
     def compute_logits(
         self,
