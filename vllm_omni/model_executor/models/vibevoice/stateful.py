@@ -274,8 +274,30 @@ class VibeVoiceStatefulInference:
         state.negative_condition = None
         state.negative_input_embedding = None
         state.negative_reset_pending = True
+        self._reset_conv_caches(state)
         if self._negative_kv_branch is not None:
             self._negative_kv_branch.reset_audio_segment(state.request_id)
+
+    @staticmethod
+    def _reset_conv_caches(state: VibeVoiceRequestState) -> None:
+        """Zero the causal Conv1d padding caches at every segment boundary.
+
+        Each audio segment (one speaker turn) must start from a zero
+        left-context, matching the official VibeVoiceTokenizerStreamingCache
+        ``set_to_zero`` intent that the Transformers PR batch path never
+        invoked. Zeroing in place keeps buffer addresses stable so any captured
+        decode graph remains valid across segments. A fresh (uninitialized)
+        cache is left untouched; its first update lazily allocates zeros.
+        """
+        for cache in (state.acoustic_cache, state.semantic_cache):
+            if cache is None:
+                continue
+            layers = getattr(cache, "layers", None)
+            if not isinstance(layers, dict):
+                continue
+            for layer in layers.values():
+                if getattr(layer, "is_initialized", False) and layer.cache is not None:
+                    layer.cache.zero_()
 
     def _finish_audio_segment(self, state: VibeVoiceRequestState) -> None:
         state.in_audio_segment = False

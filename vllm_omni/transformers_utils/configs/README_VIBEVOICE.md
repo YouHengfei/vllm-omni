@@ -1760,6 +1760,25 @@ HTTP/lifecycle + RTF/TTFA 对比写入本节。
     transition 44→36ms。m4a_decode（13.3ms）与 negative_forward（9.7ms）不变
     （分别是 C2 与已完成的 B 的目标）。
   - runtime config 开关 `diffusion_cuda_graph: bool = True`（默认开，可回退 eager）。
+- **Conv cache 跨 segment 泄漏修复（独立 correctness 修复，先于 C2）**：
+  - 发现：`_start_audio_segment` 不重置 acoustic/semantic conv cache，导致多 speaker
+    单请求多 segment 生成时 speaker B 的首 audio token 继承 speaker A 的尾部卷积上下文。
+    精读 PR `generation_vibevoice.py` 与官方 `VibeVoice` 仓库后确认：PR 的 batch `_sample`
+    多 speaker 路径（batch_size=1 单序列多 segment）同样不重置 conv cache——**PR 本身就泄漏**；
+    官方 streaming inference（`assert batch_size==1`，单 speaker）用另一套 cache 类
+    `VibeVoiceTokenizerStreamingCache`（按 `(layer_id, sample_idx)` 索引，有 `set_to_zero`/
+    `clear` per-sample reset API），但**这些 reset API 从未被调用**。即官方 cache 类设计了
+    per-segment reset 意图，PR 实现未落地。
+  - 修复：`_start_audio_segment` 调用 `_reset_conv_caches`——对已初始化的 conv cache layer
+    `zero_()`（等价于 fresh lazy-init 的全零，保持 buffer 地址稳定，C2 graph 跨 segment 仍有效）。
+    与官方 `set_to_zero` 意图一致，偏离 PR 实际行为（PR 泄漏）；golden 单 segment 测试不受影响。
+  - 新增多 segment 数值门禁（`test_vibevoice_conv_cache_reset_gpu.py`）：segment 1 跑 5 token
+    累积 cache → reset → segment 2 首 token 与"零 cache 独立生成"oracle 逐位一致；
+    另一测试确认不 reset 时确实泄漏（输出与 fresh start 不同）。
+  - **GPU 验证受阻**：宿主 CUDA 驱动进入 error 802 "system not yet initialized" 状态
+    （所有 GPU 的 `torch.cuda.is_available()` 均失败，`nvidia-smi` 正常——疑似先前进程被强杀
+    导致 CUDA runtime 上下文损坏）。CPU 回归中 `pin_memory()` 测试因此 flake。待驱动恢复后
+    补跑 GPU 门禁（conv cache reset + golden + HTTP + C2 probe）。代码已 lint/compile 通过。
 - Phase C2（M4a per-slot graph）：预期 13.2→~3-4ms。
 - Phase C3（positive FULL decode graph）：预期 11.8→<2ms（收益上修）。
 - 预期合计：~44ms → ~12-15ms/token，RTF 0.44→~0.10。
