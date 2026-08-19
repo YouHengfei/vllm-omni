@@ -39,6 +39,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Model name exposed by the running server.",
     )
     parser.add_argument(
+        "--tokenizer",
+        default=os.environ.get("VIBEVOICE_QUALITY_TOKENIZER", ""),
+        help="Tokenizer path (defaults to model path).",
+    )
+    parser.add_argument(
         "--dataset-path",
         default=os.environ.get("VIBEVOICE_QUALITY_DATASET", DEFAULT_SEED_TTS_HF_REPO),
         help="Seed-TTS local root or Hugging Face dataset id.",
@@ -162,6 +167,8 @@ def _run_locale(args: argparse.Namespace, locale: str, vllm_cli: str) -> tuple[P
         str(args.port),
         "--model",
         args.model,
+        "--tokenizer",
+        args.tokenizer or args.model,
         "--endpoint",
         "/v1/audio/speech",
         "--backend",
@@ -208,6 +215,8 @@ def _run_locale(args: argparse.Namespace, locale: str, vllm_cli: str) -> tuple[P
     env = os.environ.copy()
     env.update(
         {
+            "NO_PROXY": "127.0.0.1,localhost",
+            "no_proxy": "127.0.0.1,localhost",
             "SEED_TTS_WER_EVAL": "1",
             "SEED_TTS_SIM_EVAL": "0" if args.disable_sim else "1",
             "SEED_TTS_UTMOS_EVAL": "1" if args.enable_utmos else "0",

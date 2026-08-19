@@ -1212,7 +1212,15 @@ async def async_request_openai_audio_speech(
                                 message = message.decode("utf-8")
                             if message.startswith(":"):
                                 continue
-                            data_text = message.removeprefix("data: ")
+                            # SSE messages may carry an ``event:`` line before the
+                            # ``data:`` payload (OpenAI speech.audio.delta). Parse
+                            # only the ``data:`` line.
+                            data_lines = [
+                                line.removeprefix("data: ") for line in message.split("\n") if line.startswith("data: ")
+                            ]
+                            if not data_lines:
+                                continue
+                            data_text = data_lines[-1]
                             if data_text == "[DONE]":
                                 continue
                             event = json.loads(data_text)

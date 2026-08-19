@@ -1826,3 +1826,96 @@ HTTP/lifecycle + RTF/TTFA 对比写入本节。
   - 与 C2 的对比：C3 成功因为 positive forward 是 vLLM 原生 capture 路径（无自定义 graph pool）；
     C2 失败因为用了裸 `torch.cuda.graph` + 自定义 pool 与 C1 冲突。
 - 预期合计：~44ms → ~12-15ms/token，RTF 0.44→~0.10。
+
+### 13.6 评测结果与压测脚本（Seed-TTS-Eval 本地语料）
+
+Seed-TTS 语料已落本地 `/SharedData/youhf/dataset/Seed-TTS-Eval`（parquet 已转换为
+`{en,zh}/meta.lst` + `prompt-wavs/`，en=1088 行 / zh=2020 行）。
+
+#### 性能 benchmark（TP=2，GPU 6/7，H100，与 VoxCPM2 同口径）
+
+| 指标 | VibeVoice | VoxCPM2 |
+|---|---|---|
+| B=1 RTF | **0.302** | 0.175 |
+| B=1 TTFA | 1451 ms | — |
+| B=1 总耗时/音频 | 9.0 s / 29.9 s | 4.6 s / 26.6 s |
+| B=4 RTF | 0.394-0.398 | 0.360-0.395 |
+| B=4 聚合吞吐 | **9.99×** | 10.37× |
+
+结论：VibeVoice（1.5B Qwen + diffusion + 双 KV 分支）B=4 聚合吞吐 9.99×，与 VoxCPM2
+（10.37×）基本持平；B=1 RTF 0.302（VoxCPM2 0.175），差距主要来自 VibeVoice 每 audio
+token 的 diffusion（3.2ms）+ M4a decode（4.6ms graph）链路过重，且 TP=2 有集合通信开销
+（VoxCPM2 单卡）。
+
+#### 质量评测（8 prompts，Seed-TTS-Eval）
+
+| 指标 | EN | ZH |
+|---|---|---|
+| Mean WER/CER | **0.0000**（8/8 全对） | **0.0161**（中位 0.0） |
+| Median | 0.0000 | 0.0000 |
+| ASR 失败 | 0 | 0 |
+| Mean SIM（WavLM cosine） | **0.8494** | **0.8784** |
+| Median SIM | 0.8504 | 0.8842 |
+| SIM 失败 | 0 | 0 |
+| finish=stop | 8/8 | 8/8 |
+
+注：SIM 用 `microsoft/wavlm-base-plus`（代理），非 seed-tts-eval 官方的 UniSpeech SV
+checkpoint；绝对值与官方不可直接比，仅作相对 baseline。
+
+#### 长压测场景启动脚本（用户手动执行）
+
+性能基准（B=1/B=4 RTF/TTFA，~3-4 min）：
+
+```bash
+cd /SharedData/youhf/omni_tts/vllm-omni
+CUDA_VISIBLE_DEVICES=6,7 PATH="$PWD/.venv/bin:$PATH" \
+  VLLM_USE_FLASHINFER_SAMPLER=0 \
+  VIBEVOICE_TEST_MODEL_ROOT=/SharedData/youhf/models \
+  .venv/bin/pytest --run-level advanced_model -q -s \
+  tests/e2e/online_serving/test_vibevoice_perf_baseline.py \
+  2>&1 | tee /tmp/vv_perf_$(date +%Y%m%d_%H%M%S).log
+```
+
+稳定性压测（S1: 4 并发 × 3 轮；S3: 4 speaker × 4 并发；S4: 4096 max_new_tokens 长文本，
+~30-60 min）：
+
+```bash
+cd /SharedData/youhf/omni_tts/vllm-omni
+CUDA_VISIBLE_DEVICES=6,7 PATH="$PWD/.venv/bin:$PATH" \
+  VLLM_USE_FLASHINFER_SAMPLER=0 \
+  VIBEVOICE_TEST_MODEL_ROOT=/SharedData/youhf/models \
+  .venv/bin/pytest --run-level advanced_model -q -s \
+  tests/e2e/online_serving/test_vibevoice_stress.py \
+  2>&1 | tee /tmp/vv_stress_$(date +%Y%m%d_%H%M%S).log
+```
+
+正式 dfx stability（`vllm bench serve --omni`，固定时长，`@pytest.mark.slow`）：
+
+```bash
+cd /SharedData/youhf/omni_tts/vllm-omni
+CUDA_VISIBLE_DEVICES=6,7 PATH="$PWD/.venv/bin:$PATH" \
+  .venv/bin/pytest -m "slow and tts" -q -s \
+  tests/dfx/stability/scripts/test_stability_vibevoice.py \
+  2>&1 | tee /tmp/vv_stability_$(date +%Y%m%d_%H%M%S).log
+```
+
+质量评测（WER/SIM，Seed-TTS-Eval，~10-15 min，含 Whisper/WavLM 首次下载）：
+
+```bash
+cd /SharedData/youhf/omni_tts/vllm-omni
+bash /tmp/run_vibevoice_quality.sh 6,7 2>&1 | tee /tmp/vv_quality_$(date +%Y%m%d_%H%M%S).log
+bash /tmp/run_vibevoice_quality_zh.sh 2>&1 | tee /tmp/vv_quality_zh_$(date +%Y%m%d_%H%M%S).log
+```
+
+日志读取：`/tmp/vv_perf_*.log`（性能）、`/tmp/vv_stress_*.log`（压测）、
+`/tmp/vv_quality_*.log`（质量）。评测结果 JSON 在
+`tests/e2e/accuracy/vibevoice/results/vibevoice_quality_{locale}_*.json`。
+
+#### 评测期间修复的 infrastructure bug
+
+- `vllm_omni/benchmarks/patch/patch.py`：SSE 解析只处理 `data:` 开头的消息，但
+  serving_speech 的 SSE 事件带 `event: speech.audio.delta\ndata: {...}` 前缀 → ready checker
+  报 `JSONDecodeError`。修复：跳过 `event:` 行，只取 `data:` 行。
+- `run_vibevoice_quality.py`：新增 `--tokenizer` 参数（VibeVoice 的 tokenizer 在
+  `VibeVoice-1.5B-hf` 子目录，不在模型目录）；env 注入 `NO_PROXY` 避免 bench serve 的
+  aiohttp `trust_env=True` 把 localhost 请求走 SOCKS 代理。
