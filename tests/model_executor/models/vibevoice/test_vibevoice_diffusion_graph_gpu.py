@@ -20,7 +20,7 @@ from vllm_omni.model_executor.models.vibevoice.diffusion import (
 )
 from vllm_omni.transformers_utils.configs.vibevoice import VibeVoiceConfig
 
-pytestmark = [pytest.mark.core_model, pytest.mark.gpu]
+pytestmark = [pytest.mark.core_model, pytest.mark.cuda]
 
 _MODEL_ROOT = os.getenv("VIBEVOICE_TEST_MODEL_ROOT")
 _CONFIG_PATH = (
