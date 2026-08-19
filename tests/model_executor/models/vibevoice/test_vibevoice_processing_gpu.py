@@ -60,13 +60,13 @@ def _gpu_processing_worker(
         from vllm.multimodal.processing import InputProcessingContext
 
         from vllm_omni.engine.arg_utils import OmniEngineArgs
-        from vllm_omni.worker.gpu_model_runner import OmniGPUModelRunner
         from vllm_omni.model_executor.models.vibevoice.processing_vibevoice import (
             AUDIO_BOS_TOKEN,
             AUDIO_EOS_TOKEN,
             AUDIO_TOKEN,
             SAMPLE_RATE,
         )
+        from vllm_omni.worker.gpu_model_runner import OmniGPUModelRunner
 
         model_path = Path(model_path_str)
         torch.cuda.set_device(0)
@@ -116,9 +116,7 @@ def _gpu_processing_worker(
                 f"Speaker 1: {AUDIO_BOS_TOKEN}{AUDIO_TOKEN}{AUDIO_EOS_TOKEN}"
             )
             first_audio = np.linspace(-0.25, 0.25, 3_201, dtype=np.float32)
-            second_audio = np.sin(
-                np.linspace(0, 20 * np.pi, 8_001, dtype=np.float32)
-            ).astype(np.float32)
+            second_audio = np.sin(np.linspace(0, 20 * np.pi, 8_001, dtype=np.float32)).astype(np.float32)
             mm_items = info.parse_mm_data(
                 {
                     "audio": [
@@ -131,10 +129,7 @@ def _gpu_processing_worker(
             mm_data = processed["mm_kwargs"].get_data()
             counts = mm_data["audio_num_tokens"].reshape(-1)
             assert counts.tolist() == [2, 3]
-            assert [
-                placeholder.length
-                for placeholder in processed["mm_placeholders"]["audio"]
-            ] == [2, 3]
+            assert [placeholder.length for placeholder in processed["mm_placeholders"]["audio"]] == [2, 3]
 
             input_values = mm_data["input_values"].to("cuda")
             padding_mask = mm_data["padding_mask"].to("cuda")
@@ -184,12 +179,9 @@ def _gpu_processing_worker(
                     sample=True,
                 ).latents
                 sampled_features = (
-                    sampled_latents
-                    + model.model.latent_bias_factor.to(sampled_latents.device)
+                    sampled_latents + model.model.latent_bias_factor.to(sampled_latents.device)
                 ) * model.model.latent_scaling_factor.to(sampled_latents.device)
-                sampled_projected = model.model.multi_modal_projector(
-                    sampled_features
-                )
+                sampled_projected = model.model.multi_modal_projector(sampled_features)
             for item_idx, num_tokens in enumerate((2, 3)):
                 torch.testing.assert_close(
                     sampled[item_idx],
@@ -252,9 +244,7 @@ def _gpu_processing_worker(
             runner.has_talker_mtp = False
             runner.encoder_cache = {}
             runner.input_ids = SimpleNamespace(gpu=prompt_ids.clone())
-            runner.inputs_embeds = SimpleNamespace(
-                gpu=torch.zeros_like(text_only)
-            )
+            runner.inputs_embeds = SimpleNamespace(gpu=torch.zeros_like(text_only))
             runner.positions = torch.arange(
                 prompt_ids.numel(),
                 device="cuda",
@@ -264,9 +254,7 @@ def _gpu_processing_worker(
                 req_ids=["runner-request"],
                 num_computed_tokens_cpu=np.array([0], dtype=np.int32),
             )
-            runner.query_start_loc = SimpleNamespace(
-                cpu=np.array([0, prompt_ids.numel()], dtype=np.int32)
-            )
+            runner.query_start_loc = SimpleNamespace(cpu=np.array([0, prompt_ids.numel()], dtype=np.int32))
             runner.requests = {}
             runner.model_intermediate_buffer = {}
 
@@ -281,7 +269,7 @@ def _gpu_processing_worker(
                 torch.manual_seed(2468)
                 torch.cuda.manual_seed_all(2468)
                 runner_embeddings.extend(
-                    model.embed_multimodal(
+                    runner.model.embed_multimodal(
                         input_values=input_values,
                         padding_mask=padding_mask,
                         audio_num_tokens=counts_cuda,
@@ -343,14 +331,12 @@ def _gpu_processing_worker(
             max_segment = f"{AUDIO_BOS_TOKEN}{AUDIO_TOKEN}{AUDIO_EOS_TOKEN}"
             max_processed = processor(
                 " ".join(max_segment for _ in range(8)),
-                mm_items=info.parse_mm_data(
-                    {"audio": [(max_audio, SAMPLE_RATE)] * 8}
-                ),
+                mm_items=info.parse_mm_data({"audio": [(max_audio, SAMPLE_RATE)] * 8}),
             )
             max_mm_data = max_processed["mm_kwargs"].get_data()
-            torch.cuda.synchronize()
-            torch.cuda.reset_peak_memory_stats()
-            max_embeddings = model._get_audio_embeddings(
+            torch.accelerator.synchronize()
+            torch.accelerator.reset_peak_memory_stats()
+            max_embeddings = runner.model._get_audio_embeddings(
                 max_mm_data["input_values"].to("cuda"),
                 max_mm_data["padding_mask"].to("cuda"),
                 max_mm_data["audio_num_tokens"].to("cuda"),
@@ -359,8 +345,8 @@ def _gpu_processing_worker(
             assert len(max_embeddings) == 8
             assert all(item.shape == (450, 1536) for item in max_embeddings)
             assert all(torch.isfinite(item).all() for item in max_embeddings)
-            torch.cuda.synchronize()
-            max_audio_peak_bytes = torch.cuda.max_memory_allocated()
+            torch.accelerator.synchronize()
+            max_audio_peak_bytes = torch.accelerator.max_memory_allocated()
 
             queue.put(
                 {
@@ -376,7 +362,7 @@ def _gpu_processing_worker(
         finally:
             del model
             gc.collect()
-            torch.cuda.empty_cache()
+            torch.accelerator.empty_cache()
             destroy_model_parallel()
             destroy_distributed_environment()
     except Exception:
@@ -417,9 +403,7 @@ def test_processor_to_acoustic_prefill_on_gpu():
     try:
         result = queue.get(timeout=5)
     except Empty:
-        pytest.fail(
-            f"GPU subprocess exited with code {process.exitcode} without a result"
-        )
+        pytest.fail(f"GPU subprocess exited with code {process.exitcode} without a result")
     assert "error" not in result, result.get("error")
     assert process.exitcode == 0
     assert result["counts"] == [2, 3]
