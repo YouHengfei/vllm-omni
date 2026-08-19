@@ -111,7 +111,7 @@ def _assert_error(response: httpx.Response, message: str) -> None:
 @pytest.mark.advanced_model
 @hardware_test(res={"cuda": "H100"}, num_cards=2)
 @pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
-def test_vibevoice_http_wav_pcm_and_local_file(omni_server) -> None:
+def test_vibevoice_http_wav_pcm_local_file_001(omni_server) -> None:
     base_payload = {
         "model": omni_server.model,
         "input": "Hello.",
@@ -168,7 +168,7 @@ def test_vibevoice_http_wav_pcm_and_local_file(omni_server) -> None:
 @pytest.mark.advanced_model
 @hardware_test(res={"cuda": "H100"}, num_cards=2)
 @pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
-def test_vibevoice_http_uploaded_audio_voice_lifecycle(omni_server) -> None:
+def test_vibevoice_http_uploaded_voice_lifecycle_002(omni_server) -> None:
     voice_name = "vibevoice-e2e-narrator"
     with httpx.Client(trust_env=False, timeout=300.0) as client:
         try:
@@ -219,7 +219,7 @@ def test_vibevoice_http_uploaded_audio_voice_lifecycle(omni_server) -> None:
 @pytest.mark.advanced_model
 @hardware_test(res={"cuda": "H100"}, num_cards=2)
 @pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
-def test_vibevoice_http_four_speaker_natural_generation(omni_server) -> None:
+def test_vibevoice_http_four_speaker_natural_003(omni_server) -> None:
     response = _post(
         omni_server,
         {
@@ -255,7 +255,7 @@ def test_vibevoice_http_four_speaker_natural_generation(omni_server) -> None:
 @pytest.mark.advanced_model
 @hardware_test(res={"cuda": "H100"}, num_cards=2)
 @pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
-def test_vibevoice_http_batch_mixed_results_and_safe_queueing(omni_server) -> None:
+def test_vibevoice_http_batch_mixed_results_004(omni_server) -> None:
     with httpx.Client(trust_env=False, timeout=600.0) as client:
         response = client.post(
             _batch_url(omni_server),
@@ -303,7 +303,7 @@ def test_vibevoice_http_batch_mixed_results_and_safe_queueing(omni_server) -> No
 @pytest.mark.advanced_model
 @hardware_test(res={"cuda": "H100"}, num_cards=2)
 @pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
-def test_vibevoice_sse_and_websocket_expose_terminal_length(omni_server) -> None:
+def test_vibevoice_sse_websocket_terminal_length_005(omni_server) -> None:
     sse_audio = bytearray()
     done_event = None
     with httpx.Client(trust_env=False, timeout=600.0) as client:
@@ -381,7 +381,7 @@ def test_vibevoice_sse_and_websocket_expose_terminal_length(omni_server) -> None
 @pytest.mark.advanced_model
 @hardware_test(res={"cuda": "H100"}, num_cards=2)
 @pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
-def test_vibevoice_http_rejects_invalid_requests_before_generation(omni_server) -> None:
+def test_vibevoice_http_rejects_invalid_requests_006(omni_server) -> None:
     valid = {
         "model": omni_server.model,
         "input": "Hello.",

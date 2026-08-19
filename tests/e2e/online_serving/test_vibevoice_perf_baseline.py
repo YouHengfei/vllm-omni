@@ -58,7 +58,7 @@ LONG_TEXT = (
 
 
 @pytest.mark.parametrize("omni_server", [_SERVER], indirect=True)
-def test_vibevoice_perf_baseline_long_form_sse(omni_server) -> None:
+def test_vibevoice_perf_baseline_sse_001(omni_server) -> None:
     """Baseline: long-form SSE generation; record TTFA, total, RTF, token count."""
     url = f"http://{omni_server.host}:{omni_server.port}/v1/audio/speech"
     payload = {
@@ -137,7 +137,7 @@ def _stream_one_long_form(url: str, model: str, index: int) -> dict:
 
 
 @pytest.mark.parametrize("omni_server", [_SERVER], indirect=True)
-def test_vibevoice_perf_concurrent4_sse(omni_server) -> None:
+def test_vibevoice_perf_concurrent4_002(omni_server) -> None:
     """Phase A+ gate: four concurrent long-form SSE streams on max_num_seqs=4.
 
     Reports per-request RTF and aggregate audio throughput (audio seconds
