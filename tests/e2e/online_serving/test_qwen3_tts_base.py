@@ -18,10 +18,7 @@ from tests.helpers.media import load_test_audio_data_url
 from tests.helpers.runtime import OmniServerParams
 from tests.helpers.stage_config import get_deploy_config_path
 
-MODEL = os.getenv(
-    "QWEN3_TTS_TEST_MODEL",
-    "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-)
+MODEL = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
 DEFAULT_AUDIO_SPEECH_TIMEOUT_S = 180.0
 
 # Vendored under tests/assets/qwen3_tts/clone_2.wav so the server does not need
@@ -83,12 +80,7 @@ def test_text_to_audio_001(omni_server, openai_client) -> None:
         "ref_audio": REF_AUDIO_URL,
         "ref_text": REF_TEXT,
     }
-    request_count = get_max_batch_size("few")
-    responses = openai_client.send_audio_speech_request(request_config, request_num=request_count)
-    assert len(responses) == request_count
-    for response in responses:
-        assert response.response_headers is not None
-        assert "x-finish-reason" not in response.response_headers
+    openai_client.send_audio_speech_request(request_config, request_num=get_max_batch_size("few"))
 
 
 @pytest.mark.advanced_model

@@ -127,13 +127,25 @@ def _terminal_request_state(
 
 
 @pytest.mark.parametrize(
-    ("declares_capability", "token_ids", "max_tokens", "max_model_len", "expected"),
+    (
+        "declares_capability",
+        "token_ids",
+        "max_tokens",
+        "max_model_len",
+        "stop_token_ids",
+        "min_tokens",
+        "async_sample",
+        "expected",
+    ),
     [
-        (False, [151654], 1, 8, []),
-        (True, [151654], 1, 8, ["request"]),
-        (True, [151654], 2, 8, []),
-        (True, [151653], 1, 8, []),
-        (True, [151654], 8, 2, ["request"]),
+        (False, [151654], 1, 8, [], 0, False, []),
+        (True, [151654], 1, 8, [], 0, False, ["request"]),
+        (True, [151654], 2, 8, [], 0, False, []),
+        (True, [151653], 1, 8, [], 0, False, []),
+        (True, [151654], 8, 2, [], 0, False, ["request"]),
+        (True, [151654], 1, 8, [151654], 0, False, []),
+        (True, [151654], 1, 8, [151654], 2, False, []),
+        (True, [-1], 1, 8, [], 0, True, ["request"]),
     ],
 )
 def test_terminal_sample_drain_is_capability_gated_and_length_only(
@@ -141,87 +153,30 @@ def test_terminal_sample_drain_is_capability_gated_and_length_only(
     token_ids: list[int],
     max_tokens: int,
     max_model_len: int,
+    stop_token_ids: list[int],
+    min_tokens: int,
+    async_sample: bool,
     expected: list[str],
 ) -> None:
     model = SimpleNamespace()
     if declares_capability:
         model.terminal_sample_drain_token_ids = frozenset({151654})
+    state = _terminal_request_state(output_token_ids=token_ids, max_tokens=max_tokens)
+    state.sampling_params.stop_token_ids = stop_token_ids
+    state.sampling_params.min_tokens = min_tokens
     runner = object.__new__(GPUARModelRunner)
     runner.model = model
-    runner.requests = {
-        "request": _terminal_request_state(
-            output_token_ids=token_ids,
-            max_tokens=max_tokens,
-        )
-    }
+    runner.requests = {"request": state}
     runner.max_model_len = max_model_len
 
     actual = GPUARModelRunner._terminal_sample_drain_request_ids(
         runner,
         req_ids=["request"],
-        valid_sampled_token_ids=[token_ids[-1:]],
+        valid_sampled_token_ids=[] if async_sample else [token_ids[-1:]],
+        sampled_token_ids=(torch.tensor([[151654]], dtype=torch.int32) if async_sample else None),
     )
 
     assert actual == expected
-
-
-def test_terminal_sample_drain_honors_stop_priority() -> None:
-    model = SimpleNamespace(terminal_sample_drain_token_ids=frozenset({151654}))
-    state = _terminal_request_state(output_token_ids=[151654], max_tokens=1)
-    state.sampling_params.stop_token_ids = [151654]
-    runner = object.__new__(GPUARModelRunner)
-    runner.model = model
-    runner.requests = {"request": state}
-    runner.max_model_len = 8
-
-    actual = GPUARModelRunner._terminal_sample_drain_request_ids(
-        runner,
-        req_ids=["request"],
-        valid_sampled_token_ids=[[151654]],
-    )
-
-    assert actual == []
-
-
-def test_terminal_sample_drain_defers_all_stopping_before_min_tokens() -> None:
-    model = SimpleNamespace(terminal_sample_drain_token_ids=frozenset({151654}))
-    state = _terminal_request_state(output_token_ids=[151654], max_tokens=1)
-    state.sampling_params.min_tokens = 2
-    state.sampling_params.stop_token_ids = [151654]
-    runner = object.__new__(GPUARModelRunner)
-    runner.model = model
-    runner.requests = {"request": state}
-    runner.max_model_len = 8
-
-    actual = GPUARModelRunner._terminal_sample_drain_request_ids(
-        runner,
-        req_ids=["request"],
-        valid_sampled_token_ids=[[151654]],
-    )
-
-    assert actual == []
-
-
-def test_terminal_sample_drain_async_reads_sample_only_after_length_cap() -> None:
-    model = SimpleNamespace(terminal_sample_drain_token_ids=frozenset({151654}))
-    runner = object.__new__(GPUARModelRunner)
-    runner.model = model
-    runner.requests = {
-        "request": _terminal_request_state(
-            output_token_ids=[-1],
-            max_tokens=1,
-        )
-    }
-    runner.max_model_len = 8
-
-    actual = GPUARModelRunner._terminal_sample_drain_request_ids(
-        runner,
-        req_ids=["request"],
-        valid_sampled_token_ids=[],
-        sampled_token_ids=torch.tensor([[151654]], dtype=torch.int32),
-    )
-
-    assert actual == ["request"]
 
 
 def test_terminal_sample_drain_runner_orders_postprocess_before_model_hook() -> None:

@@ -257,20 +257,6 @@ def test_seed_tts_eval_records_sse_finish_reason(monkeypatch):
     assert generic_metrics["seed_tts_non_stop_excluded"] == 0
 
 
-def test_seed_tts_utmos_device_honors_environment(monkeypatch):
-    from vllm_omni.benchmarks.data_modules import seed_tts_eval
-
-    fake_torch = types.SimpleNamespace(cuda=types.SimpleNamespace(is_available=lambda: True))
-    monkeypatch.delenv("SEED_TTS_UTMOS_DEVICE", raising=False)
-    assert seed_tts_eval._resolve_utmos_device(fake_torch) == "cpu"
-
-    monkeypatch.setenv("SEED_TTS_UTMOS_DEVICE", "cuda:3")
-    assert seed_tts_eval._resolve_utmos_device(fake_torch) == "cuda:3"
-
-    fake_torch.cuda.is_available = lambda: False
-    assert seed_tts_eval._resolve_utmos_device(fake_torch) == "cpu"
-
-
 def test_seed_tts_whisper_transcribe_passes_attention_mask(monkeypatch):
     from vllm_omni.benchmarks.data_modules import seed_tts_eval
 

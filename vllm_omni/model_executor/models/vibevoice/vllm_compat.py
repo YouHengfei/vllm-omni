@@ -28,10 +28,7 @@ def get_audio_with_sr_from_parent(
         )
     result = method(audio)
     if not isinstance(result, tuple) or len(result) != 2:
-        raise RuntimeError(
-            "Unexpected MultiModalDataParser._get_audio_with_sr return value: "
-            f"{type(result).__name__}."
-        )
+        raise RuntimeError(f"Unexpected MultiModalDataParser._get_audio_with_sr return value: {type(result).__name__}.")
     return result
 
 

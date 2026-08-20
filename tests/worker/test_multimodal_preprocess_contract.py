@@ -40,9 +40,7 @@ class _CombinedPathModel:
         is_multimodal: torch.Tensor,
     ) -> torch.Tensor:
         self.events.append("merge")
-        token_embeddings = torch.stack(
-            (input_ids.to(torch.float32), -input_ids.to(torch.float32)), dim=-1
-        )
+        token_embeddings = torch.stack((input_ids.to(torch.float32), -input_ids.to(torch.float32)), dim=-1)
         assert len(multimodal_embeddings) == 1
         token_embeddings[is_multimodal] = multimodal_embeddings[0]
         return token_embeddings

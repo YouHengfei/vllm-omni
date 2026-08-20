@@ -73,16 +73,11 @@ def _resolve_vibevoice_tokenizer_contract(
         with open(preprocessor_path, encoding="utf-8") as file:
             preprocessor_config = json.load(file)
     except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(
-            f"Invalid VibeVoice preprocessor config at {preprocessor_path}: {exc}"
-        ) from exc
+        raise ValueError(f"Invalid VibeVoice preprocessor config at {preprocessor_path}: {exc}") from exc
 
     tokenizer = preprocessor_config.get("language_model_pretrained_name")
     if not isinstance(tokenizer, str) or not tokenizer.strip():
-        raise ValueError(
-            "VibeVoice preprocessor_config.json must define a non-empty "
-            "`language_model_pretrained_name`."
-        )
+        raise ValueError("VibeVoice preprocessor_config.json must define a non-empty `language_model_pretrained_name`.")
     return tokenizer.strip()
 
 
@@ -356,26 +351,19 @@ class OmniEngineArgs(EngineArgs):
             if os.path.isdir(model_path) and not has_root_tokenizer:
                 for subfolder in sorted(os.listdir(model_path)):
                     candidate = os.path.join(model_path, subfolder)
-                    if os.path.isdir(candidate) and os.path.isfile(
-                        os.path.join(candidate, "tokenizer_config.json")
-                    ):
+                    if os.path.isdir(candidate) and os.path.isfile(os.path.join(candidate, "tokenizer_config.json")):
                         self.tokenizer = candidate
                         logger.info("Auto-detected tokenizer at %s", candidate)
                         break
 
-            if (
-                not self.tokenizer
-                and not has_root_tokenizer
-                and self.model_arch == "VibeVoiceForConditionalGeneration"
-            ):
+            if not self.tokenizer and not has_root_tokenizer and self.model_arch == "VibeVoiceForConditionalGeneration":
                 self.tokenizer = _resolve_vibevoice_tokenizer_contract(
                     model_path,
                     revision=self.revision,
                 )
                 if self.tokenizer:
                     logger.info(
-                        "Resolved VibeVoice tokenizer from "
-                        "preprocessor_config.json: %s",
+                        "Resolved VibeVoice tokenizer from preprocessor_config.json: %s",
                         self.tokenizer,
                     )
 

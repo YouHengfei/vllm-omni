@@ -957,8 +957,11 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
             try:
                 from transformers import AutoTokenizer
 
+                model_config = self.engine_client.model_config
+                tokenizer_name = getattr(model_config, "tokenizer", None) or model_config.model
                 self._usage_text_tokenizer = AutoTokenizer.from_pretrained(
-                    self.engine_client.model_config.model, trust_remote_code=True
+                    tokenizer_name,
+                    trust_remote_code=bool(getattr(model_config, "trust_remote_code", True)),
                 )
             except Exception as e:  # pragma: no cover - environment dependent
                 logger.warning("Usage: could not load a text tokenizer (%s); text_tokens will be 0", e)

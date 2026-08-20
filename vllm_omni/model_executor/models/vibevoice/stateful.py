@@ -299,14 +299,20 @@ class VibeVoiceStatefulInference:
                 if getattr(layer, "is_initialized", False) and layer.cache is not None:
                     layer.cache.zero_()
 
-    def _finish_audio_segment(self, state: VibeVoiceRequestState) -> None:
+    def _finish_audio_segment(
+        self,
+        state: VibeVoiceRequestState,
+        *,
+        release_negative_branch: bool,
+    ) -> None:
         state.in_audio_segment = False
         state.positive_condition = None
         state.negative_condition = None
-        state.negative_input_embedding = None
         state.negative_reset_pending = False
-        if self._negative_kv_branch is not None:
-            self._negative_kv_branch.free(state.request_id)
+        if release_negative_branch:
+            state.negative_input_embedding = None
+            if self._negative_kv_branch is not None:
+                self._negative_kv_branch.free(state.request_id)
 
     def process_sampled_token(
         self,
@@ -333,11 +339,27 @@ class VibeVoiceStatefulInference:
             state.next_embedding = token_embedding
             return token_embedding, None
         if token_id == self.audio_eos_token_id:
-            self._finish_audio_segment(state)
+            # Match the official generator: audio EOS closes the waveform
+            # segment, but the negative Qwen cache is retained until the next
+            # audio BOS resets it or request EOS/cleanup releases it. Keep the
+            # current embedding as the preceding negative input so even a
+            # model-emitted audio token without an intervening BOS cannot
+            # kill the whole EngineCore.
+            self._finish_audio_segment(
+                state,
+                release_negative_branch=False,
+            )
+            state.negative_input_embedding = self._validate_condition(
+                "negative_input_embedding",
+                token_embedding,
+            )
             state.next_embedding = token_embedding
             return token_embedding, None
         if token_id == self.eos_token_id:
-            self._finish_audio_segment(state)
+            self._finish_audio_segment(
+                state,
+                release_negative_branch=True,
+            )
             state.next_embedding = token_embedding
             return token_embedding, None
         if token_id != self.audio_token_id:
@@ -386,10 +408,13 @@ class VibeVoiceStatefulInference:
                     f"{tuple(token_embedding.shape)}."
                 )
             if not state.in_audio_segment:
-                raise RuntimeError(
-                    "VibeVoice audio_token was received outside an audio segment; "
-                    "audio_bos_token must be generated first."
-                )
+                # The official generator applies diffusion whenever an audio
+                # token is sampled and resets segment-local state only on an
+                # explicit audio BOS. Preserve that behavior for malformed or
+                # low-confidence model output instead of escalating one
+                # request's audio-EOS -> audio-token transition to an
+                # EngineCore-fatal exception.
+                state.in_audio_segment = True
             if state.positive_condition is None:
                 raise RuntimeError("VibeVoice audio_token has no positive Qwen condition from the preceding AR step.")
             if state.negative_condition is None or state.negative_reset_pending:

@@ -743,6 +743,25 @@ class TestTTSMethods:
         assert speech_server._is_tts is False
         assert speech_server._tts_stage is None
 
+    def test_usage_tokenizer_prefers_configured_tokenizer_path(self, speech_server, mocker: MockerFixture):
+        speech_server.engine_client.model_config = SimpleNamespace(
+            model="checkpoint-without-tokenizer",
+            tokenizer="separate-runtime-tokenizer",
+            trust_remote_code=False,
+        )
+        tokenizer = mocker.MagicMock()
+        load = mocker.patch(
+            "transformers.AutoTokenizer.from_pretrained",
+            return_value=tokenizer,
+        )
+
+        assert speech_server._get_usage_text_tokenizer() is tokenizer
+        assert speech_server._get_usage_text_tokenizer() is tokenizer
+        load.assert_called_once_with(
+            "separate-runtime-tokenizer",
+            trust_remote_code=False,
+        )
+
     def test_is_tts_detection_with_tts_stage(self, mocker: MockerFixture):
         """Test TTS model detection when TTS stage exists."""
         mock_engine_client = mocker.MagicMock()

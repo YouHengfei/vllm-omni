@@ -131,12 +131,13 @@ def test_run_locale_selects_vibevoice_schema_and_sse_transport(tmp_path: Path, m
     command = captured["command"]
     assert command[command.index("--backend") + 1] == "openai-audio-speech"
     assert command[command.index("--dataset-name") + 1] == "seed-tts-vibevoice"
+    assert command[command.index("--max-concurrency") + 1] == "4"
     extra_body = json.loads(command[command.index("--extra-body") + 1])
     assert extra_body == {
         "stream": True,
         "stream_format": "sse",
         "response_format": "pcm",
     }
-    assert captured["env"]["VLLM_OMNI_BENCH_SPEECH_STREAM_FORMAT"] == "sse"
     assert captured["env"]["SEED_TTS_SIM_EVAL"] == "1"
+    assert captured["env"]["SEED_TTS_UTMOS_EVAL"] == "0"
     assert captured["env"]["SEED_TTS_WER_SAVE_AUDIO_DIR"].endswith("/en")

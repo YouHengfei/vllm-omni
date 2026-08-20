@@ -100,9 +100,7 @@ def _modules():
 
 def test_audio_token_decoder_applies_official_formula_and_threads_caches() -> None:
     decoder = _decoder()
-    audio_tower, semantic_encoder, acoustic_projector, semantic_connector = (
-        _modules()
-    )
+    audio_tower, semantic_encoder, acoustic_projector, semantic_connector = _modules()
     latent = torch.tensor([[[2.0, 4.0]]])
     original_latent = latent.clone()
     scale = torch.tensor(2.0)
@@ -172,9 +170,7 @@ def test_audio_token_decoder_rejects_invalid_latent_contracts(
     latent: torch.Tensor,
     message: str,
 ) -> None:
-    audio_tower, semantic_encoder, acoustic_projector, semantic_connector = (
-        _modules()
-    )
+    audio_tower, semantic_encoder, acoustic_projector, semantic_connector = _modules()
     with pytest.raises((TypeError, ValueError), match=message):
         _decoder().decode_audio_token(
             audio_tower=audio_tower,

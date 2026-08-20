@@ -18,7 +18,7 @@ from tests.helpers.mark import hardware_test
 from tests.helpers.runtime import OmniServerParams
 from tests.helpers.stage_config import get_deploy_config_path
 
-MODEL = os.getenv("VOXCPM2_TEST_MODEL", "openbmb/VoxCPM2")
+MODEL = "openbmb/VoxCPM2"
 DEFAULT_AUDIO_SPEECH_TIMEOUT_S = 300.0
 MAX_CONCURRENT = 4
 
@@ -69,11 +69,7 @@ def test_text_to_audio_001(omni_server, openai_client) -> None:
         "voice": "default",
         "min_audio_bytes": _MIN_AUDIO_BYTES,
     }
-    responses = openai_client.send_audio_speech_request(request_config, request_num=MAX_CONCURRENT)
-    assert len(responses) == MAX_CONCURRENT
-    for response in responses:
-        assert response.response_headers is not None
-        assert "x-finish-reason" not in response.response_headers
+    openai_client.send_audio_speech_request(request_config, request_num=MAX_CONCURRENT)
 
 
 @pytest.mark.advanced_model

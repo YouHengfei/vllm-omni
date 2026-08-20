@@ -54,7 +54,6 @@ from vllm_omni.metrics.utils import coerce_positive_int_scalar
 logger = init_logger(__name__)
 
 _AUDIO_CONTINUITY_THRESHOLD_ENV = "VLLM_OMNI_BENCH_AUDIO_CONTINUITY_THRESHOLD_S"
-_SPEECH_STREAM_FORMAT_ENV = "VLLM_OMNI_BENCH_SPEECH_STREAM_FORMAT"
 RETURN_STAGE_METRICS_FIELD = "return_stage_metrics"
 _IMAGE_STAGE_METRICS_BACKENDS = frozenset({"openai-image-edits-omni"})
 _PRINT_STAGE = False
@@ -89,17 +88,12 @@ def set_print_stage(enabled: bool) -> None:
     _PRINT_STAGE = bool(enabled)
 
 
-def _speech_stream_format() -> Literal["audio", "sse"]:
-    """Return the benchmark-only Speech streaming transport.
-
-    Raw ``audio`` remains the default for existing TTS benchmarks. Models such
-    as VibeVoice that require terminal metadata can opt into OpenAI Speech SSE
-    without changing their public serving contract.
-    """
-    value = os.environ.get(_SPEECH_STREAM_FORMAT_ENV, "audio").strip().lower() or "audio"
-    if value not in ("audio", "sse"):
-        raise ValueError(f"{_SPEECH_STREAM_FORMAT_ENV} must be 'audio' or 'sse', got {value!r}.")
-    return value
+def _normalize_speech_stream_format(value: Any) -> Literal["audio", "sse"]:
+    """Validate the Speech transport selected by the final request payload."""
+    normalized = str(value or "audio").strip().lower()
+    if normalized not in ("audio", "sse"):
+        raise ValueError(f"Speech stream_format must be 'audio' or 'sse', got {value!r}.")
+    return normalized
 
 
 def _audio_continuity_threshold_s() -> float:
@@ -1151,30 +1145,30 @@ async def async_request_openai_audio_speech(
 ) -> MixRequestFuncOutput:
     """Streaming request to /v1/audio/speech endpoint.
 
-    Raw PCM streaming is the default. Setting
-    ``VLLM_OMNI_BENCH_SPEECH_STREAM_FORMAT=sse`` consumes OpenAI
-    ``speech.audio.delta`` events instead, allowing quality evaluation of
-    models that intentionally reject raw HTTP audio streaming.
+    Raw PCM streaming is the default. An explicit
+    ``extra_body={"stream_format": "sse"}`` consumes OpenAI
+    ``speech.audio.delta`` events instead, allowing quality evaluation to
+    capture terminal metadata without changing other Speech benchmarks.
     """
     api_url = request_func_input.api_url
     _validate_api_url(api_url, "OpenAI Audio Speech API", "audio/speech")
 
-    stream_format = _speech_stream_format()
     payload = {
         "model": request_func_input.model_name if request_func_input.model_name else request_func_input.model,
         "input": request_func_input.prompt,
         "stream": True,
-        "stream_format": stream_format,
+        "stream_format": "audio",
         "response_format": "pcm",
     }
     _update_payload_common(payload, request_func_input)
     # Seed-TTS + WER: ``--extra-body`` may set stream=false / other formats;
-    # quality capture still requires PCM, but may use either raw HTTP bytes or
-    # OpenAI Speech SSE according to the benchmark-only transport setting.
+    # quality capture still requires streaming PCM, but preserves an explicit
+    # raw-audio or SSE transport selected by that request.
     if getattr(request_func_input, "seed_tts_row", False) and _seed_tts_capture_pcm_for_wer():
         payload["stream"] = True
-        payload["stream_format"] = stream_format
         payload["response_format"] = "pcm"
+    stream_format = _normalize_speech_stream_format(payload.get("stream_format"))
+    payload["stream_format"] = stream_format
 
     headers = {
         "Content-Type": "application/json",

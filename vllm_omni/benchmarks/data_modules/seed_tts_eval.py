@@ -212,14 +212,6 @@ def _eval_submetric_enabled(env_name: str, *, default: bool = True) -> bool:
     return default
 
 
-def _resolve_utmos_device(torch_module: Any) -> str:
-    requested = os.environ.get("SEED_TTS_UTMOS_DEVICE", "").strip() or "cpu"
-    if requested.startswith("cuda") and torch_module.cuda.is_available():
-        index = requested.split(":")[-1] if ":" in requested else "0"
-        return f"cuda:{index}"
-    return "cpu"
-
-
 def _audio_path_to_f32_16k(path: str) -> np.ndarray:
     import scipy.signal
     import soundfile as sf
@@ -332,7 +324,13 @@ def _ensure_utmos_jit_model() -> Any | None:
             )
             path = hf_hub_download(repo_id=repo, filename=fname, repo_type="model")
 
-            target_dev = _resolve_utmos_device(torch)
+            # TODO The model weights in UTMOS must be loaded in cuda:0; otherwise, the model execution will fail.
+            want = "cuda:0"
+            if want.startswith("cuda") and torch.cuda.is_available():
+                idx = want.split(":")[-1] if ":" in want else "0"
+                target_dev = f"cuda:{idx}"
+            else:
+                target_dev = "cpu"
 
             try:
                 m = torch.jit.load(path, map_location=target_dev)
@@ -788,6 +786,9 @@ def compute_seed_tts_wer_metrics(
             row: dict[str, Any] = {
                 "utterance_id": req.seed_tts_utterance_id,
                 "locale": locale,
+                # Keep the historical field for existing Seed-TTS consumers;
+                # ``content_error`` and ``cer`` make the Chinese metric explicit.
+                "wer": wer,
                 "content_error": wer,
                 metric_name: wer,
                 "reference_raw": raw_truth,

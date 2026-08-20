@@ -6,13 +6,13 @@
 # decoded to waveform, semantically re-encoded, and fed back to the next Qwen2
 # decode step. The model therefore owns all per-request side state in stage 0.
 #
-# These are conservative first-version defaults for the Microsoft 1.5B
-# checkpoint. Two-way TP shards Qwen and duplicates the side modules; a
-# single-GPU override remains possible only when the card can satisfy the same
-# fixed positive/negative KV and activation-memory guards. Diffusion and
-# convolutional side-path allocations are outside
-# vLLM's paged-KV accounting, so the KV cache is capped instead of consuming
-# all memory allowed by gpu_memory_utilization.
+# The Microsoft 1.5B checkpoint defaults to one GPU. Tensor parallelism adds
+# collective communication while duplicating the side modules, so it is kept
+# as an opt-in capability topology in vibevoice_tp2.yaml instead of the
+# latency/throughput baseline. Diffusion and convolutional side-path
+# allocations are outside vLLM's paged-KV accounting, so both KV pools use
+# fixed budgets instead of consuming all memory allowed by
+# gpu_memory_utilization.
 async_chunk: false
 trust_remote_code: false
 # When --tokenizer is omitted, Omni reads
@@ -24,13 +24,13 @@ enable_chunked_prefill: true
 
 stages:
   - stage_id: 0
-    devices: "0,1"
-    # Fixed safe concurrency (Phase A+): four complete positive and negative
-    # sequences must remain resident, so KV-pressure preemption is unreachable.
-    # Capacity per rank (TP=2 shards the 2 KV heads): 4 x 65,536 tokens x
-    # 14 KiB/token = 3.5 GiB, within the 6 GiB positive / 4 GiB negative
-    # pools below; the startup guards re-verify both pools.
-    tensor_parallel_size: 2
+    devices: "0"
+    # Fixed safe concurrency: four complete positive and negative sequences
+    # must remain resident, so KV-pressure preemption is unreachable. At TP=1,
+    # each pool needs 4 x 65,536 tokens x 28 KiB/token = 7 GiB. The 8 GiB
+    # budgets below leave block-alignment headroom; startup guards re-verify
+    # both pools from the actual attention layout.
+    tensor_parallel_size: 1
     max_num_seqs: 4
     gpu_memory_utilization: 0.9
     # The processor/MM infrastructure reserves capacity for up to eight
@@ -43,14 +43,14 @@ stages:
     limit_mm_per_prompt:
       audio: 8
 
-    # The 1.5B Qwen2 backbone uses only two KV heads. Six GiB leaves room for
-    # long-form requests while reserving VRAM for the positive/negative CFG
-    # branches, Diffusion Head, Acoustic Decoder, and Semantic Encoder.
-    kv_cache_memory_bytes: 6442450944  # 6 GiB
+    # The 1.5B Qwen2 backbone has only two KV heads. Eight GiB is sufficient
+    # for four complete 64k positive sequences on one GPU while leaving ample
+    # H100 VRAM for the negative CFG branch and the acoustic/semantic modules.
+    kv_cache_memory_bytes: 8589934592  # 8 GiB
     engine_extras:
       additional_config:
         vibevoice_runtime_config:
-          negative_kv_cache_memory_bytes: 4294967296  # 4 GiB
+          negative_kv_cache_memory_bytes: 8589934592  # 8 GiB
           negative_kv_activation_margin_bytes: 536870912  # 512 MiB
 
     # The official backbone supports 64k positions and generation_config.json
@@ -67,8 +67,8 @@ stages:
     async_scheduling: true
     # The pinned v1 profiler first runs the dummy placeholder text without MM
     # data, which intentionally trips VibeVoice's symmetric placeholder check.
-    # KV memory is fixed above and the real 8x60s encoder upper bound has a
-    # dedicated GPU test, so skip that incompatible generic profiling pass.
+    # KV memory is fixed above and Processor limits are contract-tested, so
+    # skip that incompatible generic profiling pass.
     skip_mm_profiling: true
 
     default_sampling_params:

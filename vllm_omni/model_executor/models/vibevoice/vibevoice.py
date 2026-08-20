@@ -10,7 +10,7 @@ that class so the model remains the owner of its loading semantics.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Any
 
 import torch
@@ -64,6 +64,86 @@ from .stateful import (
 from .vllm_compat import merge_multimodal_embeddings
 
 logger = init_logger(__name__)
+
+
+def _flatten_audio_items(
+    value: object,
+    field_name: str,
+    *,
+    item_ndim: int,
+) -> list[torch.Tensor]:
+    """Flatten vLLM's tensor-or-ragged-list MM batch into item tensors."""
+    if isinstance(value, torch.Tensor):
+        if value.ndim == item_ndim:
+            return [value]
+        if value.ndim == item_ndim + 1:
+            return list(value.unbind(dim=0))
+        raise ValueError(
+            f"VibeVoice {field_name} items must have rank {item_ndim} "
+            f"(or rank {item_ndim + 1} when batched), got shape={tuple(value.shape)}."
+        )
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        items: list[torch.Tensor] = []
+        for item in value:
+            items.extend(_flatten_audio_items(item, field_name, item_ndim=item_ndim))
+        if items:
+            return items
+    raise TypeError(f"VibeVoice {field_name} must be a tensor or a non-empty sequence of tensors.")
+
+
+def _pad_ragged_audio_batch(
+    input_values: object,
+    padding_mask: object,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Right-pad variable-length reference audios batched by vLLM.
+
+    vLLM stacks equal-shaped multimodal fields into tensors, but intentionally
+    preserves fields from different requests as a list when their reference
+    audio lengths differ. The Microsoft Acoustic Encoder accepts one padded
+    tensor batch, so materialize that equivalent representation here while
+    preserving each item's padding mask and item order.
+    """
+    if isinstance(input_values, torch.Tensor) and isinstance(padding_mask, torch.Tensor):
+        return input_values, padding_mask
+
+    input_items = _flatten_audio_items(input_values, "input_values", item_ndim=2)
+    mask_items = _flatten_audio_items(padding_mask, "padding_mask", item_ndim=1)
+    if len(input_items) != len(mask_items):
+        raise ValueError(
+            "VibeVoice ragged audio batch has different input/mask item counts: "
+            f"input_values={len(input_items)}, padding_mask={len(mask_items)}."
+        )
+    channels = input_items[0].shape[0]
+    for item_idx, (input_item, mask_item) in enumerate(zip(input_items, mask_items, strict=True)):
+        if input_item.shape[0] != channels:
+            raise ValueError(
+                f"VibeVoice ragged audio item {item_idx} has {input_item.shape[0]} channels; expected {channels}."
+            )
+        if input_item.shape[-1] != mask_item.numel():
+            raise ValueError(
+                f"VibeVoice ragged audio item {item_idx} has mismatched sample lengths: "
+                f"input_values={input_item.shape[-1]}, padding_mask={mask_item.numel()}."
+            )
+
+    max_samples = max(item.shape[-1] for item in input_items)
+    padded_inputs = input_items[0].new_zeros((len(input_items), channels, max_samples))
+    padded_masks = mask_items[0].new_zeros((len(mask_items), max_samples))
+    for item_idx, (input_item, mask_item) in enumerate(zip(input_items, mask_items, strict=True)):
+        samples = input_item.shape[-1]
+        padded_inputs[item_idx, :, :samples] = input_item
+        padded_masks[item_idx, :samples] = mask_item.reshape(-1)
+    return padded_inputs, padded_masks
+
+
+def _flatten_audio_token_counts(value: object) -> torch.Tensor:
+    if isinstance(value, torch.Tensor):
+        return value.reshape(-1)
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        pieces = [_flatten_audio_token_counts(item) for item in value]
+        if pieces:
+            device = pieces[0].device
+            return torch.cat([piece.to(device=device) for piece in pieces])
+    raise TypeError("VibeVoice audio_num_tokens must be a tensor or a non-empty sequence of tensors.")
 
 
 def _num_tokenizer_stages(config: Any, child_config_name: str) -> int:
@@ -530,15 +610,13 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         return embeddings
 
     def embed_multimodal(self, **kwargs: object) -> list[torch.Tensor]:
-        input_values = kwargs.get("input_values")
-        padding_mask = kwargs.get("padding_mask")
-        if not isinstance(input_values, torch.Tensor):
-            raise TypeError("VibeVoice embed_multimodal requires tensor input_values.")
-        if not isinstance(padding_mask, torch.Tensor):
-            raise TypeError("VibeVoice embed_multimodal requires tensor padding_mask.")
+        input_values, padding_mask = _pad_ragged_audio_batch(
+            kwargs.get("input_values"),
+            kwargs.get("padding_mask"),
+        )
         audio_num_tokens = kwargs.get("audio_num_tokens")
-        if audio_num_tokens is not None and not isinstance(audio_num_tokens, torch.Tensor):
-            audio_num_tokens = torch.as_tensor(audio_num_tokens)
+        if audio_num_tokens is not None:
+            audio_num_tokens = _flatten_audio_token_counts(audio_num_tokens)
         return self._get_audio_embeddings(
             input_values,
             padding_mask,

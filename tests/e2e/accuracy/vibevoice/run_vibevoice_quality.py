@@ -55,14 +55,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--locale", choices=("en", "zh", "both"), default="both")
     parser.add_argument("--num-prompts", type=int, default=8)
-    parser.add_argument("--max-concurrency", type=int, default=2)
+    parser.add_argument(
+        "--max-concurrency",
+        type=int,
+        default=4,
+        help="Concurrent requests (default: 4, matching the TP=1 deployment capacity).",
+    )
     parser.add_argument("--output-len", type=int, default=2048)
     parser.add_argument("--result-dir", type=Path, default=_default_result_dir())
     parser.add_argument("--save-audio-dir", type=Path)
     parser.add_argument("--eval-device", default=os.environ.get("SEED_TTS_EVAL_DEVICE", "cpu"))
     parser.add_argument("--sim-device", default=os.environ.get("SEED_TTS_SIM_DEVICE", "cpu"))
     parser.add_argument("--disable-sim", action="store_true")
-    parser.add_argument("--enable-utmos", action="store_true")
     parser.add_argument("--min-evaluated", type=int, default=1)
     parser.add_argument("--max-mean-content-error", type=float)
     parser.add_argument("--min-mean-sim", type=float)
@@ -78,7 +82,6 @@ def _validate_result(
     max_mean_content_error: float | None,
     min_mean_sim: float | None,
     sim_enabled: bool,
-    utmos_enabled: bool = False,
 ) -> list[str]:
     errors: list[str] = []
     if setup_error := result.get("seed_tts_eval_setup_error"):
@@ -142,13 +145,6 @@ def _validate_result(
         mean_sim = result.get("seed_tts_sim_mean")
         if min_mean_sim is not None and (mean_sim is None or float(mean_sim) < min_mean_sim):
             errors.append(f"mean speaker similarity={mean_sim!r} < {min_mean_sim:.6f}")
-    if utmos_enabled:
-        utmos_evaluated = int(result.get("seed_tts_utmos_evaluated", 0) or 0)
-        if utmos_evaluated != evaluated:
-            errors.append(f"UTMOS evaluated={utmos_evaluated} != content evaluated {evaluated}")
-        utmos_failed = int(result.get("seed_tts_utmos_failed", 0) or 0)
-        if utmos_failed:
-            errors.append(f"UTMOS failures={utmos_failed}")
     return errors
 
 
@@ -219,10 +215,9 @@ def _run_locale(args: argparse.Namespace, locale: str, vllm_cli: str) -> tuple[P
             "no_proxy": "127.0.0.1,localhost",
             "SEED_TTS_WER_EVAL": "1",
             "SEED_TTS_SIM_EVAL": "0" if args.disable_sim else "1",
-            "SEED_TTS_UTMOS_EVAL": "1" if args.enable_utmos else "0",
+            "SEED_TTS_UTMOS_EVAL": "0",
             "SEED_TTS_EVAL_DEVICE": args.eval_device,
             "SEED_TTS_SIM_DEVICE": args.sim_device,
-            "VLLM_OMNI_BENCH_SPEECH_STREAM_FORMAT": "sse",
             "VLLM_OMNI_BENCH_AUDIO_SAMPLE_RATE": "24000",
             "VLLM_OMNI_BENCH_AUDIO_CHANNELS": "1",
         }
@@ -242,7 +237,6 @@ def _run_locale(args: argparse.Namespace, locale: str, vllm_cli: str) -> tuple[P
         max_mean_content_error=args.max_mean_content_error,
         min_mean_sim=args.min_mean_sim,
         sim_enabled=not args.disable_sim,
-        utmos_enabled=args.enable_utmos,
     )
     metric_name = "CER" if locale == "zh" else "WER"
     print(
@@ -257,8 +251,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_arg_parser().parse_args(argv)
     if args.num_prompts < 1:
         raise ValueError("--num-prompts must be positive")
-    if not 1 <= args.max_concurrency <= 2:
-        raise ValueError("--max-concurrency must be 1 or 2 for the fixed VibeVoice deployment")
+    if not 1 <= args.max_concurrency <= 4:
+        raise ValueError("--max-concurrency must be between 1 and 4 for the fixed VibeVoice deployment")
     if args.output_len < 1:
         raise ValueError("--output-len must be positive")
 

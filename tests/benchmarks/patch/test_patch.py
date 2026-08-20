@@ -78,7 +78,11 @@ async def test_audio_speech_sse_transport_captures_pcm_for_quality_eval(monkeypa
     )
     setattr(request_input, "seed_tts_row", True)
     monkeypatch.setenv("SEED_TTS_WER_EVAL", "1")
-    monkeypatch.setenv("VLLM_OMNI_BENCH_SPEECH_STREAM_FORMAT", "sse")
+    setattr(
+        request_input,
+        "extra_body",
+        {"stream": True, "stream_format": "sse", "response_format": "pcm"},
+    )
 
     output = await async_request_openai_audio_speech(request_input, session)
 
@@ -90,6 +94,7 @@ async def test_audio_speech_sse_transport_captures_pcm_for_quality_eval(monkeypa
     assert payload["stream"] is True
     assert payload["stream_format"] == "sse"
     assert payload["response_format"] == "pcm"
+    assert "max_new_tokens" not in payload
 
 
 # ============================================================================

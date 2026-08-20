@@ -18,7 +18,7 @@ pytestmark = [
     pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required"),
 ]
 
-_MODEL_ROOT_ENV = "VIBEVOICE_TEST_MODEL_ROOT"
+_MODEL_ENV = "VIBEVOICE_TEST_MODEL"
 
 
 def _build():
@@ -34,13 +34,8 @@ def _build():
     )
     from vllm_omni.transformers_utils.configs.vibevoice import VibeVoiceConfig
 
-    model_root = os.getenv(_MODEL_ROOT_ENV)
-    config_path = (
-        os.path.join(model_root, "VibeVoice-1.5B-hf", "config.json")
-        if model_root
-        else "/SharedData/youhf/models/VibeVoice-1.5B-hf/config.json"
-    )
-    config = VibeVoiceConfig.from_pretrained(config_path)
+    model = os.getenv(_MODEL_ENV, "microsoft/VibeVoice-1.5B")
+    config = VibeVoiceConfig.from_pretrained(model)
     torch.manual_seed(0)
     audio_tower = AutoModel.from_config(config.audio_config).to(device="cuda", dtype=torch.bfloat16).eval()
     semantic_encoder = (

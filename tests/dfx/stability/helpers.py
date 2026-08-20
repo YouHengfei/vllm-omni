@@ -137,7 +137,14 @@ def _normalize_bench_metrics(raw: dict[str, Any]) -> dict[str, Any]:
     failed = int(raw.get("failed", raw.get("failed_requests", 0) or 0))
     duration = float(raw.get("duration", 0.0) or 0.0)
     errors = list(raw.get("errors") or [])
-    if failed and not errors:
+    if completed == 0 and failed == 0:
+        # ``run_benchmark`` writes an all-zero fallback template when its
+        # subprocess exits before producing a result (for example after the
+        # server dies). Treat that as a failed batch rather than allowing a
+        # long stability loop to spin on connection-refused templates.
+        failed = 1
+        errors.append("benchmark produced no completed or failed request records")
+    elif failed and not errors:
         errors = [f"{failed} benchmark request(s) failed"]
     return {"completed": completed, "failed": failed, "duration": duration, "errors": errors}
 
@@ -489,6 +496,11 @@ def run_stability_benchmark_loop(
         )
         batch_results.append(result)
         batch_index += 1
+        # Stability is fail-closed: once requests fail or the benchmark
+        # subprocess produces no usable result, continuing only obscures the
+        # first root cause and wastes host resources after a dead server.
+        if int(result.get("failed", 0) or 0) > 0 or result.get("errors"):
+            break
         if (time.perf_counter() - start_time) >= duration_sec:
             break
 

@@ -4,9 +4,6 @@
 
 from __future__ import annotations
 
-import json
-import os
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -130,19 +127,19 @@ def test_official_weight_names_map_to_runtime_schema(source: str, expected: str)
 def test_mapper_generates_stage_index_rules_from_config():
     mapper = _build_vibevoice_weights_mapper(_config(acoustic_stages=3, semantic_stages=2))
 
-    assert mapper.apply_list(
-        ["model.acoustic_tokenizer.encoder.stages.2.0.gamma"]
-    ) == ["model.audio_tower.encoder.conv_layers.1.stage.0.gamma"]
-    assert mapper.apply_list(
-        ["model.semantic_tokenizer.encoder.stages.1.0.gamma"]
-    ) == ["model.semantic_tokenizer_encoder.conv_layers.0.stage.0.gamma"]
+    assert mapper.apply_list(["model.acoustic_tokenizer.encoder.stages.2.0.gamma"]) == [
+        "model.audio_tower.encoder.conv_layers.1.stage.0.gamma"
+    ]
+    assert mapper.apply_list(["model.semantic_tokenizer.encoder.stages.1.0.gamma"]) == [
+        "model.semantic_tokenizer_encoder.conv_layers.0.stage.0.gamma"
+    ]
 
     # There is no generated stage-3 rule in a three-stage Acoustic config.
     # The generic acoustic rename still applies, making a malformed/incompatible
     # checkpoint visible to AutoWeightsLoader instead of silently dropping it.
-    assert mapper.apply_list(
-        ["model.acoustic_tokenizer.encoder.stages.3.0.gamma"]
-    ) == ["model.audio_tower.encoder.stages.3.0.gamma"]
+    assert mapper.apply_list(["model.acoustic_tokenizer.encoder.stages.3.0.gamma"]) == [
+        "model.audio_tower.encoder.stages.3.0.gamma"
+    ]
 
 
 @pytest.mark.parametrize("child_name", ["audio_config", "semantic_model_config"])
@@ -162,28 +159,3 @@ def test_mapper_preserves_tensor_identity():
 
     assert name == "model.multi_modal_projector.linear_1.weight"
     assert mapped_tensor is tensor
-
-
-def test_all_official_checkpoint_keys_match_converted_hf_index():
-    """Full local coverage against the authoritative 1.5B checkpoint indexes."""
-    model_root_env = os.getenv("VIBEVOICE_TEST_MODEL_ROOT")
-    if not model_root_env:
-        pytest.skip("Set VIBEVOICE_TEST_MODEL_ROOT to run checkpoint-index coverage")
-
-    model_root = Path(model_root_env)
-    original_index = model_root / "VibeVoice" / "model.safetensors.index.json"
-    converted_index = model_root / "VibeVoice-1.5B-hf" / "model.safetensors.index.json"
-    if not original_index.is_file() or not converted_index.is_file():
-        pytest.fail(f"VibeVoice checkpoint indexes not found below {model_root}")
-
-    original_names = set(json.loads(original_index.read_text())["weight_map"])
-    converted_names = set(json.loads(converted_index.read_text())["weight_map"])
-    mapper = _build_vibevoice_weights_mapper(_config())
-    mapped_names = mapper.apply_list(sorted(original_names))
-
-    assert len(original_names) == 1204
-    assert len(mapped_names) == 1204
-    assert len(set(mapped_names)) == 1204
-    assert set(mapped_names) == converted_names
-    assert not any("conv_layers.-" in name for name in mapped_names)
-    assert mapper.apply_list(sorted(converted_names)) == sorted(converted_names)

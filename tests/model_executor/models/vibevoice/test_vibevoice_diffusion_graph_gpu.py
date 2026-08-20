@@ -22,16 +22,11 @@ from vllm_omni.transformers_utils.configs.vibevoice import VibeVoiceConfig
 
 pytestmark = [pytest.mark.core_model, pytest.mark.cuda]
 
-_MODEL_ROOT = os.getenv("VIBEVOICE_TEST_MODEL_ROOT")
-_CONFIG_PATH = (
-    os.path.join(_MODEL_ROOT, "VibeVoice-1.5B-hf", "config.json")
-    if _MODEL_ROOT
-    else "/SharedData/youhf/models/VibeVoice-1.5B-hf/config.json"
-)
+_MODEL = os.getenv("VIBEVOICE_TEST_MODEL", "microsoft/VibeVoice-1.5B")
 
 
 def _build() -> tuple[VibeVoiceDiffusionHead, VibeVoiceDiffusionSampler]:
-    config = VibeVoiceConfig.from_pretrained(_CONFIG_PATH)
+    config = VibeVoiceConfig.from_pretrained(_MODEL)
     torch.manual_seed(0)
     head = VibeVoiceDiffusionHead(config).to(device="cuda", dtype=torch.bfloat16).eval()
     sampler = VibeVoiceDiffusionSampler.from_model_config(config)

@@ -41,6 +41,8 @@ from vllm_omni.model_executor.models.vibevoice.processing_vibevoice import (
 )
 from vllm_omni.model_executor.models.vibevoice.vibevoice import (
     VibeVoiceForConditionalGeneration,
+    _flatten_audio_token_counts,
+    _pad_ragged_audio_batch,
 )
 from vllm_omni.model_executor.models.vibevoice.vllm_compat import (
     get_audio_with_sr_from_parent,
@@ -49,6 +51,29 @@ from vllm_omni.model_executor.models.vibevoice.vllm_compat import (
 )
 
 pytestmark = [pytest.mark.core_model, pytest.mark.cpu]
+
+
+def test_ragged_audio_batch_is_right_padded_without_changing_valid_samples():
+    inputs = [torch.tensor([[1.0, 2.0]]), torch.tensor([[3.0, 4.0, 5.0, 6.0]])]
+    masks = [torch.tensor([[1, 1]]), torch.tensor([[1, 1, 1, 0]])]
+
+    padded_inputs, padded_masks = _pad_ragged_audio_batch(inputs, masks)
+
+    assert padded_inputs.tolist() == [[[1.0, 2.0, 0.0, 0.0]], [[3.0, 4.0, 5.0, 6.0]]]
+    assert padded_masks.tolist() == [[1, 1, 0, 0], [1, 1, 1, 0]]
+
+
+def test_ragged_audio_batch_rejects_misaligned_input_and_mask_lengths():
+    with pytest.raises(ValueError, match="mismatched sample lengths"):
+        _pad_ragged_audio_batch(
+            [torch.tensor([[1.0, 2.0]])],
+            [torch.tensor([[1]])],
+        )
+
+
+def test_nested_audio_token_counts_are_flattened_in_item_order():
+    counts = _flatten_audio_token_counts([torch.tensor([2]), torch.tensor([[4], [3]])])
+    assert counts.tolist() == [2, 4, 3]
 
 
 def _make_tokenizer() -> PreTrainedTokenizerFast:
@@ -348,21 +373,16 @@ def test_request_scoped_audio_uuids_control_processor_hashes():
 # ======================================================================
 
 
-def _fixture_paths() -> tuple[Path, Path]:
-    model_root = os.getenv("VIBEVOICE_TEST_MODEL_ROOT")
+def _fixture_paths() -> tuple[str, Path]:
     official_repo = os.getenv("VIBEVOICE_OFFICIAL_REPO")
-    if not model_root:
-        pytest.skip("Set VIBEVOICE_TEST_MODEL_ROOT for real-tokenizer processing parity")
     if not official_repo:
         pytest.skip("Set VIBEVOICE_OFFICIAL_REPO for Microsoft processor parity")
 
-    tokenizer_path = Path(model_root) / "VibeVoice-1.5B-hf"
+    tokenizer = os.getenv("VIBEVOICE_TEST_TOKENIZER", "Qwen/Qwen2.5-1.5B")
     repo_path = Path(official_repo)
-    if not (tokenizer_path / "tokenizer.json").is_file():
-        pytest.skip(f"VibeVoice tokenizer fixture not found at {tokenizer_path}")
     if not (repo_path / "vibevoice/processor/vibevoice_processor.py").is_file():
         pytest.skip(f"Microsoft VibeVoice processor not found at {repo_path}")
-    return tokenizer_path, repo_path
+    return tokenizer, repo_path
 
 
 def _load_microsoft_processor_class(repo_path: Path):

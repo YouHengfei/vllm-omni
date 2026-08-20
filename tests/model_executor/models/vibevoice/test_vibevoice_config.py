@@ -342,16 +342,16 @@ def test_single_stage_deploy_defaults_match_vibevoice_generation_contract():
 
     stage = deploy.stages[0]
     assert stage.stage_id == 0
-    assert stage.devices == "0,1"
-    assert stage.tensor_parallel_size == 2
+    assert stage.devices == "0"
+    assert stage.tensor_parallel_size == 1
     assert stage.enforce_eager is False
     assert stage.async_scheduling is True
     assert stage.max_model_len == 65536
     assert stage.max_num_seqs == 4
-    assert stage.engine_extras["kv_cache_memory_bytes"] == 6 * 1024**3
+    assert stage.engine_extras["kv_cache_memory_bytes"] == 8 * 1024**3
     assert stage.engine_extras["additional_config"] == {
         "vibevoice_runtime_config": {
-            "negative_kv_cache_memory_bytes": 4 * 1024**3,
+            "negative_kv_cache_memory_bytes": 8 * 1024**3,
             "negative_kv_activation_margin_bytes": 512 * 1024**2,
         }
     }
@@ -372,6 +372,24 @@ def test_single_stage_deploy_defaults_match_vibevoice_generation_contract():
     assert sampling_params.allowed_token_ids == VIBEVOICE_VALID_TOKEN_IDS
     assert sampling_params.stop_token_ids == [151643]
     assert sampling_params.detokenize is False
+
+
+def test_tp2_deploy_is_an_opt_in_capability_overlay():
+    deploy_path = Path(__file__).parents[4] / "vllm_omni" / "deploy" / "vibevoice_tp2.yaml"
+    deploy = load_deploy_config(deploy_path)
+
+    assert len(deploy.stages) == 1
+    stage = deploy.stages[0]
+    assert stage.devices == "0,1"
+    assert stage.tensor_parallel_size == 2
+    assert stage.max_num_seqs == 4
+    assert stage.engine_extras["kv_cache_memory_bytes"] == 6 * 1024**3
+    assert stage.engine_extras["additional_config"] == {
+        "vibevoice_runtime_config": {
+            "negative_kv_cache_memory_bytes": 4 * 1024**3,
+            "negative_kv_activation_margin_bytes": 512 * 1024**2,
+        }
+    }
 
 
 def test_auto_config_normalizes_official_checkpoint_without_remote_code(checkpoint_dir):

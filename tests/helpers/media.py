@@ -12,7 +12,6 @@ import multiprocessing
 import os
 import random
 import re
-import shutil
 import subprocess
 import tempfile
 import time
@@ -551,6 +550,8 @@ def concat_audio(audio_val) -> np.ndarray:
 
 
 def preprocess_text(text):
+    import opencc
+
     word_to_num = {
         "zero": "0",
         "one": "1",
@@ -570,11 +571,9 @@ def preprocess_text(text):
 
     text = re.sub(r"[^\w\s]", "", text)
     text = re.sub(r"\s+", " ", text)
-    if re.search(r"[\u4e00-\u9fff]", text):
-        import opencc
-
-        text = opencc.OpenCC("t2s").convert(text)
-        text = re.sub(r"(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])", "", text)
+    cc = opencc.OpenCC("t2s")
+    text = cc.convert(text)
+    text = re.sub(r"(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])", "", text)
     return text.lower().strip()
 
 
@@ -653,32 +652,9 @@ def _serialize_whisper_model_download(model_size: str = "small"):
         f.close()
 
 
-def _ensure_test_ffmpeg_on_path() -> None:
-    if shutil.which("ffmpeg") is not None:
-        return
-    # imageio-ffmpeg is already a test dependency and ships a portable binary.
-    # OpenAI Whisper invokes the literal `ffmpeg` command, so make that binary
-    # discoverable in spawned transcription workers when the host does not
-    # install a system ffmpeg package.
-    try:
-        import imageio_ffmpeg
-
-        ffmpeg_target = Path(imageio_ffmpeg.get_ffmpeg_exe()).resolve()
-        ffmpeg_dir = Path(tempfile.gettempdir()) / "vllm_omni_test_bin"
-        ffmpeg_dir.mkdir(parents=True, exist_ok=True)
-        ffmpeg_link = ffmpeg_dir / "ffmpeg"
-        if not ffmpeg_link.exists():
-            ffmpeg_link.symlink_to(ffmpeg_target)
-        os.environ["PATH"] = os.pathsep.join((str(ffmpeg_dir), os.environ.get("PATH", "")))
-    except (ImportError, OSError, RuntimeError):
-        pass
-
-
 def _whisper_transcribe_in_current_process(
     output_path: str, model_size: str = "small", language: str | None = None
 ) -> str:
-    _ensure_test_ffmpeg_on_path()
-
     import whisper
 
     device_index = None

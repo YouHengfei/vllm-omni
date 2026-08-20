@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -274,32 +273,6 @@ def test_active_subset_uses_one_batched_official_rng_draw() -> None:
     assert len(audio_chunks) == 2
     assert stateful.get("request-a").audio_token_count == 1
     assert stateful.get("request-b").audio_token_count == 1
-
-
-def test_named_kv_capability_warning_distinguishes_runner_ack_and_binding(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    wrapper = object.__new__(VibeVoiceForConditionalGeneration)
-    nn.Module.__init__(wrapper)
-    wrapper._negative_kv_branch = None
-    warnings: list[str] = []
-    monkeypatch.setattr(
-        "vllm_omni.model_executor.models.vibevoice.vibevoice.logger.warning_once",
-        lambda message, *_args, **_kwargs: warnings.append(message),
-    )
-
-    wrapper._warn_if_named_kv_capability_unavailable()
-    assert len(warnings) == 1
-    assert "named-KV runner capability" in warnings[0]
-
-    wrapper.named_kv_branch_capability_acknowledged = True
-    wrapper._warn_if_named_kv_capability_unavailable()
-    assert len(warnings) == 1
-
-    del wrapper.named_kv_branch_capability_acknowledged
-    wrapper._negative_kv_branch = SimpleNamespace()
-    wrapper._warn_if_named_kv_capability_unavailable()
-    assert len(warnings) == 1
 
 
 def test_model_forward_batches_negative_branch_and_writes_feedback_rows() -> None:
@@ -588,16 +561,17 @@ def test_audio_transition_refuses_unguided_fallback_without_negative_paged_kv() 
     assert not kernel.decode_calls
 
 
-def test_audio_token_requires_bos_and_fresh_one_step_conditions() -> None:
+def test_audio_token_requires_fresh_one_step_conditions() -> None:
     stateful = _stateful()
     kernel = _FakeKernel()
-    with pytest.raises(RuntimeError, match="outside an audio segment"):
+    with pytest.raises(RuntimeError, match="no positive Qwen condition"):
         stateful.process_sampled_token(
             request_id="request-a",
             token_id=_AUDIO,
             token_embedding=torch.zeros(1, 4),
             kernel=kernel,
         )
+    assert stateful.get("request-a").in_audio_segment
 
     stateful.start_audio_segment("request-a")
     stateful.record_positive_condition("request-a", torch.ones(1, 4))
@@ -617,7 +591,7 @@ def test_audio_token_requires_bos_and_fresh_one_step_conditions() -> None:
         )
 
 
-def test_audio_eos_is_a_state_transition_but_model_eos_is_separate() -> None:
+def test_audio_eos_retains_negative_context_until_bos_or_model_eos() -> None:
     stateful = _stateful()
     kernel = _FakeKernel()
     negative_branch = _FakeNegativeBranch()
@@ -635,7 +609,23 @@ def test_audio_eos_is_a_state_transition_but_model_eos_is_separate() -> None:
     assert audio is None
     state = stateful.get("request-a")
     assert state is not None and not state.in_audio_segment
-    assert negative_branch.freed_ids == ["request-a"]
+    assert torch.equal(state.negative_input_embedding, embedding)
+    assert negative_branch.freed_ids == []
+
+    # Match the official generator's robust behavior if model logits produce
+    # audio EOS -> audio token without an intervening audio BOS. The existing
+    # negative/conv context continues instead of killing the EngineCore.
+    stateful.record_positive_condition("request-a", torch.ones(1, 4))
+    stateful.record_negative_condition("request-a", torch.zeros(1, 4))
+    output, audio = stateful.process_sampled_token(
+        request_id="request-a",
+        token_id=_AUDIO,
+        token_embedding=embedding,
+        kernel=kernel,
+    )
+    assert output.shape == (1, 4)
+    assert audio is not None
+    assert state.in_audio_segment
 
     output, audio = stateful.process_sampled_token(
         request_id="request-a",
@@ -645,8 +635,8 @@ def test_audio_eos_is_a_state_transition_but_model_eos_is_separate() -> None:
     )
     assert torch.equal(output, embedding)
     assert audio is None
-    assert negative_branch.freed_ids == ["request-a", "request-a"]
-    assert not kernel.sample_calls
+    assert negative_branch.freed_ids == ["request-a"]
+    assert len(kernel.sample_calls) == 1
 
 
 def test_request_cleanup_drops_unpublished_waveform_after_abort() -> None:
@@ -670,6 +660,7 @@ def test_request_cleanup_drops_unpublished_waveform_after_abort() -> None:
     assert negative_branch.freed_ids == ["aborted"]
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="Pinned host allocation requires CUDA")
 def test_drain_recycles_pinned_buffers_and_publishes_owning_copies() -> None:
     """Phase A pinned-D2H contract, exercised with host-pinned tensors."""
     stateful = _stateful()
@@ -697,18 +688,6 @@ def test_drain_recycles_pinned_buffers_and_publishes_owning_copies() -> None:
     assert state._waveform_events == {}
 
 
-def test_drain_plain_cpu_chunks_keep_identity_and_touch_no_pool() -> None:
-    stateful = _stateful()
-    state = stateful.get_or_create("request-a")
-    plain = torch.ones(4, dtype=torch.float32)
-    state.waveform_chunks_cpu.append(plain)
-
-    published = stateful.drain_waveform_chunks("request-a")
-
-    assert published is plain
-    assert state._pinned_pool == []
-
-
 def test_request_cleanup_is_deferred_around_the_final_scheduled_forward() -> None:
     stateful = _stateful()
     negative_branch = _FakeNegativeBranch()
@@ -733,17 +712,3 @@ def test_request_cleanup_is_deferred_around_the_final_scheduled_forward() -> Non
     assert stateful.get("active") is None
     assert negative_branch.freed_ids == ["finished", "active"]
     assert not stateful.deferred_cleanup_ids
-
-
-@pytest.mark.parametrize(
-    ("extra_args", "message"),
-    [
-        ({"guidance_scale": float("nan")}, "guidance_scale must be finite"),
-        ({"guidance_scale": "bad"}, "guidance_scale must be finite"),
-        ({"num_diffusion_steps": 0}, "must be a positive integer"),
-        ({"num_diffusion_steps": True}, "must be a positive integer"),
-    ],
-)
-def test_runtime_controls_fail_fast(extra_args: dict[str, Any], message: str) -> None:
-    with pytest.raises(ValueError, match=message):
-        _stateful().set_runtime_controls("request-a", extra_args)

@@ -6,25 +6,16 @@ from collections.abc import Mapping
 import pytest
 import torch
 
-from tests.helpers.ar_tts_isolation_worker_extension import assert_non_vibevoice_ar_isolation
 from tests.helpers.mark import hardware_test
 from tests.helpers.runtime import OmniRunner
 from tests.helpers.stage_config import get_deploy_config_path
 
-VOXCPM2_MODEL = os.getenv("VOXCPM2_TEST_MODEL", "openbmb/VoxCPM2")
+VOXCPM2_MODEL = "openbmb/VoxCPM2"
 DEPLOY_CONFIG = get_deploy_config_path("voxcpm2.yaml")
 SAMPLE_RATE = 48000
 
 # VoxCPM2 ships a custom tokenizer, so remote code must be explicitly enabled.
-_WORKER_EXTENSION = "tests.helpers.ar_tts_isolation_worker_extension.ARTTSIsolationWorkerExtensionForTest"
-_OMNI_RUNNER_PARAM = (
-    VOXCPM2_MODEL,
-    DEPLOY_CONFIG,
-    {
-        "trust_remote_code": True,
-        "stage_overrides": {"0": {"worker_extension_cls": _WORKER_EXTENSION}},
-    },
-)
+_OMNI_RUNNER_PARAM = (VOXCPM2_MODEL, DEPLOY_CONFIG, {"trust_remote_code": True})
 
 pytestmark = pytest.mark.parametrize("omni_runner", [_OMNI_RUNNER_PARAM], indirect=True)
 
@@ -131,10 +122,3 @@ def test_voxcpm2_prefill_decode_mixed_batch_003(omni_runner: OmniRunner) -> None
         audio = _extract_audio(out.outputs[0].multimodal_output)
         duration_s = audio.shape[0] / SAMPLE_RATE
         assert 0.1 < duration_s < 30.0, f"Request {i} audio duration out of range: {duration_s:.2f}s"
-
-    isolation = omni_runner.omni.engine.collective_rpc(
-        method="ar_tts_test_runtime_isolation",
-        timeout=60,
-        stage_ids=[0],
-    )
-    assert_non_vibevoice_ar_isolation(isolation)

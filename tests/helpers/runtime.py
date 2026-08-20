@@ -28,7 +28,7 @@ import requests
 import soundfile as sf
 import torch
 import yaml
-from openai import APIError, DefaultHttpxClient, OpenAI, omit
+from openai import APIError, OpenAI, omit
 from PIL import Image
 from vllm import TextPrompt, envs
 from vllm.distributed.parallel_state import (
@@ -231,9 +231,6 @@ class OmniServerParams(NamedTuple):
     use_stage_cli: bool = False
     init_timeout: int | None = None
     stage_init_timeout: int | None = None  # None: fixture supplies default (600 s)
-    # Fail closed before server startup when a test is intended to provide
-    # real-checkpoint evidence but pytest is using its core-model dummy mode.
-    require_real_weights: bool = False
 
 
 class OmniServer:
@@ -762,9 +759,6 @@ class OmniResponse:
     audio_content: str | None = None
     audio_format: str | None = None
     audio_bytes: bytes | None = None
-    #: Lower-cased response headers for binary Speech API calls. Other helpers
-    #: may leave this unset.
-    response_headers: dict[str, str] | None = None
     #: End-to-end wall time in **seconds** (``perf_counter`` delta), from just before the
     #: OpenAI client call through response parsing and local post-process (e.g. audio decode).
     e2e_latency: float | None = None
@@ -1063,14 +1057,7 @@ class OpenAIClientHandler:
         if port is None:
             port = get_open_port()
         self.base_url = f"http://{host}:{port}"
-        # E2E clients always target the local test server. Inheriting a
-        # developer/CI SOCKS proxy can either route localhost traffic away or
-        # fail construction when the optional socksio package is absent.
-        self.client = OpenAI(
-            base_url=f"http://{host}:{port}/v1",
-            api_key=api_key,
-            http_client=DefaultHttpxClient(trust_env=False),
-        )
+        self.client = OpenAI(base_url=f"http://{host}:{port}/v1", api_key=api_key)
         self.run_level = run_level
         self.log_stats = log_stats
 
@@ -1995,10 +1982,9 @@ class OpenAIClientHandler:
             result.audio_bytes = raw_bytes
             result.e2e_latency = time.perf_counter() - wall_start
             result.success = True
-            raw_response = getattr(response, "response", None)
-            if raw_response is not None:
-                result.response_headers = {str(key).lower(): str(value) for key, value in raw_response.headers.items()}
-                result.audio_format = result.response_headers.get("content-type", "")
+            result.audio_format = getattr(response, "response", None)
+            if result.audio_format is not None:
+                result.audio_format = result.audio_format.headers.get("content-type", "")
 
         except Exception as e:
             msg = f"Audio speech stream processing error: {str(e)}"
@@ -2029,10 +2015,9 @@ class OpenAIClientHandler:
             result.audio_bytes = raw_bytes
             result.e2e_latency = time.perf_counter() - wall_start
             result.success = True
-            raw_response = getattr(response, "response", None)
-            if raw_response is not None:
-                result.response_headers = {str(key).lower(): str(value) for key, value in raw_response.headers.items()}
-                result.audio_format = result.response_headers.get("content-type", "")
+            result.audio_format = getattr(response, "response", None)
+            if result.audio_format is not None:
+                result.audio_format = result.audio_format.headers.get("content-type", "")
 
         except Exception as e:
             msg = f"Audio speech non-stream processing error: {str(e)}"
@@ -2871,13 +2856,12 @@ class OmniRunner:
     def _is_engine_process(proc: psutil.Process) -> bool:
         try:
             cmdline = " ".join(proc.cmdline()).lower() if proc.cmdline() else ""
-            name = proc.name().lower()
-            return "enginecore" in cmdline or "enginecore" in name
+            return "enginecore" in cmdline or "enginecore" in proc.name().lower()
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             return False
 
     def _owned_engine_processes(self) -> list[psutil.Process]:
-        """Snapshot only EngineCore descendants owned by this test process."""
+        """Return EngineCore descendants owned by this test process only."""
         try:
             descendants = psutil.Process(os.getpid()).children(recursive=True)
         except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -2885,13 +2869,7 @@ class OmniRunner:
         return [proc for proc in descendants if self._is_engine_process(proc)]
 
     def _cleanup_process(self, matched: list[psutil.Process]) -> None:
-        """Clean up only descendants captured before this runner shut down.
-
-        A global process-name scan can target unrelated vLLM jobs, including
-        another test or user's server running under the same account. Residual
-        cleanup must therefore be restricted to the runner's pre-shutdown
-        process tree.
-        """
+        """Clean up the owned descendants captured before runner shutdown."""
         try:
             for proc in matched:
                 try:
@@ -3126,17 +3104,10 @@ def iter_omni_server(
     omni_fixture_lock: threading.Lock,
 ) -> Generator[Any, Any, None]:
     """Start/stop an Omni HTTP server; used by ``omni_server`` / ``omni_server_function`` fixtures."""
-    from tests.helpers.stage_config import (
-        stage_config_path_for_run_level,
-        stage_config_uses_dummy_load_format,
-    )
+    from tests.helpers.stage_config import stage_config_path_for_run_level
 
     with omni_fixture_lock:
         params: OmniServerParams = request.param
-        if params.require_real_weights and run_level not in {"advanced_model", "full_model"}:
-            import pytest
-
-            pytest.skip("This HTTP E2E requires real weights; rerun with --run-level advanced_model (or full_model).")
         # For now, when a tiny model is substituted, we preserve the original model
         # name via --served-model-name (so that the server still accepts requests with
         # the original name). We also do the same for server.model so that tests reading
@@ -3151,12 +3122,6 @@ def iter_omni_server(
             model = resolve_tiny_model_path(model)
         port = params.port
         stage_config_path = stage_config_path_for_run_level(params.stage_config_path, run_level)
-        if (
-            params.require_real_weights
-            and stage_config_path is not None
-            and stage_config_uses_dummy_load_format(stage_config_path)
-        ):
-            raise AssertionError("Real-weight HTTP E2E resolved to a stage config with load_format='dummy'")
 
         server_args = params.server_args or []
         if model != original_model:

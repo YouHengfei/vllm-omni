@@ -222,9 +222,7 @@ class VibeVoiceConfig(PreTrainedConfig):
             semantic_model_config["model_type"] = semantic_model_config.get(
                 "model_type", "vibevoice_acoustic_tokenizer_encoder"
             )
-            self.semantic_model_config = CONFIG_MAPPING[semantic_model_config["model_type"]](
-                **semantic_model_config
-            )
+            self.semantic_model_config = CONFIG_MAPPING[semantic_model_config["model_type"]](**semantic_model_config)
         elif self.semantic_model_config is None:
             self.semantic_model_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer_encoder"](hidden_size=128)
 

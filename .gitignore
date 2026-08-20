@@ -241,6 +241,8 @@ datasets/
 *.csv
 *.json
 !tests/dfx/perf/tests/*.json
+!tests/dfx/stability/tests/test_vibevoice.json
+tests/dfx/stability/gpu_monitor_data/
 !apps/ComfyUI-vLLM-Omni/example_workflows/*.json
 !tests/assets/soulxsinger/*.json
 *.jsonl
