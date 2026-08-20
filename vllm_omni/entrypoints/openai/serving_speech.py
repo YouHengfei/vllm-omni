@@ -4027,13 +4027,11 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
             if validation_error is not None:
                 return SpeechBatchItemResult(index=idx, status="error", error=validation_error)
             usage_box: list[SpeechTokenUsage] = []
-            response_headers: dict[str, str] = {}
             try:
                 audio_data, media_type = await self._generate_audio_bytes(
                     req,
                     base64_encode=True,
                     usage_out=usage_box,
-                    response_headers_out=response_headers,
                     has_inline_ref_audio=has_inline_ref_audio,
                 )
             except Exception as e:
@@ -4044,7 +4042,6 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
                 status="success",
                 audio_data=audio_data,
                 media_type=media_type,
-                finish_reason=response_headers.get("X-Finish-Reason"),
                 usage=usage_box[0] if usage_box else None,
             )
 

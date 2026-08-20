@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Env-gated per-phase timing harness for the VibeVoice decode path.
 
-Phase A of the performance plan (see README_VIBEVOICE.md §13) needs a
-repeatable per-token phase breakdown without paying for it in production.
+VibeVoice performance investigations need a repeatable per-token phase
+breakdown without paying for it in production.
 Set ``VLLM_OMNI_VIBEVOICE_PERF_TIMING`` to enable:
 
 - ``1``: CPU wall timers around each phase (enqueue-side cost; safe under

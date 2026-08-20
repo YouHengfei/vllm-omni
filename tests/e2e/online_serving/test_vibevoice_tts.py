@@ -288,13 +288,10 @@ def test_vibevoice_http_batch_mixed_results_004(omni_server) -> None:
     assert payload["failed"] == 1
     first, invalid, third = payload["results"]
     assert first["status"] == "success"
-    assert first["finish_reason"] == "length"
     assert base64.b64decode(first["audio_data"])[:4] == b"RIFF"
     assert invalid["status"] == "error"
     assert "does not support 'instructions'" in invalid["error"]
-    assert "finish_reason" not in invalid
     assert third["status"] == "success"
-    assert third["finish_reason"] == "stop"
     assert base64.b64decode(third["audio_data"])[:4] == b"RIFF"
 
 

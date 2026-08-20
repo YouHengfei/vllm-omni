@@ -528,6 +528,10 @@ def compute_seed_tts_wer_metrics(
     first = input_requests[0]
     assert isinstance(first, SeedTTSSampleRequest)
     lang = "zh" if (first.seed_tts_locale or "en").lower().startswith("zh") else "en"
+    required_terminal_stop = sum(bool(req.seed_tts_require_terminal_stop) for req in input_requests)
+    # Preserve the historical WER schema for generic Seed-TTS consumers. The
+    # VibeVoice variant opts into explicit CER labeling for Chinese rows.
+    content_metric = "cer" if required_terminal_stop and lang == "zh" else "wer"
 
     setup_err = _missing_deps_message(lang)
     if setup_err:
@@ -541,7 +545,7 @@ def compute_seed_tts_wer_metrics(
             "seed_tts_request_failed": 0,
             "seed_tts_no_pcm": 0,
             "seed_tts_asr_failed": 0,
-            "seed_tts_content_metric": "cer" if lang == "zh" else "wer",
+            "seed_tts_content_metric": content_metric,
         }
 
     import soundfile as sf
@@ -557,7 +561,6 @@ def compute_seed_tts_wer_metrics(
     sim_skipped_no_ref = 0
     utmos_failed = 0
     finish_reason_counts: dict[str, int] = {}
-    required_terminal_stop = sum(bool(req.seed_tts_require_terminal_stop) for req in input_requests)
     required_stop_count = 0
     missing_finish_reason = 0
     non_stop_excluded = 0
@@ -782,25 +785,26 @@ def compute_seed_tts_wer_metrics(
                 sim_skipped_no_ref += 1
 
         if include_per_item:
-            metric_name = "cer" if row_lang == "zh" else "wer"
             row: dict[str, Any] = {
                 "utterance_id": req.seed_tts_utterance_id,
                 "locale": locale,
-                # Keep the historical field for existing Seed-TTS consumers;
-                # ``content_error`` and ``cer`` make the Chinese metric explicit.
                 "wer": wer,
-                "content_error": wer,
-                metric_name: wer,
                 "reference_raw": raw_truth,
                 "asr_raw": raw_hypo,
             }
+            if requires_stop:
+                # VibeVoice makes the locale-specific metric explicit while
+                # retaining ``wer`` for compatibility with existing tooling.
+                row["content_error"] = wer
+                if row_lang == "zh":
+                    row["cer"] = wer
             if audio_path:
                 row["audio_path"] = audio_path
             if sim_v is not None:
                 row["sim"] = sim_v
             if utmos_v is not None:
                 row["utmos"] = utmos_v
-            if finish_reason is not None:
+            if requires_stop and finish_reason is not None:
                 row["finish_reason"] = finish_reason
             items.append(row)
 
@@ -812,7 +816,7 @@ def compute_seed_tts_wer_metrics(
         "seed_tts_request_failed": request_failed,
         "seed_tts_no_pcm": no_pcm,
         "seed_tts_asr_failed": asr_failed,
-        "seed_tts_content_metric": "cer" if lang == "zh" else "wer",
+        "seed_tts_content_metric": content_metric,
         "seed_tts_sim_evaluated": len(sim_values),
         "seed_tts_sim_mean": statistics.fmean(sim_values) if sim_values else None,
         "seed_tts_sim_median": statistics.median(sim_values) if sim_values else None,
@@ -822,16 +826,21 @@ def compute_seed_tts_wer_metrics(
         "seed_tts_utmos_mean": statistics.fmean(utmos_values) if utmos_values else None,
         "seed_tts_utmos_median": statistics.median(utmos_values) if utmos_values else None,
         "seed_tts_utmos_failed": utmos_failed,
-        "seed_tts_finish_reason_counts": finish_reason_counts,
-        "seed_tts_length_capped": int(finish_reason_counts.get("length", 0)),
-        "seed_tts_terminal_stop_required": required_terminal_stop,
-        "seed_tts_required_stop_count": required_stop_count,
-        "seed_tts_missing_finish_reason": missing_finish_reason,
-        "seed_tts_non_stop_excluded": non_stop_excluded,
-        "seed_tts_total_requests": len(input_requests),
         "seed_tts_saved_audio": saved_audio,
         "seed_tts_save_audio_failed": save_audio_failed,
     }
+    if required_terminal_stop:
+        result.update(
+            {
+                "seed_tts_finish_reason_counts": finish_reason_counts,
+                "seed_tts_length_capped": int(finish_reason_counts.get("length", 0)),
+                "seed_tts_terminal_stop_required": required_terminal_stop,
+                "seed_tts_required_stop_count": required_stop_count,
+                "seed_tts_missing_finish_reason": missing_finish_reason,
+                "seed_tts_non_stop_excluded": non_stop_excluded,
+                "seed_tts_total_requests": len(input_requests),
+            }
+        )
     if save_audio_dir is not None:
         result["seed_tts_save_audio_dir"] = str(save_audio_dir)
     if include_per_item:

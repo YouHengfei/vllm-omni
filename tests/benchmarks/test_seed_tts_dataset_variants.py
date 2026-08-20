@@ -254,7 +254,18 @@ def test_seed_tts_eval_records_sse_finish_reason(monkeypatch):
     )
     assert generic_metrics is not None
     assert generic_metrics["seed_tts_content_evaluated"] == 1
-    assert generic_metrics["seed_tts_non_stop_excluded"] == 0
+    assert generic_metrics["seed_tts_content_metric"] == "wer"
+    assert "seed_tts_non_stop_excluded" not in generic_metrics
+    assert "seed_tts_finish_reason_counts" not in generic_metrics
+    assert generic_metrics["seed_tts_wer_eval_items"] == [
+        {
+            "utterance_id": "utt-0",
+            "locale": "en",
+            "wer": 0.0,
+            "reference_raw": "hello",
+            "asr_raw": "hello",
+        }
+    ]
 
 
 def test_seed_tts_whisper_transcribe_passes_attention_mask(monkeypatch):

@@ -3,11 +3,6 @@
 """VibeVoice stability: OmniServer + ``vllm bench serve --omni`` for a fixed duration.
 
 Configuration: ``tests/dfx/stability/tests/test_vibevoice.json``.
-
-Aligned with VoxCPM2 stability (same conftest + helpers), with VibeVoice-specific
-differences: max_concurrency=4 (matches max_num_seqs=4), stream=true (SSE for
-continuity/underrun metrics), and ref_audio in extra_body (VibeVoice requires
-reference audio for voice cloning).
 """
 
 from __future__ import annotations

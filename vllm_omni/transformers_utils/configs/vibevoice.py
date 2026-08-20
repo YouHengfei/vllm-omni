@@ -11,7 +11,7 @@ Microsoft's original checkpoint is the public input. Its nested config schema
 is normalized at load time to the representation used by Transformers PR
 #40546: ``audio_config``, ``semantic_model_config``, ``text_config``, and flat
 diffusion fields. Weight-name conversion remains a model-loader responsibility.
-See ``README_VIBEVOICE.md`` for the integration contract.
+See ``docs/models/vibevoice.md`` for supported deployment behavior.
 """
 
 from copy import deepcopy

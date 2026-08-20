@@ -7,8 +7,8 @@
 # decode step. The model therefore owns all per-request side state in stage 0.
 #
 # The Microsoft 1.5B checkpoint defaults to one GPU. Tensor parallelism adds
-# collective communication while duplicating the side modules, so it is kept
-# as an opt-in capability topology in vibevoice_tp2.yaml instead of the
+# collective communication while duplicating the side modules, so TP=2 is
+# documented as an opt-in capability topology instead of being the
 # latency/throughput baseline. Diffusion and convolutional side-path
 # allocations are outside vLLM's paged-KV accounting, so both KV pools use
 # fixed budgets instead of consuming all memory allowed by
