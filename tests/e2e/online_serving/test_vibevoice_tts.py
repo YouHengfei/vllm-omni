@@ -166,7 +166,46 @@ def test_vibevoice_http_wav_pcm_local_file_001(omni_server) -> None:
 @pytest.mark.advanced_model
 @hardware_test(res={"cuda": "H100"}, num_cards=1)
 @pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
-def test_vibevoice_http_uploaded_voice_lifecycle_002(omni_server) -> None:
+def test_vibevoice_http_bundled_default_voices_002(omni_server) -> None:
+    requests = [
+        {
+            "model": omni_server.model,
+            "input": "Hello from the bundled default voice.",
+            "response_format": "wav",
+            "max_new_tokens": 512,
+        },
+        {
+            "model": omni_server.model,
+            "input": "\n".join(
+                [
+                    "Speaker 8: Welcome.",
+                    "Speaker 3: It is good to be here.",
+                    "Speaker 5: Let us begin.",
+                    "Speaker 1: Thank you.",
+                ]
+            ),
+            "response_format": "wav",
+            "max_new_tokens": 1_024,
+        },
+    ]
+
+    for payload in requests:
+        response = _post(omni_server, payload, timeout=900.0)
+        assert response.status_code == 200, response.text
+        assert response.headers.get("X-Finish-Reason") == "stop"
+        waveform, sample_rate = sf.read(io.BytesIO(response.content), dtype="float32")
+        assert sample_rate == 24_000
+        assert waveform.ndim == 1
+        assert waveform.size > 0
+        assert waveform.size % 3_200 == 0
+        assert np.isfinite(waveform).all()
+        assert float(np.sqrt(np.mean(np.square(waveform, dtype=np.float64)))) > 1e-5
+
+
+@pytest.mark.advanced_model
+@hardware_test(res={"cuda": "H100"}, num_cards=1)
+@pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
+def test_vibevoice_http_uploaded_voice_lifecycle_003(omni_server) -> None:
     voice_name = "vibevoice-e2e-narrator"
     with httpx.Client(trust_env=False, timeout=300.0) as client:
         try:
@@ -217,7 +256,7 @@ def test_vibevoice_http_uploaded_voice_lifecycle_002(omni_server) -> None:
 @pytest.mark.advanced_model
 @hardware_test(res={"cuda": "H100"}, num_cards=1)
 @pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
-def test_vibevoice_http_four_speaker_natural_003(omni_server) -> None:
+def test_vibevoice_http_four_speaker_natural_004(omni_server) -> None:
     response = _post(
         omni_server,
         {
@@ -253,7 +292,7 @@ def test_vibevoice_http_four_speaker_natural_003(omni_server) -> None:
 @pytest.mark.advanced_model
 @hardware_test(res={"cuda": "H100"}, num_cards=1)
 @pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
-def test_vibevoice_http_batch_mixed_results_004(omni_server) -> None:
+def test_vibevoice_http_batch_mixed_results_005(omni_server) -> None:
     with httpx.Client(trust_env=False, timeout=600.0) as client:
         response = client.post(
             _batch_url(omni_server),
@@ -272,8 +311,9 @@ def test_vibevoice_http_batch_mixed_results_004(omni_server) -> None:
                         "instructions": "unsupported",
                     },
                     {
-                        "input": "Hello.",
-                        "ref_audio": _REFERENCE_DATA_URL,
+                        # Batch items use the same adapter fallback as direct
+                        # speech requests when no reference is supplied.
+                        "input": "Hello from a bundled default voice.",
                         "response_format": "wav",
                         "max_new_tokens": 256,
                     },
@@ -298,7 +338,7 @@ def test_vibevoice_http_batch_mixed_results_004(omni_server) -> None:
 @pytest.mark.advanced_model
 @hardware_test(res={"cuda": "H100"}, num_cards=1)
 @pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
-def test_vibevoice_sse_terminal_length_005(omni_server) -> None:
+def test_vibevoice_sse_terminal_length_006(omni_server) -> None:
     sse_audio = bytearray()
     done_event = None
     with httpx.Client(trust_env=False, timeout=600.0) as client:
@@ -333,7 +373,7 @@ def test_vibevoice_sse_terminal_length_005(omni_server) -> None:
 @pytest.mark.advanced_model
 @hardware_test(res={"cuda": "H100"}, num_cards=1)
 @pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
-def test_vibevoice_http_rejects_invalid_requests_006(omni_server) -> None:
+def test_vibevoice_http_rejects_invalid_requests_007(omni_server) -> None:
     valid = {
         "model": omni_server.model,
         "input": "Hello.",
@@ -355,6 +395,17 @@ def test_vibevoice_http_rejects_invalid_requests_006(omni_server) -> None:
     _assert_error(
         _post(omni_server, {**valid, "seed": 42}),
         "request-level seed",
+    )
+    _assert_error(
+        _post(
+            omni_server,
+            {
+                **valid,
+                "input": "Speaker 0: hello\nSpeaker 1: world",
+                "ref_audio": [_REFERENCE_DATA_URL],
+            },
+        ),
+        "found 2 speakers but received 1 reference audios",
     )
     _assert_error(
         _post(omni_server, {**valid, "ref_audio": "not-a-url"}),

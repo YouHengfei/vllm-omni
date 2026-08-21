@@ -15,6 +15,9 @@ from vllm_omni.entrypoints.openai.tts_adapters.base import (
     ARTTSAdapter,
     PreparedRequest,
 )
+from vllm_omni.model_executor.models.vibevoice.default_voices import (
+    get_default_reference_audio_path,
+)
 from vllm_omni.model_executor.models.vibevoice.pipeline import (
     VIBEVOICE_VALID_TOKEN_IDS,
 )
@@ -150,9 +153,7 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
             return str(exc)
 
         references = self._reference_sources(request)
-        if request.voice is None:
-            if not references:
-                return "VibeVoice requires 'ref_audio' for each speaker"
+        if request.voice is None and references:
             if len(references) != num_speakers:
                 return f"VibeVoice found {num_speakers} speakers but received {len(references)} reference audios"
 
@@ -168,13 +169,8 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
                 return "max_new_tokens cannot exceed 40500"
         return None
 
-    async def _resolve_reference(self, source: str) -> tuple[np.ndarray, int]:
-        model_config = self.ctx.server.model_config
-        connector = MediaConnector(
-            allowed_local_media_path=model_config.allowed_local_media_path,
-            allowed_media_domains=model_config.allowed_media_domains,
-        )
-        waveform, sample_rate = await connector.fetch_audio_async(source)
+    @staticmethod
+    def _validate_resolved_reference(waveform: object, sample_rate: object) -> tuple[np.ndarray, int]:
         waveform = np.asarray(waveform, dtype=np.float32)
         if waveform.ndim not in (1, 2):
             raise ValueError(f"VibeVoice reference audio must be one- or two-dimensional, got {waveform.shape}.")
@@ -188,6 +184,22 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
         if duration > MAX_AUDIO_SECONDS:
             raise ValueError(f"VibeVoice reference audio is {duration:.2f}s; the maximum is {MAX_AUDIO_SECONDS}s.")
         return waveform, sample_rate
+
+    async def _resolve_reference(self, source: str) -> tuple[np.ndarray, int]:
+        model_config = self.ctx.server.model_config
+        connector = MediaConnector(
+            allowed_local_media_path=model_config.allowed_local_media_path,
+            allowed_media_domains=model_config.allowed_media_domains,
+        )
+        return self._validate_resolved_reference(*await connector.fetch_audio_async(source))
+
+    async def _resolve_default_reference(self, index: int) -> tuple[np.ndarray, int]:
+        path = get_default_reference_audio_path(index)
+        # Framework-owned media is trusted independently of the user-facing
+        # --allowed-local-media-path sandbox. Restrict this connector to the
+        # package's VibeVoice asset directory rather than widening that sandbox.
+        connector = MediaConnector(allowed_local_media_path=str(path.parent))
+        return self._validate_resolved_reference(*await connector.fetch_audio_async(path.as_uri()))
 
     @staticmethod
     def _render_prompt(parsed: list[tuple[int, str]], num_speakers: int) -> str:
@@ -220,10 +232,17 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
             request.voice = None
             request.ref_text = None
         references = self._reference_sources(request)
-        # validate() normally checks this first; keep build safe for direct use.
-        if len(references) != num_speakers:
-            raise ValueError(f"VibeVoice found {num_speakers} speakers but received {len(references)} reference audios")
-        audio_items = [await self._resolve_reference(source) for source in references]
+        # Supplying any explicit references retains the strict one-per-speaker
+        # contract. Only an entirely omitted ref_audio field selects the four
+        # bundled defaults, in canonical speaker first-appearance order.
+        if references:
+            if len(references) != num_speakers:
+                raise ValueError(
+                    f"VibeVoice found {num_speakers} speakers but received {len(references)} reference audios"
+                )
+            audio_items = [await self._resolve_reference(source) for source in references]
+        else:
+            audio_items = [await self._resolve_default_reference(index) for index in range(num_speakers)]
         prompt = {
             "prompt": self._render_prompt(parsed, num_speakers),
             "multi_modal_data": {"audio": audio_items},

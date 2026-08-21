@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import wave
 from types import SimpleNamespace
 
 import numpy as np
@@ -17,6 +18,10 @@ from vllm_omni.entrypoints.openai.serving_speech import OmniOpenAIServingSpeech
 from vllm_omni.entrypoints.openai.tts_adapters import resolve_adapter
 from vllm_omni.entrypoints.openai.tts_adapters.base import SpeechServingContext
 from vllm_omni.entrypoints.openai.tts_adapters.vibevoice import VibeVoiceTTSAdapter
+from vllm_omni.model_executor.models.vibevoice.default_voices import (
+    DEFAULT_REFERENCE_AUDIO_FILENAMES,
+    get_default_reference_audio_path,
+)
 from vllm_omni.model_executor.models.vibevoice.pipeline import VIBEVOICE_VALID_TOKEN_IDS
 from vllm_omni.model_executor.models.vibevoice.processing_vibevoice import (
     AUDIO_BOS_TOKEN,
@@ -87,6 +92,12 @@ def test_speaker_cardinality_and_format_validation() -> None:
     )
     assert adapter.validate(mismatch) == "VibeVoice found 2 speakers but received 1 reference audios"
 
+    extra_reference = OpenAICreateSpeechRequest(
+        input="hello",
+        ref_audio=["file:///one.wav", "file:///two.wav"],
+    )
+    assert adapter.validate(extra_reference) == "VibeVoice found 1 speakers but received 2 reference audios"
+
     mixed = OpenAICreateSpeechRequest(
         input="Speaker 1: hello\nthis line has no speaker",
         ref_audio=["file:///one.wav"],
@@ -98,6 +109,11 @@ def test_speaker_cardinality_and_format_validation() -> None:
         ref_audio=[f"file:///{index}.wav" for index in range(4)],
     )
     assert adapter.validate(four) is None
+
+    four_defaults = OpenAICreateSpeechRequest(
+        input="\n".join(f"Speaker {index}: text" for index in range(4)),
+    )
+    assert adapter.validate(four_defaults) is None
 
     five = OpenAICreateSpeechRequest(
         input="\n".join(f"Speaker {index}: text" for index in range(5)),
@@ -134,6 +150,54 @@ def test_explicit_unsupported_fields_are_rejected(field_name: str, field_value: 
     request = OpenAICreateSpeechRequest(**kwargs)
 
     assert f"does not support '{field_name}'" in (_adapter().validate(request) or "")
+
+
+def test_bundled_default_references_are_packaged_and_resolvable() -> None:
+    assert DEFAULT_REFERENCE_AUDIO_FILENAMES == (
+        "default_0.wav",
+        "default_1.wav",
+        "default_2.wav",
+        "default_3.wav",
+    )
+
+    adapter = _adapter()
+    for index in range(4):
+        path = get_default_reference_audio_path(index)
+        with wave.open(str(path), "rb") as wav_file:
+            assert wav_file.getframerate() == 24_000
+            assert wav_file.getnchannels() == 1
+            assert wav_file.getsampwidth() == 2
+            assert 0 < wav_file.getnframes() <= 60 * 24_000
+
+        waveform, sample_rate = asyncio.run(adapter._resolve_default_reference(index))
+        assert sample_rate == 24_000
+        assert waveform.ndim == 1
+        assert 0 < waveform.size <= 60 * 24_000
+        assert np.isfinite(waveform).all()
+        assert float(np.sqrt(np.mean(np.square(waveform, dtype=np.float64)))) > 1e-5
+
+
+def test_build_uses_bundled_defaults_in_first_appearance_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    adapter = _adapter()
+    request = OpenAICreateSpeechRequest(
+        input="Speaker 8: first\nSpeaker 3: second\nSpeaker 8: third",
+    )
+    resolved_indices: list[int] = []
+
+    async def resolve(index: int):
+        resolved_indices.append(index)
+        return np.full(3_200, index + 1, dtype=np.float32), 24_000
+
+    monkeypatch.setattr(adapter, "_resolve_default_reference", resolve)
+    prepared = asyncio.run(adapter.build(request, [], False))
+
+    assert resolved_indices == [0, 1]
+    audio_items = prepared.prompt["multi_modal_data"]["audio"]
+    np.testing.assert_array_equal(audio_items[0][0], np.full(3_200, 1, dtype=np.float32))
+    np.testing.assert_array_equal(audio_items[1][0], np.full(3_200, 2, dtype=np.float32))
+    assert " Speaker 0: first\n" in prepared.prompt["prompt"]
+    assert " Speaker 1: second\n" in prepared.prompt["prompt"]
+    assert " Speaker 0: third\n" in prepared.prompt["prompt"]
 
 
 def test_uploaded_voice_resolves_to_reference_audio(monkeypatch: pytest.MonkeyPatch) -> None:

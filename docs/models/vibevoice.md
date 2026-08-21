@@ -9,8 +9,10 @@ only; VibeVoice Realtime, ASR, training, and other model sizes are not included.
 - OpenAI-compatible `POST /v1/audio/speech`
 - 24 kHz mono waveform output (`wav` or signed 16-bit `pcm`)
 - Streaming PCM and structured SSE streaming
-- One to four speakers, with one reference audio per speaker
-- Uploaded voices through `/v1/audio/voices`
+- One to four speakers, using four bundled default reference voices when
+  `ref_audio` and `voice` are omitted
+- Explicit reference audio per speaker and uploaded voices through
+  `/v1/audio/voices`
 - Classifier-free guidance with the checkpoint's positive and negative Qwen2
   branches
 - Acoustic and semantic feedback after every generated audio token
@@ -51,10 +53,34 @@ vllm serve microsoft/VibeVoice-1.5B \
   --allowed-local-media-path /srv/vibevoice-references
 ```
 
+## Default reference voices
+
+VibeVoice includes four framework-owned reference voices. When both `ref_audio`
+and `voice` are omitted, the adapter assigns the first N defaults to the N
+speakers in first-appearance order. Plain text therefore uses default voice 0,
+and a four-speaker script uses all four defaults.
+
+Explicit references remain all-or-nothing: once `ref_audio` is provided, its
+length must exactly match the number of speakers. A partial list is rejected
+instead of silently mixing user and default voices.
+
+```bash
+curl http://localhost:8000/v1/audio/speech \
+  -H 'Content-Type: application/json' \
+  --output default-voice.wav \
+  -d '{
+    "model": "microsoft/VibeVoice-1.5B",
+    "input": "Hello from the bundled default voice.",
+    "response_format": "wav",
+    "max_new_tokens": 1024
+  }'
+```
+
 ## Single-speaker synthesis
 
-A request must provide one reference audio, either as a data URL, an allowed
-`file://` URI, or an uploaded voice.
+To select a custom voice, provide one reference audio as a data URL, an allowed
+`file://` URI, or an uploaded voice. Omitting both selects bundled default voice
+0.
 
 ```bash
 curl http://localhost:8000/v1/audio/speech \
@@ -123,8 +149,9 @@ curl http://localhost:8000/v1/audio/speech \
 
 A voice uploaded through `POST /v1/audio/voices` can be selected by its `voice`
 name instead of passing `ref_audio` on every request. `voice` and `ref_audio`
-are mutually exclusive. Multi-speaker requests must pass the reference list
-directly.
+are mutually exclusive. Uploaded `voice` names are single-speaker only.
+Multi-speaker requests can either omit both fields to use the bundled defaults,
+or pass a complete reference list directly.
 
 ## Generation defaults
 
