@@ -94,14 +94,13 @@ class PreparedRequest:
 
     The fields mirror what ``_prepare_speech_generation`` assembled inline:
     ``prompt`` is the engine prompt dict, ``tts_params`` the per-model parameter
-    dict, ``model_type`` the discriminator used for logging, and
-    ``output_policy`` controls non-streaming aggregation.
+    dict, and ``model_type`` the discriminator used for logging. Model-wide
+    output behavior remains authoritative on the active adapter.
     """
 
     prompt: dict[str, Any]
     tts_params: dict[str, Any] = field(default_factory=dict)
     model_type: str = "generic"
-    output_policy: OutputPolicy = field(default_factory=OutputPolicy)
     #: Cross-cutting per-request state the orchestrator still owns (e.g. the
     #: Qwen3-TTS ref-audio warmup artifact key tracked after ``generate()``).
     warmup_artifact_key: str | None = None

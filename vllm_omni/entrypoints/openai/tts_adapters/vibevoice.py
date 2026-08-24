@@ -259,7 +259,6 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
         return PreparedRequest(
             prompt=prompt,
             model_type=self.name,
-            output_policy=self.output_policy,
         )
 
     def _tokenize_prompt(self, prompt: str) -> list[int]:

@@ -351,7 +351,7 @@ def test_build_preserves_prompt_audio_order_and_request_uuids(monkeypatch: pytes
     prepared = asyncio.run(adapter.build(request, [], True))
     prepared = adapter.finalize_prepared_request(prepared, "speech-request-7")
 
-    assert prepared.output_policy is adapter.output_policy
+    assert not hasattr(prepared, "output_policy")
     prompt = prepared.prompt["prompt"]
     reference_segment = f"{AUDIO_BOS_TOKEN}{AUDIO_TOKEN}{AUDIO_EOS_TOKEN}"
     assert prompt.count(reference_segment) == 2
