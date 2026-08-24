@@ -440,6 +440,10 @@ class VibeVoiceDiffusionSampler:
         return noisy_audio_latent[:batch_size].unsqueeze(1)
 
 
+class _DiffusionGraphCaptureError(RuntimeError):
+    """A CUDA graph capture failure that permits permanent eager fallback."""
+
+
 class VibeVoiceDiffusionGraphExecutor:
     """Manual CUDA-graph replay of the fixed-step DPM denoising loop.
 
@@ -489,6 +493,11 @@ class VibeVoiceDiffusionGraphExecutor:
         )
 
     @property
+    def disabled(self) -> bool:
+        """Whether a failed capture permanently selected eager fallback."""
+        return self._disabled
+
+    @property
     def num_captured_graphs(self) -> int:
         """Return the number of resident diffusion graphs for diagnostics."""
         return len(self._entries)
@@ -525,7 +534,7 @@ class VibeVoiceDiffusionGraphExecutor:
         if entry is None:
             try:
                 entry = self._capture(key, positive_condition, negative_condition, noise)
-            except Exception as exc:
+            except _DiffusionGraphCaptureError as exc:
                 self._disabled = True
                 if self._capture_failure_fatal:
                     raise RuntimeError("Required VibeVoice diffusion CUDA-graph capture failed.") from exc
@@ -630,8 +639,13 @@ class VibeVoiceDiffusionGraphExecutor:
             if self._pool is None:
                 self._pool = torch.cuda.graph_pool_handle()
             graph = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(graph, pool=self._pool):
-                latent_out = run_loop()
+            try:
+                with torch.cuda.graph(graph, pool=self._pool):
+                    latent_out = run_loop()
+            except torch.OutOfMemoryError:
+                raise
+            except RuntimeError as exc:
+                raise _DiffusionGraphCaptureError("VibeVoice diffusion CUDA graph capture failed") from exc
         entry.graph = graph
         entry.latent_out = latent_out
         # Keep the precomputed per-step timestep tensors alive: the captured

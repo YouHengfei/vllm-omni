@@ -356,6 +356,78 @@ class VibeVoiceModel(nn.Module):
             inputs_embeds=inputs_embeds,
         )
 
+    def warmup_diffusion_graphs(
+        self,
+        batch_sizes: Iterable[int],
+        *,
+        num_inference_steps: int,
+        guidance_scale: float,
+    ) -> None:
+        """Pre-capture configured C1 diffusion graph keys without consuming RNG."""
+        if not self.diffusion_graph_enabled:
+            return
+        requested_batch_sizes = tuple(batch_sizes)
+        if any(
+            isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size <= 0
+            for batch_size in requested_batch_sizes
+        ):
+            raise ValueError(
+                f"VibeVoice diffusion graph warmup batch sizes must be positive integers: {requested_batch_sizes!r}."
+            )
+        resolved_batch_sizes = tuple(sorted(set(requested_batch_sizes)))
+        if not resolved_batch_sizes:
+            return
+        executor = self._diffusion_graph_executor
+        if executor is not None and executor.disabled:
+            return
+
+        head_parameter = next(self.diffusion_head.parameters(), None)
+        if head_parameter is None or not head_parameter.is_cuda:
+            return
+        device = head_parameter.device
+        dtype = head_parameter.dtype
+        device_index = device.index if device.index is not None else torch.accelerator.current_device_index()
+        condition_size = self.diffusion_sampler.condition_size
+        latent_size = self.diffusion_sampler.latent_size
+
+        logger.info(
+            "Warming VibeVoice diffusion CUDA graphs for batch sizes %s.",
+            list(resolved_batch_sizes),
+        )
+        with (
+            torch.random.fork_rng(devices=[device_index], device_type=device.type),
+            torch.inference_mode(),
+        ):
+            for batch_size in resolved_batch_sizes:
+                positive_condition = torch.randn(
+                    batch_size,
+                    condition_size,
+                    device=device,
+                    dtype=dtype,
+                )
+                negative_condition = torch.randn_like(positive_condition)
+                noise = torch.randn(
+                    2 * batch_size,
+                    latent_size,
+                    device=device,
+                    dtype=dtype,
+                )
+                self.sample_audio_latent(
+                    positive_condition,
+                    negative_condition,
+                    noise,
+                    guidance_scale=guidance_scale,
+                    num_inference_steps=num_inference_steps,
+                )
+                executor = self._diffusion_graph_executor
+                if executor is not None and executor.disabled:
+                    break
+        if executor is not None and not executor.disabled:
+            logger.info(
+                "Warmed VibeVoice diffusion CUDA graphs for batch sizes %s.",
+                list(resolved_batch_sizes),
+            )
+
     def sample_audio_latent(
         self,
         positive_condition: torch.Tensor,
@@ -506,14 +578,17 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
             default_num_diffusion_steps=VIBEVOICE_DEFAULT_NUM_DIFFUSION_STEPS,
         )
         self._negative_kv_branch: VibeVoiceNegativeKVBranch | None = None
-        runtime_config = VibeVoiceRuntimeConfig.from_vllm_config(vllm_config)
-        self.model.diffusion_graph_enabled = runtime_config.diffusion_cuda_graph
-        self.model.decode_graph_enabled = runtime_config.decode_cuda_graph
-        self.model.cuda_graph_capture_failure_fatal = runtime_config.cuda_graph_capture_failure_fatal
+        self._runtime_config = VibeVoiceRuntimeConfig.from_vllm_config(vllm_config)
+        self._diffusion_graph_warmup_batch_sizes = self._runtime_config.resolve_diffusion_graph_warmup_batch_sizes(
+            vllm_config.scheduler_config.max_num_seqs,
+        )
+        self.model.diffusion_graph_enabled = self._runtime_config.diffusion_cuda_graph
+        self.model.decode_graph_enabled = self._runtime_config.decode_cuda_graph
+        self.model.cuda_graph_capture_failure_fatal = self._runtime_config.cuda_graph_capture_failure_fatal
         self.named_kv_branch_request = NamedKVBranchRequest(
             name="negative",
-            memory_bytes=runtime_config.negative_kv_cache_memory_bytes,
-            activation_margin_bytes=(runtime_config.negative_kv_activation_margin_bytes),
+            memory_bytes=self._runtime_config.negative_kv_cache_memory_bytes,
+            activation_margin_bytes=(self._runtime_config.negative_kv_activation_margin_bytes),
         )
         self._pending_request_ids: list[str] = []
         self._pending_request_spans: list[tuple[str, int, int]] = []
@@ -528,6 +603,14 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
 
     def get_input_embeddings(self) -> nn.Module:
         return self.model.language_model.embed_tokens
+
+    def warmup_side_graphs(self) -> None:
+        """Pre-capture model-local graphs after runner-owned graph capture."""
+        self.model.warmup_diffusion_graphs(
+            self._diffusion_graph_warmup_batch_sizes,
+            num_inference_steps=self._stateful.default_num_diffusion_steps,
+            guidance_scale=self._stateful.default_guidance_scale,
+        )
 
     def _get_audio_embeddings(
         self,

@@ -279,7 +279,7 @@ def test_runtime_config_uses_additional_config_without_touching_hf_config() -> N
     config = SimpleNamespace(
         additional_config={
             "vibevoice_runtime_config": {
-                "negative_kv_cache_memory_bytes": "4096",
+                "negative_kv_cache_memory_bytes": 4096,
                 "negative_kv_activation_margin_bytes": 128,
             }
         },
@@ -305,6 +305,91 @@ def test_runtime_config_rejects_unrecognized_schema(raw: object, message: str) -
     with pytest.raises(ValueError) as exc_info:
         VibeVoiceRuntimeConfig.from_vllm_config(config)
     assert str(exc_info.value) == message
+
+
+def test_runtime_config_parses_diffusion_graph_warmup_batch_sizes() -> None:
+    default = VibeVoiceRuntimeConfig.from_vllm_config(SimpleNamespace(additional_config={}))
+    assert default.diffusion_graph_warmup_batch_sizes is None
+    assert default.resolve_diffusion_graph_warmup_batch_sizes(4) == (1, 2, 3, 4)
+
+    explicit = VibeVoiceRuntimeConfig.from_vllm_config(
+        SimpleNamespace(
+            additional_config={
+                "vibevoice_runtime_config": {
+                    "diffusion_graph_warmup_batch_sizes": [4, 1, 3, 3],
+                }
+            }
+        )
+    )
+    assert explicit.diffusion_graph_warmup_batch_sizes == (4, 1, 3, 3)
+    assert explicit.resolve_diffusion_graph_warmup_batch_sizes(4) == (1, 3, 4)
+
+    disabled = VibeVoiceRuntimeConfig.from_vllm_config(
+        SimpleNamespace(
+            additional_config={
+                "vibevoice_runtime_config": {
+                    "diffusion_graph_warmup_batch_sizes": [],
+                }
+            }
+        )
+    )
+    assert disabled.diffusion_graph_warmup_batch_sizes == ()
+    assert disabled.resolve_diffusion_graph_warmup_batch_sizes(4) == ()
+
+    explicit_tuple = VibeVoiceRuntimeConfig.from_vllm_config(
+        SimpleNamespace(
+            additional_config={
+                "vibevoice_runtime_config": {
+                    "diffusion_graph_warmup_batch_sizes": (2, 4),
+                }
+            }
+        )
+    )
+    assert explicit_tuple.diffusion_graph_warmup_batch_sizes == (2, 4)
+
+    explicit_auto = VibeVoiceRuntimeConfig.from_vllm_config(
+        SimpleNamespace(
+            additional_config={
+                "vibevoice_runtime_config": {
+                    "diffusion_graph_warmup_batch_sizes": None,
+                }
+            }
+        )
+    )
+    assert explicit_auto.resolve_diffusion_graph_warmup_batch_sizes(3) == (1, 2, 3)
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        (1, "must be a list or tuple"),
+        ("1", "must be a list or tuple"),
+        ([0], "positive integers"),
+        ([-1], "positive integers"),
+        ([True], "positive integers"),
+        ([1.0], "positive integers"),
+        ([[1]], "positive integers"),
+    ],
+)
+def test_runtime_config_rejects_invalid_diffusion_graph_warmup_batch_sizes(
+    value: object,
+    message: str,
+) -> None:
+    config = SimpleNamespace(
+        additional_config={
+            "vibevoice_runtime_config": {
+                "diffusion_graph_warmup_batch_sizes": value,
+            }
+        }
+    )
+    with pytest.raises(ValueError, match=message):
+        VibeVoiceRuntimeConfig.from_vllm_config(config)
+
+
+def test_runtime_config_rejects_diffusion_graph_warmup_batch_above_concurrency() -> None:
+    config = VibeVoiceRuntimeConfig(diffusion_graph_warmup_batch_sizes=(1, 5))
+    with pytest.raises(ValueError, match=r"\[5\] exceed max_num_seqs=4"):
+        config.resolve_diffusion_graph_warmup_batch_sizes(4)
 
 
 def test_runtime_config_parses_diffusion_graph_bool() -> None:
@@ -364,6 +449,11 @@ def test_runtime_config_parses_diffusion_graph_bool() -> None:
         (
             "negative_kv_cache_memory_bytes",
             "not-an-int",
+            "must be an integer",
+        ),
+        (
+            "negative_kv_cache_memory_bytes",
+            "4096",
             "must be an integer",
         ),
         (
