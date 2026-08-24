@@ -525,9 +525,18 @@ class GPUARModelRunner(OmniGPUModelRunner, OmniConnectorModelRunnerMixin, Duplex
             downstream_req_ids = req_ids_output_copy
         return engine_output_type, downstream_req_ids
 
+    def _maybe_warmup_model_side_graphs(self) -> None:
+        """Run an explicitly declared model-side graph warmup after C3 capture."""
+        if self.vllm_config.model_config.enforce_eager:
+            return
+        warmup = getattr(self.model, "warmup_side_graphs", None)
+        if callable(warmup):
+            warmup()
+
     def capture_model(self) -> int:
         result = super().capture_model()
         self._capture_talker_mtp_graphs()
+        self._maybe_warmup_model_side_graphs()
         return result
 
     def shutdown(self) -> None:

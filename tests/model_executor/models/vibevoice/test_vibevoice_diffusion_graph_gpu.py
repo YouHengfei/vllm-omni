@@ -18,7 +18,9 @@ from vllm_omni.model_executor.models.vibevoice.diffusion import (
     VibeVoiceDiffusionGraphExecutor,
     VibeVoiceDiffusionHead,
     VibeVoiceDiffusionSampler,
+    _DiffusionGraphCaptureError,
 )
+from vllm_omni.model_executor.models.vibevoice.vibevoice import VibeVoiceModel
 from vllm_omni.transformers_utils.configs.vibevoice import VibeVoiceConfig
 
 pytestmark = [pytest.mark.core_model, pytest.mark.cuda]
@@ -40,6 +42,118 @@ def _inputs(batch: int, hidden: int, latent: int, seed: int):
     negative = torch.randn(batch, hidden, device="cuda", dtype=torch.bfloat16, generator=generator)
     noise = torch.randn(2 * batch, latent, device="cuda", dtype=torch.bfloat16, generator=generator)
     return positive, negative, noise
+
+
+def _build_graph_model() -> VibeVoiceModel:
+    head, sampler = _build()
+    model = VibeVoiceModel.__new__(VibeVoiceModel)
+    torch.nn.Module.__init__(model)
+    model.diffusion_head = head
+    model.diffusion_sampler = sampler
+    model.diffusion_graph_enabled = True
+    model.cuda_graph_capture_failure_fatal = False
+    model._diffusion_graph_executor = None
+    model._shared_graph_pool = None
+    return model
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+def test_diffusion_graph_startup_warmup_captures_all_batches_without_consuming_rng() -> None:
+    model = _build_graph_model()
+
+    model.diffusion_graph_enabled = False
+    model.warmup_diffusion_graphs(
+        (1, 2, 3, 4),
+        num_inference_steps=10,
+        guidance_scale=1.3,
+    )
+    assert model._diffusion_graph_executor is None
+    model.diffusion_graph_enabled = True
+    model.warmup_diffusion_graphs(
+        (),
+        num_inference_steps=10,
+        guidance_scale=1.3,
+    )
+    assert model._diffusion_graph_executor is None
+
+    torch.manual_seed(1234)
+    expected_cpu_random = torch.randn(8)
+    expected_cuda_random = torch.randn(8, device="cuda")
+    torch.manual_seed(1234)
+
+    model.warmup_diffusion_graphs(
+        (4, 1, 3, 2, 3),
+        num_inference_steps=10,
+        guidance_scale=1.3,
+    )
+
+    executor = model._diffusion_graph_executor
+    assert executor is not None
+    assert executor.disabled is False
+    assert set(executor._entries) == {
+        (1, 10, 1.3),
+        (2, 10, 1.3),
+        (3, 10, 1.3),
+        (4, 10, 1.3),
+    }
+    assert torch.equal(torch.randn(8), expected_cpu_random)
+    assert torch.equal(torch.randn(8, device="cuda"), expected_cuda_random)
+
+    entry_ids = {key: id(entry) for key, entry in executor._entries.items()}
+    model.warmup_diffusion_graphs(
+        (1, 2, 3, 4),
+        num_inference_steps=10,
+        guidance_scale=1.3,
+    )
+    assert {key: id(entry) for key, entry in executor._entries.items()} == entry_ids
+
+    positive, negative, noise = _inputs(
+        3,
+        model.diffusion_sampler.condition_size,
+        model.diffusion_sampler.latent_size,
+        seed=901,
+    )
+    model.sample_audio_latent(
+        positive,
+        negative,
+        noise,
+        guidance_scale=1.0,
+        num_inference_steps=5,
+    )
+    assert (3, 5, 1.0) not in executor._entries
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+def test_diffusion_graph_startup_warmup_stops_after_capture_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = _build_graph_model()
+    executor = VibeVoiceDiffusionGraphExecutor(
+        model.diffusion_sampler,
+        model.diffusion_head,
+    )
+    model._diffusion_graph_executor = executor
+    batch_sizes: list[int] = []
+    sample_audio_latent = model.sample_audio_latent
+
+    def record_sample(*args, **kwargs):
+        batch_sizes.append(int(args[0].shape[0]))
+        return sample_audio_latent(*args, **kwargs)
+
+    def fail_capture(*_args, **_kwargs):
+        raise _DiffusionGraphCaptureError("capture failed")
+
+    monkeypatch.setattr(model, "sample_audio_latent", record_sample)
+    monkeypatch.setattr(executor, "_capture", fail_capture)
+
+    model.warmup_diffusion_graphs(
+        (1, 2, 3, 4),
+        num_inference_steps=10,
+        guidance_scale=1.3,
+    )
+
+    assert executor.disabled is True
+    assert batch_sizes == [1]
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
@@ -152,29 +266,30 @@ def test_diffusion_graph_cache_is_bounded_to_official_control_keys() -> None:
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
-def test_diffusion_graph_capture_failure_falls_back_to_eager() -> None:
-    _, sampler = _build()
-
-    class _BrokenHead:
-        def parameters(self):
-            return iter([])
-
-    executor = VibeVoiceDiffusionGraphExecutor(sampler, _BrokenHead())
+def test_diffusion_graph_capture_failure_falls_back_to_eager(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    head, sampler = _build()
+    executor = VibeVoiceDiffusionGraphExecutor(sampler, head)
     hidden = sampler.condition_size
     latent = sampler.latent_size
     positive, negative, noise = _inputs(1, hidden, latent, seed=11)
 
+    def fail_capture(*_args, **_kwargs):
+        raise _DiffusionGraphCaptureError("capture failed")
+
+    monkeypatch.setattr(executor, "_capture", fail_capture)
     with torch.inference_mode():
         assert executor.sample(positive, negative, noise, guidance_scale=1.3, num_inference_steps=10) is None
-        # Permanently disabled: a working input later still returns None.
         assert executor.sample(positive, negative, noise, guidance_scale=1.3, num_inference_steps=10) is None
-        assert executor._disabled is True
+        assert executor.disabled is True
 
         strict_executor = VibeVoiceDiffusionGraphExecutor(
             sampler,
-            _BrokenHead(),
+            head,
             capture_failure_fatal=True,
         )
+        monkeypatch.setattr(strict_executor, "_capture", fail_capture)
         with pytest.raises(RuntimeError, match="Required VibeVoice diffusion CUDA-graph capture failed"):
             strict_executor.sample(
                 positive,
@@ -183,11 +298,48 @@ def test_diffusion_graph_capture_failure_falls_back_to_eager() -> None:
                 guidance_scale=1.3,
                 num_inference_steps=10,
             )
-        with pytest.raises(RuntimeError, match="disabled after a prior capture failure"):
-            strict_executor.sample(
-                positive,
-                negative,
-                noise,
-                guidance_scale=1.3,
-                num_inference_steps=10,
-            )
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+def test_diffusion_graph_oom_fails_fast(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    head, sampler = _build()
+    executor = VibeVoiceDiffusionGraphExecutor(sampler, head)
+    positive, negative, noise = _inputs(1, sampler.condition_size, sampler.latent_size, seed=12)
+
+    def fail_capture(*_args, **_kwargs):
+        raise torch.OutOfMemoryError("injected OOM")
+
+    monkeypatch.setattr(executor, "_capture", fail_capture)
+    with pytest.raises(torch.OutOfMemoryError, match="injected OOM"):
+        executor.sample(
+            positive,
+            negative,
+            noise,
+            guidance_scale=1.3,
+            num_inference_steps=10,
+        )
+    assert executor.disabled is False
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+def test_diffusion_graph_non_capture_errors_fail_fast() -> None:
+    _, sampler = _build()
+
+    class _BrokenHead:
+        def parameters(self):
+            return iter([])
+
+    executor = VibeVoiceDiffusionGraphExecutor(sampler, _BrokenHead())
+    positive, negative, noise = _inputs(1, sampler.condition_size, sampler.latent_size, seed=13)
+
+    with pytest.raises(RuntimeError, match="requires a CUDA diffusion head"):
+        executor.sample(
+            positive,
+            negative,
+            noise,
+            guidance_scale=1.3,
+            num_inference_steps=10,
+        )
+    assert executor.disabled is False

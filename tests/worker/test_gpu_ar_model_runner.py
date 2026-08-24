@@ -28,6 +28,7 @@ from vllm_omni.worker.gpu_ar_model_runner import (
     GPUARModelRunner,
     OmniAsyncGPUModelRunnerOutput,
 )
+from vllm_omni.worker.gpu_model_runner import OmniGPUModelRunner
 from vllm_omni.worker.output import payload_build
 from vllm_omni.worker.runner_assisted_metadata import RunnerAssistedFullAttentionMetadataRequest
 from vllm_omni.worker.sampling_utils import clamp_prompt_ids_to_penalty_padding
@@ -472,6 +473,61 @@ def test_sparse_audio_routes_delta_semantics_with_each_request() -> None:
 
     assert torch.equal(payload["audio"], torch.tensor([2.0]))
     assert payload["meta.audio_chunk_semantics"] == "delta"
+
+
+def test_model_side_graph_warmup_is_capability_gated() -> None:
+    calls: list[str] = []
+    runner = object.__new__(GPUARModelRunner)
+    runner.vllm_config = SimpleNamespace(model_config=SimpleNamespace(enforce_eager=False))
+    runner.model = SimpleNamespace(warmup_side_graphs=lambda: calls.append("warmup"))
+
+    runner._maybe_warmup_model_side_graphs()
+
+    assert calls == ["warmup"]
+
+    runner.model = object()
+    runner._maybe_warmup_model_side_graphs()
+    assert calls == ["warmup"]
+
+
+def test_model_side_graph_warmup_skips_enforce_eager() -> None:
+    calls: list[str] = []
+    runner = object.__new__(GPUARModelRunner)
+    runner.vllm_config = SimpleNamespace(model_config=SimpleNamespace(enforce_eager=True))
+    runner.model = SimpleNamespace(warmup_side_graphs=lambda: calls.append("warmup"))
+
+    runner._maybe_warmup_model_side_graphs()
+
+    assert calls == []
+
+
+def test_capture_model_orders_native_talker_and_model_side_graphs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    runner = object.__new__(GPUARModelRunner)
+    runner.vllm_config = SimpleNamespace(model_config=SimpleNamespace(enforce_eager=False))
+    runner.model = SimpleNamespace(warmup_side_graphs=lambda: calls.append("side"))
+
+    def capture_model(_self) -> int:
+        calls.append("native")
+        return 17
+
+    monkeypatch.setattr(
+        OmniGPUModelRunner,
+        "capture_model",
+        capture_model,
+    )
+    monkeypatch.setattr(
+        runner,
+        "_capture_talker_mtp_graphs",
+        lambda: calls.append("talker"),
+    )
+
+    result = runner.capture_model()
+
+    assert result == 17
+    assert calls == ["native", "talker", "side"]
 
 
 def test_finished_request_hook_receives_executing_request_ids() -> None:
