@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
+# Test-only matrix cell: positive and diffusion graphs, eager waveform decode.
+base_config: ../../../vllm_omni/deploy/vibevoice.yaml
+
+stages:
+  - stage_id: 0
+    enforce_eager: false
+    engine_extras:
+      additional_config:
+        vibevoice_runtime_config:
+          diffusion_cuda_graph: true
+          decode_cuda_graph: false
+          cuda_graph_capture_failure_fatal: true

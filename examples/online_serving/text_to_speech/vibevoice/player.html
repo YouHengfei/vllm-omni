@@ -1,0 +1,357 @@
+<!--
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>VibeVoice PCM AudioWorklet player</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 1rem; max-width: 960px; }
+    label { display: block; margin-top: .75rem; font-weight: 600; }
+    input, textarea, select, button { box-sizing: border-box; font: inherit; }
+    input[type="text"], input[type="number"], textarea, select { width: 100%; padding: .5rem; }
+    textarea { min-height: 7rem; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .buttons { display: flex; gap: .75rem; margin-top: 1rem; }
+    button { padding: .6rem 1.1rem; cursor: pointer; }
+    pre { min-height: 7rem; padding: .75rem; overflow: auto; background: rgba(127,127,127,.12); }
+    .hint { opacity: .8; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <h2>VibeVoice streaming PCM player</h2>
+  <p class="hint">Raw and SSE transports both carry mono signed int16 PCM at 24 kHz. Audio is resampled to the browser AudioContext rate before entering an isolated AudioWorklet ring buffer.</p>
+
+  <div class="row">
+    <div>
+      <label for="model">Model</label>
+      <input id="model" type="text" value="microsoft/VibeVoice-1.5B">
+    </div>
+    <div>
+      <label for="transport">Transport</label>
+      <select id="transport">
+        <option value="audio">Raw PCM</option>
+        <option value="sse">SSE with finish reason</option>
+      </select>
+    </div>
+  </div>
+
+  <label for="text">Text</label>
+  <textarea id="text">Hello from the VibeVoice streaming browser example.</textarea>
+
+  <div class="row">
+    <div>
+      <label for="reference">Reference WAV (optional)</label>
+      <input id="reference" type="file" accept="audio/*">
+    </div>
+    <div>
+      <label for="maxTokens">Maximum new tokens</label>
+      <input id="maxTokens" type="number" min="1" max="40500" value="512">
+    </div>
+  </div>
+
+  <div class="buttons">
+    <button id="start">Start</button>
+    <button id="abort" disabled>Abort</button>
+  </div>
+  <pre id="status">idle</pre>
+
+<script>
+const SOURCE_RATE = 24000;
+let abortController = null;
+let audioContext = null;
+let playerNode = null;
+let playerConnected = false;
+let oddRawByte = null;
+let streamingResampler = null;
+let playerBufferAvailable = 0;
+let playerBufferCapacity = 0;
+let currentStatus = "idle";
+const counters = {
+  transportChunks: 0,
+  sseDeltaEvents: 0,
+  sseDoneEvents: 0,
+  pcmBytes: 0,
+  samples: 0,
+  underrunFrames: 0,
+  overflowSamples: 0,
+};
+
+const statusElement = document.getElementById("status");
+const startButton = document.getElementById("start");
+const abortButton = document.getElementById("abort");
+
+function renderStatus() {
+  statusElement.textContent = `${currentStatus}\n${JSON.stringify(counters, null, 2)}`;
+}
+
+function report(message) {
+  currentStatus = message;
+  renderStatus();
+}
+
+function resetCounters() {
+  Object.keys(counters).forEach((key) => { counters[key] = 0; });
+  oddRawByte = null;
+  streamingResampler = null;
+  playerBufferAvailable = 0;
+  playerBufferCapacity = 0;
+}
+
+class StreamingLinearResampler {
+  constructor(sourceRate, targetRate) {
+    this.sourceRate = sourceRate;
+    this.targetRate = targetRate;
+    this.ratio = sourceRate / targetRate;
+    this.totalInputSamples = 0;
+    this.nextSourcePosition = 0;
+    this.previousSample = null;
+  }
+
+  process(input, { flush = false } = {}) {
+    if (this.sourceRate === this.targetRate) {
+      this.totalInputSamples += input.length;
+      if (input.length > 0) this.previousSample = input[input.length - 1];
+      return input;
+    }
+    if (input.length === 0 && !flush) return input;
+
+    const hadPrevious = this.previousSample !== null;
+    const combined = new Float32Array(input.length + (hadPrevious ? 1 : 0));
+    if (hadPrevious) combined[0] = this.previousSample;
+    combined.set(input, hadPrevious ? 1 : 0);
+    const combinedStart = hadPrevious ? this.totalInputSamples - 1 : this.totalInputSamples;
+    const endExclusive = this.totalInputSamples + input.length;
+    const interpolationLimit = flush ? endExclusive : endExclusive - 1;
+    const output = [];
+
+    while (combined.length > 0 && this.nextSourcePosition < interpolationLimit) {
+      const localPosition = Math.max(0, this.nextSourcePosition - combinedStart);
+      const left = Math.min(combined.length - 1, Math.floor(localPosition));
+      const right = Math.min(combined.length - 1, left + 1);
+      const fraction = localPosition - Math.floor(localPosition);
+      output.push(combined[left] + (combined[right] - combined[left]) * fraction);
+      this.nextSourcePosition += this.ratio;
+    }
+
+    this.totalInputSamples = endExclusive;
+    if (combined.length > 0) this.previousSample = combined[combined.length - 1];
+    return Float32Array.from(output);
+  }
+}
+
+async function ensurePlayer() {
+  if (audioContext) return;
+  audioContext = new AudioContext({ latencyHint: "interactive" });
+  await audioContext.audioWorklet.addModule("/pcm-player-worklet.js");
+  playerNode = new AudioWorkletNode(audioContext, "pcm-player", { outputChannelCount: [1] });
+  playerNode.port.onmessage = (event) => {
+    const message = event.data || {};
+    if (message.type === "underrun") counters.underrunFrames = message.frames;
+    if (message.type === "buffer") {
+      playerBufferAvailable = message.available;
+      playerBufferCapacity = message.capacity;
+      counters.overflowSamples = message.overflowSamples;
+    }
+    renderStatus();
+  };
+  await audioContext.resume();
+}
+
+async function resetPlayer() {
+  if (playerNode) playerNode.port.postMessage({ type: "reset" });
+  if (playerNode) playerNode.disconnect();
+  if (audioContext) await audioContext.close();
+  playerNode = null;
+  audioContext = null;
+  playerConnected = false;
+  playerBufferAvailable = 0;
+  playerBufferCapacity = 0;
+  streamingResampler = null;
+}
+
+function bytesToPCM(bytes) {
+  let source = bytes;
+  if (oddRawByte !== null) {
+    const joined = new Uint8Array(bytes.length + 1);
+    joined[0] = oddRawByte;
+    joined.set(bytes, 1);
+    source = joined;
+    oddRawByte = null;
+  }
+  if (source.length % 2 === 1) {
+    oddRawByte = source[source.length - 1];
+    source = source.subarray(0, source.length - 1);
+  }
+  const view = new DataView(source.buffer, source.byteOffset, source.byteLength);
+  const samples = new Float32Array(source.byteLength / 2);
+  for (let index = 0; index < samples.length; index += 1) {
+    samples[index] = view.getInt16(index * 2, true) / 32768.0;
+  }
+  return samples;
+}
+
+async function waitForBufferCapacity(sampleCount) {
+  if (playerBufferCapacity > 0 && sampleCount > playerBufferCapacity) {
+    throw new Error(`PCM chunk has ${sampleCount} samples but the worklet capacity is ${playerBufferCapacity}`);
+  }
+  while (playerBufferCapacity > 0 && playerBufferAvailable + sampleCount > playerBufferCapacity) {
+    if (abortController?.signal.aborted) throw new DOMException("Aborted", "AbortError");
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  playerBufferAvailable += sampleCount;
+}
+
+async function enqueueResampledSamples(samples) {
+  if (samples.length === 0) return;
+  if (!playerConnected) {
+    playerNode.connect(audioContext.destination);
+    playerConnected = true;
+  }
+  await waitForBufferCapacity(samples.length);
+  playerNode.port.postMessage({ type: "samples", samples: samples.buffer }, [samples.buffer]);
+}
+
+async function enqueuePCM(bytes) {
+  counters.pcmBytes += bytes.byteLength;
+  const sourceSamples = bytesToPCM(bytes);
+  counters.samples += sourceSamples.length;
+  if (sourceSamples.length === 0) return;
+  await ensurePlayer();
+  if (!streamingResampler) {
+    streamingResampler = new StreamingLinearResampler(SOURCE_RATE, audioContext.sampleRate);
+  }
+  await enqueueResampledSamples(streamingResampler.process(sourceSamples));
+}
+
+async function flushPCM() {
+  if (!streamingResampler) return;
+  await enqueueResampledSamples(streamingResampler.process(new Float32Array(), { flush: true }));
+}
+
+function decodeBase64(value) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+async function consumeRaw(reader) {
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    counters.transportChunks += 1;
+    await enqueuePCM(value);
+    report("playing raw PCM");
+  }
+  if (oddRawByte !== null) throw new Error("Raw PCM response ended with an incomplete int16 sample");
+  await flushPCM();
+  return null;
+}
+
+async function consumeSSE(reader) {
+  const decoder = new TextDecoder();
+  let buffered = "";
+  let finishReason = null;
+  let sawDone = false;
+
+  async function consumeEventBlock(block) {
+    const line = block.split(/\r?\n/).find((candidate) => candidate.startsWith("data: "));
+    if (!line) return;
+    const event = JSON.parse(line.slice(6));
+    if (event.type === "speech.audio.error") {
+      const detail = event.error?.message || JSON.stringify(event.error || event);
+      throw new Error(`SSE speech stream failed: ${detail}`);
+    }
+    if (event.type === "speech.audio.done") {
+      if (sawDone) throw new Error("SSE speech stream emitted speech.audio.done more than once");
+      sawDone = true;
+      counters.sseDoneEvents += 1;
+      finishReason = event.finish_reason || null;
+      return;
+    }
+    if (event.type !== "speech.audio.delta") return;
+    if (sawDone) throw new Error("SSE speech stream emitted audio after speech.audio.done");
+    counters.transportChunks += 1;
+    counters.sseDeltaEvents += 1;
+    await enqueuePCM(decodeBase64(event.audio));
+    report("playing SSE PCM");
+  }
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffered += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const events = buffered.split(/\r?\n\r?\n/);
+    buffered = events.pop() || "";
+    if (done && buffered.trim()) {
+      events.push(buffered);
+      buffered = "";
+    }
+    for (const block of events) await consumeEventBlock(block);
+    if (done) break;
+  }
+  if (!sawDone) throw new Error("SSE speech stream ended before speech.audio.done");
+  await flushPCM();
+  return finishReason;
+}
+
+function fileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function start() {
+  await resetPlayer();
+  resetCounters();
+  abortController = new AbortController();
+  startButton.disabled = true;
+  abortButton.disabled = false;
+  const transport = document.getElementById("transport").value;
+  try {
+    const referenceFile = document.getElementById("reference").files[0];
+    const payload = {
+      model: document.getElementById("model").value,
+      input: document.getElementById("text").value,
+      response_format: "pcm",
+      stream: true,
+      stream_format: transport,
+      max_new_tokens: Number(document.getElementById("maxTokens").value),
+    };
+    if (referenceFile) payload.ref_audio = await fileAsDataURL(referenceFile);
+
+    report("connecting");
+    const response = await fetch("/proxy/speech", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: abortController.signal,
+    });
+    if (!response.ok) throw new Error(await response.text());
+    if (!response.body) throw new Error("Streaming response body is unavailable");
+    const reader = response.body.getReader();
+    const finishReason = transport === "sse" ? await consumeSSE(reader) : await consumeRaw(reader);
+    report(`complete${finishReason ? ` (finish_reason=${finishReason})` : ""}`);
+  } catch (error) {
+    report(error.name === "AbortError" ? "aborted" : `error: ${error.message}`);
+  } finally {
+    abortController = null;
+    startButton.disabled = false;
+    abortButton.disabled = true;
+  }
+}
+
+startButton.addEventListener("click", start);
+abortButton.addEventListener("click", () => {
+  if (abortController) abortController.abort();
+});
+</script>
+</body>
+</html>
