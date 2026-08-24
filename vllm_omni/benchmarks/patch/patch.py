@@ -479,6 +479,18 @@ if _serve_mod is not None:
     _serve_mod.get_samples = get_samples
 
 
+def _speech_finish_reason_counts(outputs: Iterable[object]) -> dict[str, int]:
+    """Count structured OpenAI Speech terminal reasons without model branching."""
+    counts: dict[str, int] = {}
+    for output in outputs:
+        reason = getattr(output, "speech_finish_reason", None)
+        if reason is None:
+            continue
+        normalized = str(reason)
+        counts[normalized] = counts.get(normalized, 0) + 1
+    return counts
+
+
 @dataclass
 class MixRequestFuncOutput(RequestFuncOutput):
     audio_ttfp: float = 0.0
@@ -1950,6 +1962,10 @@ async def benchmark(
             "input_lens": [output.prompt_len for output in outputs],
             "errors": [output.error for output in outputs],
         }
+    speech_finish_reason_counts = _speech_finish_reason_counts(outputs)
+    if speech_finish_reason_counts:
+        result["speech_finish_reason_counts"] = speech_finish_reason_counts
+
     # Plain-vLLM backends (e.g. the vLLM-text perf config) return upstream
     # RequestFuncOutput objects without the Mix duplex fields; read them
     # tolerantly or the whole benchmark result is discarded ("fallback to

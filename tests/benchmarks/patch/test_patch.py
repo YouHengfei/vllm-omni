@@ -17,6 +17,7 @@ from vllm.benchmarks.lib.endpoint_request_func import RequestFuncInput
 
 from vllm_omni.benchmarks.patch.patch import (
     MixRequestFuncOutput,
+    _speech_finish_reason_counts,
     async_request_openai_audio_speech,
     async_request_openai_chat_omni_completions,
     async_request_openai_realtime_duplex,
@@ -24,6 +25,18 @@ from vllm_omni.benchmarks.patch.patch import (
 from vllm_omni.experimental.fullduplex.client import RealtimeEventCollector
 
 pytestmark = [pytest.mark.core_model, pytest.mark.benchmark, pytest.mark.cpu]
+
+
+def test_speech_finish_reason_counts_only_structured_terminal_metadata() -> None:
+    outputs = [
+        SimpleNamespace(speech_finish_reason="stop"),
+        SimpleNamespace(speech_finish_reason="length"),
+        SimpleNamespace(speech_finish_reason="stop"),
+        SimpleNamespace(speech_finish_reason=None),
+        SimpleNamespace(),
+    ]
+
+    assert _speech_finish_reason_counts(outputs) == {"stop": 2, "length": 1}
 
 
 class MockResponse:
