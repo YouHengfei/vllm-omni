@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
 """Registry of TTS serving adapters, and the model detection built on it.
 
 Adapters register themselves by their ``name`` (the model-type discriminator)
@@ -116,6 +117,7 @@ from vllm_omni.entrypoints.openai.tts_adapters import (  # noqa: E402,F401
     omnivoice,
     qwen3_tts,
     step_audio2,
+    vibevoice,
     voxcpm2,
     voxtral,
 )

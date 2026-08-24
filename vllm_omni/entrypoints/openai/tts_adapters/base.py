@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
 """Base contract for per-model TTS serving adapters.
 
 This package factors the per-model ``if self._tts_model_type == ...`` dispatch
@@ -79,6 +80,12 @@ class OutputPolicy:
     """
 
     accumulate_nonstreaming: bool = False
+    #: Include the engine's terminal finish reason on opaque non-stream audio
+    #: responses. SSE already carries this as structured terminal metadata.
+    include_finish_reason_header: bool = False
+    #: Optional allow-list for ``/v1/audio/speech/stream`` response formats.
+    #: ``None`` preserves the default handler behavior.
+    websocket_streaming_formats: frozenset[str] | None = None
 
 
 @dataclass
@@ -155,6 +162,8 @@ class TTSModelAdapter(ABC):
     backend: ClassVar[str] = "ar"
     #: Whether the model consumes ``request.speed`` in its native parameters.
     native_speed_control: ClassVar[bool] = False
+    #: Model-wide output behavior consumed by generic serving transports.
+    output_policy: ClassVar[OutputPolicy] = OutputPolicy()
 
     max_new_tokens_min = 1
 
@@ -218,6 +227,14 @@ class TTSModelAdapter(ABC):
         Recomputing it here would misclassify uploaded voices as inline and drop
         the ``voice_name`` / ``voice_created_at`` metadata.
         """
+
+    def finalize_prepared_request(
+        self,
+        prepared: PreparedRequest,
+        request_id: str,
+    ) -> PreparedRequest:
+        """Finalize request-ID-dependent prompt metadata. Default: identity."""
+        return prepared
 
     def apply_sampling_overrides(
         self,

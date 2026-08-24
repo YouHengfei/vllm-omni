@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
 # tests/entrypoints/openai/test_serving_speech.py
 import asyncio
 import base64
@@ -42,7 +44,12 @@ from vllm_omni.entrypoints.openai.serving_speech import (
     OmniOpenAIServingSpeech,
     _create_wav_header,
 )
-from vllm_omni.entrypoints.openai.tts_adapters.base import DEFAULT_TTS_LANGUAGES, PreparedRequest, SpeechServingContext
+from vllm_omni.entrypoints.openai.tts_adapters.base import (
+    DEFAULT_TTS_LANGUAGES,
+    ARTTSAdapter,
+    PreparedRequest,
+    SpeechServingContext,
+)
 from vllm_omni.entrypoints.openai.tts_adapters.capabilities import load_supported_speakers
 from vllm_omni.entrypoints.openai.tts_adapters.ming_tts import MingTTSAdapter
 from vllm_omni.entrypoints.openai.tts_adapters.voxtral import VoxtralTTSAdapter
@@ -865,6 +872,54 @@ class TestTTSMethods:
         audio_obj = create_audio.call_args.args[0]
         assert isinstance(audio_obj, CreateAudio)
         assert audio_obj.speed == 1.0
+
+    @pytest.mark.asyncio
+    async def test_non_streaming_finish_reason_uses_flattened_request_output(
+        self,
+        speech_server,
+        mocker: MockerFixture,
+    ):
+        async def mock_generate():
+            yield create_mock_audio_output_for_test()
+
+        speech_server._tts_model_type = "vibevoice"
+        mocker.patch.object(
+            speech_server,
+            "_prepare_speech_generation",
+            new=mocker.AsyncMock(return_value=("speech-finish-reason", mock_generate(), {})),
+        )
+        mocker.patch.object(
+            speech_server,
+            "create_audio",
+            return_value=SimpleNamespace(audio_data=b"dummy", media_type="audio/wav"),
+        )
+        response_headers: dict[str, str] = {}
+
+        await speech_server._generate_audio_bytes(
+            OpenAICreateSpeechRequest(input="Hello"),
+            response_headers_out=response_headers,
+        )
+
+        assert response_headers == {"X-Finish-Reason": "stop"}
+
+    def test_usage_tokenizer_prefers_configured_tokenizer_path(self, speech_server, mocker: MockerFixture):
+        speech_server.engine_client.model_config = SimpleNamespace(
+            model="checkpoint-without-tokenizer",
+            tokenizer="separate-runtime-tokenizer",
+            trust_remote_code=False,
+        )
+        tokenizer = mocker.MagicMock()
+        load = mocker.patch(
+            "transformers.AutoTokenizer.from_pretrained",
+            return_value=tokenizer,
+        )
+
+        assert speech_server._get_usage_text_tokenizer() is tokenizer
+        assert speech_server._get_usage_text_tokenizer() is tokenizer
+        load.assert_called_once_with(
+            "separate-runtime-tokenizer",
+            trust_remote_code=False,
+        )
 
     def test_is_tts_detection_with_tts_stage(self, mocker: MockerFixture):
         """Test TTS model detection when TTS stage exists."""
@@ -4591,9 +4646,8 @@ class TestTTSAsyncOffloading:
         legacy_tts_model_type = "dummy_tts"
         adapter_model_type = "adapter_dummy_tts"
 
-        class FakeAdapter:
-            def validate(self, request):
-                return None
+        class FakeAdapter(ARTTSAdapter):
+            name = adapter_model_type
 
             async def build(self, request, sampling_params_list, has_inline_ref_audio):
                 return PreparedRequest(
@@ -4606,7 +4660,11 @@ class TestTTSAsyncOffloading:
                 return sampling_params_list
 
         voxtral_server._tts_model_type = legacy_tts_model_type
-        mocker.patch.object(voxtral_server, "_get_tts_adapter", return_value=FakeAdapter())
+        mocker.patch.object(
+            voxtral_server,
+            "_get_tts_adapter",
+            return_value=FakeAdapter(voxtral_server._adapter.ctx),
+        )
         log_info = mocker.patch("vllm_omni.entrypoints.openai.serving_speech.logger.info")
 
         asyncio.run(voxtral_server._prepare_speech_generation(OpenAICreateSpeechRequest(input="hello")))

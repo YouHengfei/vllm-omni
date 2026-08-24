@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
 
 """
 Unit tests for patch.py
@@ -17,6 +17,7 @@ from vllm.benchmarks.lib.endpoint_request_func import RequestFuncInput
 
 from vllm_omni.benchmarks.patch.patch import (
     MixRequestFuncOutput,
+    async_request_openai_audio_speech,
     async_request_openai_chat_omni_completions,
     async_request_openai_realtime_duplex,
 )
@@ -34,6 +35,7 @@ class MockResponse:
         self._chunks = chunks
         self._delay = delay_between_chunks
         self.content = self
+        self.headers = {}
 
     async def iter_any(self):
         for chunk in self._chunks:
@@ -201,6 +203,125 @@ async def test_seed_tts_realtime_duplex_exports_per_request_metrics(monkeypatch)
 def create_sse_chunk(data_dict):
     """Helper to create SSE formatted chunk"""
     return f"data: {json.dumps(data_dict)}\n\n".encode()
+
+
+@pytest.mark.asyncio
+async def test_audio_speech_sse_transport_captures_pcm_for_quality_eval(monkeypatch, mocker: MockerFixture):
+    pcm = b"\x01\x00\x02\x00\x03\x00\x04\x00"
+    delta = create_sse_chunk(
+        {
+            "type": "speech.audio.delta",
+            "audio": base64.b64encode(pcm).decode("ascii"),
+        }
+    )
+    chunks = [
+        delta[:7],
+        delta[7:],
+        create_sse_chunk({"type": "speech.audio.done", "finish_reason": "stop"}),
+    ]
+    response = MockResponse(200, chunks)
+    session = mocker.AsyncMock()
+    session.post = mocker.MagicMock(return_value=response)
+    request_input = RequestFuncInput(
+        model="test-model",
+        model_name="test-model",
+        prompt="hello",
+        api_url="http://test.com/v1/audio/speech",
+        prompt_len=1,
+        output_len=4,
+    )
+    setattr(request_input, "seed_tts_row", True)
+    monkeypatch.setenv("SEED_TTS_WER_EVAL", "1")
+    setattr(
+        request_input,
+        "extra_body",
+        {"stream": True, "stream_format": "sse", "response_format": "pcm"},
+    )
+
+    output = await async_request_openai_audio_speech(request_input, session)
+
+    assert output.success is True
+    assert output.audio_frames == 4
+    assert output.tts_output_pcm_bytes == pcm
+    assert output.speech_finish_reason == "stop"
+    payload = session.post.call_args.kwargs["json"]
+    assert payload["stream"] is True
+    assert payload["stream_format"] == "sse"
+    assert payload["response_format"] == "pcm"
+    assert "max_new_tokens" not in payload
+
+
+@pytest.mark.asyncio
+async def test_audio_speech_sse_error_event_fails_request(mocker: MockerFixture):
+    pcm = b"\x01\x00\x02\x00"
+    response = MockResponse(
+        200,
+        [
+            create_sse_chunk(
+                {
+                    "type": "speech.audio.delta",
+                    "audio": base64.b64encode(pcm).decode("ascii"),
+                }
+            ),
+            create_sse_chunk(
+                {
+                    "type": "speech.audio.error",
+                    "error": {
+                        "message": "generation boom",
+                        "type": "server_error",
+                        "code": 500,
+                    },
+                }
+            ),
+        ],
+    )
+    session = mocker.AsyncMock()
+    session.post = mocker.MagicMock(return_value=response)
+    request_input = RequestFuncInput(
+        model="test-model",
+        model_name="test-model",
+        prompt="hello",
+        api_url="http://test.com/v1/audio/speech",
+        prompt_len=1,
+        output_len=2,
+    )
+    setattr(request_input, "extra_body", {"stream_format": "sse"})
+
+    output = await async_request_openai_audio_speech(request_input, session)
+
+    assert output.success is False
+    assert "generation boom" in output.error
+
+
+@pytest.mark.asyncio
+async def test_audio_speech_sse_eof_without_done_fails_request(mocker: MockerFixture):
+    response = MockResponse(
+        200,
+        [
+            create_sse_chunk(
+                {
+                    "type": "speech.audio.delta",
+                    "audio": base64.b64encode(b"\x01\x00").decode("ascii"),
+                }
+            )
+        ],
+    )
+    session = mocker.AsyncMock()
+    session.post = mocker.MagicMock(return_value=response)
+    request_input = RequestFuncInput(
+        model="test-model",
+        model_name="test-model",
+        prompt="hello",
+        api_url="http://test.com/v1/audio/speech",
+        prompt_len=1,
+        output_len=1,
+    )
+    setattr(request_input, "extra_body", {"stream_format": "sse"})
+
+    output = await async_request_openai_audio_speech(request_input, session)
+
+    assert output.success is False
+    assert "ended before speech.audio.done" in output.error
 
 
 # ============================================================================

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
+
 import asyncio
 import base64
 import hashlib
@@ -9,6 +12,7 @@ import re
 import struct
 import time
 from collections import OrderedDict
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
 from pathlib import Path
@@ -688,8 +692,11 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
             try:
                 from transformers import AutoTokenizer
 
+                model_config = self.engine_client.model_config
+                tokenizer_name = getattr(model_config, "tokenizer", None) or model_config.model
                 self._usage_text_tokenizer = AutoTokenizer.from_pretrained(
-                    self.engine_client.model_config.model, trust_remote_code=True
+                    tokenizer_name,
+                    trust_remote_code=bool(getattr(model_config, "trust_remote_code", True)),
                 )
             except Exception as e:  # pragma: no cover - environment dependent
                 logger.warning("Usage: could not load a text tokenizer (%s); text_tokens will be 0", e)
@@ -2163,14 +2170,13 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
         include_sample_rate: bool = False,
         usage_acc: SpeechOutputTokenCounter | None = None,
         collect: dict | None = None,
+        generation_metadata_out: dict[str, str] | None = None,
     ):
         """Generate audio chunks for streaming response.
 
-        Handles two audio output modes from the engine:
-        - Cumulative mode (list): Engine returns growing list of chunks;
-        we emit only the new tail on each iteration.
-        - Per-step mode (tensor): Engine returns single tensor per iteration;
-        we emit it directly.
+        Explicit Delta payloads emit every chunk in the current snapshot.
+        Unmarked legacy list payloads retain cumulative-tail behavior, while
+        scalar/Tensor/array payloads are emitted once per engine update.
 
         Args:
             generator: Async generator from the engine
@@ -2193,8 +2199,14 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
                 # off the final output; a cheap early-return on every other res).
                 if usage_acc is not None:
                     usage_acc.observe(res)
+                if generation_metadata_out is not None:
+                    for completion in getattr(res, "outputs", None) or []:
+                        finish_reason = getattr(completion, "finish_reason", None)
+                        if finish_reason:
+                            generation_metadata_out["finish_reason"] = str(finish_reason)
+                            break
                 audio_output, audio_key = self._extract_audio_output(res)
-                if audio_key is None:
+                if audio_output is None or audio_key is None:
                     # Stash the aligner's timestamps output for streaming callers.
                     if collect is not None and self._is_timestamps_output(res):
                         collect["aligner_res"] = res
@@ -2202,28 +2214,42 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
 
                 sr_raw = audio_output.get("sr")
                 if sr_raw is not None:
-                    sr_val = sr_raw[-1] if isinstance(sr_raw, list) and sr_raw else sr_raw
-                    sample_rate_val = sr_val.item() if hasattr(sr_val, "item") else int(sr_val)
+                    if isinstance(sr_raw, list | tuple):
+                        if not sr_raw:
+                            raise ValueError("Audio sample-rate metadata cannot be empty")
+                        sr_val = sr_raw[-1]
+                    else:
+                        sr_val = sr_raw
+                    sample_rate_val = int(sr_val.item()) if hasattr(sr_val, "item") else int(sr_val)
+
+                meta = audio_output.get("meta")
+                chunk_semantics = meta.get("audio_chunk_semantics") if isinstance(meta, Mapping) else None
+                if isinstance(chunk_semantics, list | tuple):
+                    chunk_semantics = chunk_semantics[-1] if chunk_semantics else None
+                is_delta = isinstance(chunk_semantics, str) and chunk_semantics.lower() == "delta"
 
                 audio_val = audio_output[audio_key]
-                if isinstance(audio_val, list):
-                    # Cumulative mode: each update grows the list; emit only new tail.
-                    new_chunks = audio_val[prev_count:]
-                    prev_count = len(audio_val)
-                else:
-                    # Per-step mode: each update is a single tensor; emit directly.
-                    if audio_val is not None:
-                        new_chunks = [audio_val]
-                        prev_count += 1
+                if isinstance(audio_val, list | tuple):
+                    if is_delta:
+                        new_chunks = list(audio_val)
                     else:
-                        new_chunks = []
+                        # Backward compatibility for unmarked cumulative lists.
+                        new_chunks = list(audio_val[prev_count:])
+                        prev_count = len(audio_val)
+                elif audio_val is not None:
+                    new_chunks = [audio_val]
+                    prev_count += 1
+                else:
+                    new_chunks = []
 
                 for chunk_tensor in new_chunks:
-                    chunk_np = (
-                        chunk_tensor.float().detach().cpu().numpy() if hasattr(chunk_tensor, "float") else chunk_tensor
-                    )
+                    if hasattr(chunk_tensor, "float"):
+                        chunk_tensor = chunk_tensor.float().detach().cpu().numpy()
+                    chunk_np = np.asarray(chunk_tensor, dtype=np.float32)
                     if chunk_np.ndim > 1:
                         chunk_np = chunk_np.squeeze()
+                    if chunk_np.ndim == 0:
+                        chunk_np = chunk_np.reshape(1)
                     if self._tts_model_type in _AUDEX_NO_AUDIO_GUARD_MODEL_TYPES and int(np.size(chunk_np)) == 0:
                         # Zero-size chunks must not emit a WAV header or count
                         # as first audio; the post-loop guard below needs to
@@ -2348,6 +2374,7 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
         ``input_tokens`` is computed from the request text + reference audio.
         """
         usage_acc = SpeechOutputTokenCounter()
+        generation_metadata: dict[str, str] = {}
         try:
             async for chunk in self._generate_audio_chunks(
                 generator,
@@ -2356,6 +2383,7 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
                 raw_request=raw_request,
                 request_start_s=request_start_s,
                 usage_acc=usage_acc,
+                generation_metadata_out=generation_metadata,
             ):
                 payload = {
                     "type": "speech.audio.delta",
@@ -2365,6 +2393,8 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
                 data = json.dumps(payload, separators=(",", ":"))
                 yield f"event: speech.audio.delta\ndata: {data}\n\n"
             done_payload: dict[str, Any] = {"type": "speech.audio.done"}
+            if finish_reason := generation_metadata.get("finish_reason"):
+                done_payload["finish_reason"] = finish_reason
             if request is not None:
                 # Streaming path: output_tokens = sum of stage-0 deltas.
                 usage = self._build_speech_usage(request, tts_params or {}, usage_acc.total())
@@ -2976,20 +3006,26 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
 
         # Build prompt + tts_params via the per-model adapter (RFC #4327). Every
         # dedicated TTS model resolves to an adapter that owns its validation,
-        # uploaded-speaker handling, prompt/param building, and sampling
-        # overrides. The model-type label remains available for compatibility.
+        # uploaded-speaker handling, prompt/param building, request-ID
+        # finalization, sampling overrides, and output policy. The model-type
+        # label remains available for compatibility.
         # Non-TTS deployments (no adapter) fall through to the rejection below.
         # Capture inline-ref-audio status BEFORE validate(): several adapters
         # apply uploaded speakers inside validate(), which sets request.ref_audio
         # in place. The builders need to know whether the caller supplied audio
         # inline vs. via an uploaded voice.
         model_type: str | None = None
+        active_adapter = self._get_tts_adapter()
         has_inline_ref_audio = (request.ref_audio is not None) if has_inline_ref_audio is None else has_inline_ref_audio
-        if (adapter := self._get_tts_adapter()) is not None:
-            validation_error = adapter.validate(request)
+        if active_adapter is not None:
+            validation_error = active_adapter.validate(request)
             if validation_error:
                 raise ValueError(validation_error)
-            prepared = await adapter.build(request, sampling_params_list, has_inline_ref_audio)
+            prepared = await active_adapter.build(request, sampling_params_list, has_inline_ref_audio)
+            prepared = active_adapter.finalize_prepared_request(
+                prepared,
+                request_id,
+            )
             prompt = prepared.prompt
             tts_params = prepared.tts_params
             model_type = prepared.model_type
@@ -3050,8 +3086,13 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
 
         # Apply adapter-owned sampling overrides, including request-level token
         # limits and model-specific dynamic token or stop-token configuration.
-        if sampling_params_list and (adapter := self._get_tts_adapter()) is not None:
-            sampling_params_list = adapter.apply_sampling_overrides(sampling_params_list, request, prompt, request_id)
+        if sampling_params_list and active_adapter is not None:
+            sampling_params_list = active_adapter.apply_sampling_overrides(
+                sampling_params_list,
+                request,
+                prompt,
+                request_id,
+            )
 
         if request.seed is not None and sampling_params_list:
             import copy
@@ -3098,7 +3139,13 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
         return request_id, generator, tts_params
 
     async def _generate_pcm_chunks(
-        self, generator, request_id: str, *, include_sample_rate: bool = False, collect: dict | None = None
+        self,
+        generator,
+        request_id: str,
+        *,
+        include_sample_rate: bool = False,
+        collect: dict | None = None,
+        generation_metadata_out: dict[str, str] | None = None,
     ):
         """Yield raw PCM byte chunks from the engine generator.
 
@@ -3113,6 +3160,7 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
             response_format="pcm",
             include_sample_rate=include_sample_rate,
             collect=collect,
+            generation_metadata_out=generation_metadata_out,
         ):
             yield chunk
 
@@ -3131,14 +3179,14 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
         base64_encode: bool = False,
         request_id: str | None = None,
         usage_out: list[SpeechTokenUsage] | None = None,
+        response_headers_out: dict[str, str] | None = None,
         has_inline_ref_audio: bool | None = None,
         collect: dict | None = None,
     ) -> tuple[bytes | str, str]:
-        # ``usage_out`` is an opt-in output channel: when a list is passed, the
-        # computed SpeechTokenUsage is appended to it. The return stays a
-        # 2-tuple so existing callers (and their test mocks) are unaffected;
-        # batch and non-streaming response-header paths opt in when surfacing
-        # usage outside the raw audio body.
+        # ``usage_out`` and ``response_headers_out`` are opt-in output channels.
+        # The return stays a 2-tuple so existing callers and their test mocks are
+        # unaffected. Batch opts into usage; model output policies may opt into
+        # response headers for otherwise opaque audio responses.
         request_id, generator, bytes_tts_params = await self._prepare_speech_generation(
             request, request_id=request_id, has_inline_ref_audio=has_inline_ref_audio
         )
@@ -3273,6 +3321,18 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
                 base64_encode=base64_encode,
             )
             audio_response: AudioResponse = self.create_audio(audio_obj)
+            active_adapter = self._get_tts_adapter()
+            include_finish_reason = (
+                active_adapter is not None and active_adapter.output_policy.include_finish_reason_header
+            )
+            if response_headers_out is not None and include_finish_reason:
+                # OmniRequestOutput follows the current flattened RequestOutput
+                # contract, so completion metadata lives directly on the final
+                # stage output rather than under a nested request_output.
+                completions = getattr(final_output, "outputs", None) or []
+                finish_reason = getattr(completions[0], "finish_reason", None) if completions else None
+                if finish_reason:
+                    response_headers_out["X-Finish-Reason"] = str(finish_reason)
             self._mark_ref_audio_artifact_ready_for_request(request_id)
             artifact_ready = True
             if usage_out is not None:
@@ -3552,8 +3612,13 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
 
             collect: dict = {}
             usage_box: list[SpeechTokenUsage] = []
+            response_headers: dict[str, str] = {}
             audio_bytes, media_type = await self._generate_audio_bytes(
-                request, request_id=request_id, usage_out=usage_box, collect=collect
+                request,
+                request_id=request_id,
+                usage_out=usage_box,
+                response_headers_out=response_headers,
+                collect=collect,
             )
             total_ms = (time.perf_counter() - request_start_s) * 1000.0
             logger.info(
@@ -3563,6 +3628,7 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
                 len(audio_bytes) if isinstance(audio_bytes, (bytes, bytearray)) else len(str(audio_bytes)),
             )
             headers = self._build_speech_usage_headers(usage_box[0] if usage_box else None)
+            headers.update(response_headers)
             if collect.get("word_timestamps") is not None:
                 # Default ensure_ascii keeps the header latin-1 encodable (non-ASCII words \uXXXX-escaped).
                 ts_json = json.dumps(collect["word_timestamps"])
@@ -3681,7 +3747,10 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
             usage_box: list[SpeechTokenUsage] = []
             try:
                 audio_data, media_type = await self._generate_audio_bytes(
-                    req, base64_encode=True, usage_out=usage_box, has_inline_ref_audio=has_inline_ref_audio
+                    req,
+                    base64_encode=True,
+                    usage_out=usage_box,
+                    has_inline_ref_audio=has_inline_ref_audio,
                 )
             except Exception as e:
                 logger.exception("Batch item %d failed: %s", idx, e)

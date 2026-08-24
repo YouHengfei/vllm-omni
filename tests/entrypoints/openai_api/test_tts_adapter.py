@@ -15,6 +15,8 @@ from vllm_omni.entrypoints.openai.tts_adapters import (
     TTS_ADAPTER_REGISTRY,
     ARTTSAdapter,
     DiffusionTTSAdapter,
+    OutputPolicy,
+    PreparedRequest,
     all_tts_model_types,
     detect_tts_model_type,
     resolve_adapter,
@@ -57,6 +59,7 @@ EXPECTED_MODEL_TYPES = {
     "step_audio2",
     "indextts2",
     "indextts2_5",
+    "vibevoice",
 }
 
 
@@ -67,6 +70,33 @@ def test_all_model_types_registered():
 def test_registry_keyed_by_name():
     for name, cls in TTS_ADAPTER_REGISTRY.items():
         assert cls.name == name
+
+
+def test_default_adapter_lifecycle_hooks_are_identity() -> None:
+    class _ProbeAdapter(ARTTSAdapter):
+        name = "probe"
+
+        async def build(self, request, sampling_params_list, has_inline_ref_audio):  # pragma: no cover
+            raise NotImplementedError
+
+    adapter = _ProbeAdapter(ctx=None)  # type: ignore[arg-type]
+    prepared = PreparedRequest(prompt={"prompt": "hello"})
+    sampling_params = [object()]
+
+    assert adapter.finalize_prepared_request(prepared, "speech-1") is prepared
+    assert adapter.apply_sampling_overrides(sampling_params, request=None) is sampling_params  # type: ignore[arg-type]
+    assert adapter.output_policy.include_finish_reason_header is False
+    assert adapter.output_policy.websocket_streaming_formats is None
+
+
+def test_vibevoice_output_policy_requires_pcm_for_websocket_streaming() -> None:
+    adapter_cls = resolve_adapter("vibevoice")
+
+    assert adapter_cls is not None
+    assert adapter_cls.output_policy == OutputPolicy(
+        include_finish_reason_header=True,
+        websocket_streaming_formats=frozenset({"pcm"}),
+    )
 
 
 def test_resolve_each_model_type():

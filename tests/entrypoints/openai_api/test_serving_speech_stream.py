@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
+
 import asyncio
 import base64
 from types import SimpleNamespace
@@ -12,6 +15,7 @@ from starlette.websockets import WebSocketDisconnect
 from vllm_omni.entrypoints.openai import serving_speech_stream as streaming_speech_module
 from vllm_omni.entrypoints.openai.serving_speech import OmniOpenAIServingSpeech
 from vllm_omni.entrypoints.openai.serving_speech_stream import OmniStreamingSpeechHandler
+from vllm_omni.entrypoints.openai.tts_adapters.base import OutputPolicy
 from vllm_omni.model_executor.stage_input_processors.forced_aligner import ALIGNER_WORDS_KEY
 
 pytestmark = [pytest.mark.core_model, pytest.mark.cpu]
@@ -30,6 +34,60 @@ def _fake_aligner_res(pairs, words):
     )
 
 
+def _audio_chunk_test_service() -> SimpleNamespace:
+    def create_audio(audio_obj) -> SimpleNamespace:
+        value = int(audio_obj.audio_tensor.reshape(-1)[0])
+        return SimpleNamespace(audio_data=bytes([value]))
+
+    return SimpleNamespace(
+        _tts_model_type="vibevoice",
+        _extract_audio_output=OmniOpenAIServingSpeech._extract_audio_output,
+        create_audio=create_audio,
+        _mark_ref_audio_artifact_ready_for_request=lambda _request_id: None,
+        _discard_ref_audio_artifact_warmup=lambda _request_id: None,
+    )
+
+
+async def _collect_audio_chunks(results: list[SimpleNamespace]) -> list[bytes]:
+    async def generate():
+        for result in results:
+            yield result
+
+    service = _audio_chunk_test_service()
+    return [
+        chunk
+        async for chunk in OmniOpenAIServingSpeech._generate_audio_chunks(
+            service,
+            generate(),
+            "request-a",
+        )
+    ]
+
+
+def test_delta_list_snapshots_emit_every_new_chunk() -> None:
+    results = [
+        SimpleNamespace(
+            multimodal_output={
+                "audio": [value],
+                "sr": 24_000,
+                "meta": {"audio_chunk_semantics": "delta"},
+            }
+        )
+        for value in (1.0, 2.0)
+    ]
+
+    assert asyncio.run(_collect_audio_chunks(results)) == [b"\x01", b"\x02"]
+
+
+def test_unmarked_cumulative_audio_lists_keep_legacy_tail_behavior() -> None:
+    results = [
+        SimpleNamespace(multimodal_output={"audio": [1.0], "sr": 24_000}),
+        SimpleNamespace(multimodal_output={"audio": [1.0, 2.0], "sr": [24_000]}),
+    ]
+
+    assert asyncio.run(_collect_audio_chunks(results)) == [b"\x01", b"\x02"]
+
+
 def _build_test_app(
     speech_service=None,
     *,
@@ -44,7 +102,14 @@ def _build_test_app(
         speech_service._prepare_speech_generation = mocker.AsyncMock(return_value=("req-1", object(), {}))
         speech_service.forced_aligner_enabled = False
 
-        async def mock_generate_pcm_chunks(_generator, _request_id, *, include_sample_rate=False, collect=None):
+        async def mock_generate_pcm_chunks(
+            _generator,
+            _request_id,
+            *,
+            include_sample_rate=False,
+            collect=None,
+            generation_metadata_out=None,
+        ):
             for chunk in (b"\x01\x02", b"\x03\x04\x05"):
                 yield (chunk, 24000) if include_sample_rate else chunk
 
@@ -257,9 +322,17 @@ class TestStreamingSpeechWebSocket:
 
         speech_service._prepare_speech_generation = mock_prepare_speech_generation
 
-        async def mock_generate_pcm_chunks(_generator, _request_id, *, include_sample_rate=False):
+        async def mock_generate_pcm_chunks(
+            _generator,
+            _request_id,
+            *,
+            include_sample_rate=False,
+            generation_metadata_out=None,
+        ):
             for chunk in (b"\x01\x02", b"\x03\x04\x05", b"\x06"):
                 yield (chunk, 24000) if include_sample_rate else chunk
+            if generation_metadata_out is not None:
+                generation_metadata_out["finish_reason"] = "stop"
 
         speech_service._generate_pcm_chunks = mock_generate_pcm_chunks
         app, _ = _build_test_app(speech_service)
@@ -294,6 +367,7 @@ class TestStreamingSpeechWebSocket:
                     "sentence_index": 0,
                     "total_bytes": 6,
                     "error": False,
+                    "finish_reason": "stop",
                 }
 
                 assert ws.receive_json() == {"type": "session.done", "utterance_index": 0, "total_sentences": 1}
@@ -303,6 +377,40 @@ class TestStreamingSpeechWebSocket:
         assert captured_requests[0].response_format == "pcm"
         assert captured_requests[0].initial_codec_chunk_frames == 12
         assert speech_service._generate_audio_bytes.await_count == 0
+
+    def test_adapter_websocket_streaming_policy_rejects_wav_framing(self, mocker: MockerFixture):
+        speech_service = mocker.MagicMock(spec=OmniOpenAIServingSpeech)
+        speech_service._adapter = SimpleNamespace(
+            name="adapter-probe",
+            output_policy=OutputPolicy(
+                websocket_streaming_formats=frozenset({"pcm"}),
+            ),
+        )
+        speech_service._prepare_speech_generation = mocker.AsyncMock()
+        handler = OmniStreamingSpeechHandler(speech_service=speech_service)
+        websocket = mocker.MagicMock()
+        websocket.send_json = mocker.AsyncMock()
+        config = SimpleNamespace(
+            response_format="wav",
+            stream_audio=True,
+        )
+
+        asyncio.run(
+            handler._generate_and_send(
+                websocket,
+                config,
+                "Hello world.",
+                utterance_index=0,
+                sentence_index=0,
+            )
+        )
+
+        websocket.send_json.assert_awaited_once()
+        error = websocket.send_json.await_args.args[0]
+        assert error["type"] == "error"
+        assert "adapter-probe WebSocket streaming" in error["message"]
+        assert "response_format='pcm'" in error["message"]
+        speech_service._prepare_speech_generation.assert_not_awaited()
 
     def test_word_timestamps_requires_configured_aligner(self, mocker: MockerFixture):
         app, _ = _build_test_app(mocker=mocker)
@@ -344,7 +452,14 @@ class TestStreamingSpeechWebSocket:
 
         # The forced-aligner stage rides the same generator: its pooling output
         # is surfaced via the ``collect`` channel once the audio has streamed.
-        async def mock_generate_pcm_chunks(_generator, _request_id, *, include_sample_rate=False, collect=None):
+        async def mock_generate_pcm_chunks(
+            _generator,
+            _request_id,
+            *,
+            include_sample_rate=False,
+            collect=None,
+            generation_metadata_out=None,
+        ):
             for chunk in (first_chunk, second_chunk):
                 yield (chunk, 1000) if include_sample_rate else chunk
             if collect is not None:
@@ -427,7 +542,14 @@ class TestStreamingSpeechWebSocket:
         speech_service.forced_aligner_enabled = True
         speech_service._prepare_speech_generation = mocker.AsyncMock(return_value=("req", object(), {}))
 
-        async def mock_generate_pcm_chunks(_generator, _request_id, *, include_sample_rate=False, collect=None):
+        async def mock_generate_pcm_chunks(
+            _generator,
+            _request_id,
+            *,
+            include_sample_rate=False,
+            collect=None,
+            generation_metadata_out=None,
+        ):
             chunk = b"\x01" * 1000
             yield (chunk, 1000) if include_sample_rate else chunk
             if collect is not None:
@@ -608,7 +730,13 @@ class TestStreamingSpeechWebSocket:
         speech_service.engine_client.abort = mocker.AsyncMock()
         speech_service.forced_aligner_enabled = False
 
-        async def mock_generate_pcm_chunks(_generator, _request_id, *, include_sample_rate=False):
+        async def mock_generate_pcm_chunks(
+            _generator,
+            _request_id,
+            *,
+            include_sample_rate=False,
+            generation_metadata_out=None,
+        ):
             yield b"\x01\x02"
             raise RuntimeError("stream boom")
 
@@ -702,7 +830,13 @@ class TestStreamingSpeechWebSocket:
         speech_service.engine_client.abort = mocker.AsyncMock()
         speech_service.forced_aligner_enabled = False
 
-        async def mock_generate_pcm_chunks(_generator, _request_id, *, include_sample_rate=False):
+        async def mock_generate_pcm_chunks(
+            _generator,
+            _request_id,
+            *,
+            include_sample_rate=False,
+            generation_metadata_out=None,
+        ):
             yield b"\x01\x02"
 
         speech_service._generate_pcm_chunks = mock_generate_pcm_chunks
