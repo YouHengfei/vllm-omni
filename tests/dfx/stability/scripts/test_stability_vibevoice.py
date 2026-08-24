@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -19,7 +20,11 @@ from tests.dfx.conftest import (
     create_unique_server_params,
     load_configs,
 )
-from tests.dfx.stability.helpers import _run_one_vllm_bench_batch, run_stability_benchmark_loop
+from tests.dfx.stability.helpers import (
+    _run_one_vllm_bench_batch,
+    classify_speech_batch,
+    run_stability_benchmark_loop,
+)
 from tests.helpers.mark import hardware_test
 from tests.helpers.media import get_asset_path
 
@@ -79,6 +84,10 @@ server_to_benchmark_mapping = create_test_parameter_mapping(BENCHMARK_CONFIGS) i
 benchmark_indices = create_benchmark_indices(BENCHMARK_CONFIGS, server_to_benchmark_mapping)
 
 
+def _run_one_vibevoice_batch(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    return classify_speech_batch(_run_one_vllm_bench_batch(*args, **kwargs))
+
+
 @pytest.mark.slow
 @pytest.mark.tts
 @hardware_test(res={"cuda": "H100"}, num_cards=1)
@@ -131,7 +140,7 @@ def test_stability_vibevoice(omni_server, stability_benchmark_params):
         max_concurrency=max_concurrency,
         result_dir=str(result_dir.resolve()),
         num_prompts_per_batch=num_prompts_per_batch,
-        run_one_batch=_run_one_vllm_bench_batch,
+        run_one_batch=_run_one_vibevoice_batch,
         result_filename="vibevoice_stability_summary.json",
     )
 
@@ -148,8 +157,11 @@ def test_stability_vibevoice(omni_server, stability_benchmark_params):
             },
         )
 
-    assert result.get("failed", 0) == 0, f"[{test_name}] Failed requests detected: {result.get('errors', [])}"
-    assert result.get("completed", 0) > 0, f"[{test_name}] No requests completed"
+    assert result.get("request_failures", 0) == 0, f"[{test_name}] Failed requests detected: {result.get('errors', [])}"
+    assert result.get("successful_requests", 0) > 0, f"[{test_name}] No requests completed"
+    assert result.get("successful_requests", 0) == (
+        result.get("natural_stop_requests", 0) + result.get("truncated_requests", 0)
+    )
     assert health.status_code == 200, health.text
     assert probe.status_code == 200, probe.text
     assert probe.headers.get("X-Finish-Reason") == "length"

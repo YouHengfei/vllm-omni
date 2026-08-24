@@ -184,6 +184,13 @@ and request EOS tokens. The default checkpoint limit is 40,500 generated
 tokens; applications should pass a smaller `max_new_tokens` when a bounded
 request is required.
 
+The 65,536-token context limit applies after the chat template, text, and every
+reference-audio placeholder have been expanded. A request that asks for at
+least one output token can therefore use at most 65,535 prompt tokens. To
+guarantee `N` generated tokens, the expanded prompt must be no longer than
+`65,536 - N`; with `max_new_tokens=40,500`, the prompt ceiling is 25,036
+tokens.
+
 Requests may override the two VibeVoice controls through `extra_params`:
 
 ```json
@@ -205,6 +212,15 @@ The bounded CUDA Graph cache covers only the official controls
 `guidance_scale=1.3`, `num_diffusion_steps=10`, and active batch sizes 1 through
 4. Other valid controls and larger active batches use eager diffusion and do
 not allocate additional graph entries.
+
+Before the first request, the default deployment captures the official
+diffusion graph keys for every active batch size from 1 through
+`max_num_seqs`. Set `diffusion_graph_warmup_batch_sizes: []` under
+`engine_extras.additional_config.vibevoice_runtime_config` to disable startup capture while
+retaining lazy runtime capture, or provide a positive-integer list to capture
+only those sizes. Duplicate values are removed and the list is sorted. Values
+above `max_num_seqs`, booleans, numeric strings, and non-integers fail startup
+validation. `enforce_eager: true` always skips startup graph capture.
 
 ## Experimental TP=2 deployment
 
@@ -267,9 +283,13 @@ pytest -q -s --run-level advanced_model \
 ```
 
 The portable DFX configuration is
-`tests/dfx/stability/tests/test_vibevoice.json`. Performance, experimental TP=2,
-and multi-scenario long-duration tests are intentionally maintained outside the
-regular merge gate.
+`tests/dfx/stability/tests/test_vibevoice.json`. Its report counts both `stop`
+and valid `length` responses as `successful_requests`, while reporting them
+separately as `natural_stop_requests` and `truncated_requests`.
+`request_failures` is reserved for transport, SSE, PCM, engine, or terminal
+metadata failures. Performance, experimental TP=2, and multi-scenario
+long-duration tests are intentionally maintained outside the regular merge
+gate.
 
 ## Limitations
 
