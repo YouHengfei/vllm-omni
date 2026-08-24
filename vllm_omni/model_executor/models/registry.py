@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
+
 from vllm.model_executor.models.registry import (
     _VLLM_MODELS,
     _LazyRegisteredModel,
@@ -265,6 +268,12 @@ _OMNI_MODELS = {
         "gepard",
         "gepard_talker",
         "GepardTalkerForConditionalGeneration",
+    ),
+    ## VibeVoice
+    "VibeVoiceForConditionalGeneration": (
+        "vibevoice",
+        "vibevoice",
+        "VibeVoiceForConditionalGeneration",
     ),
     ## VoxCPM2
     "VoxCPM2TalkerForConditionalGeneration": (
