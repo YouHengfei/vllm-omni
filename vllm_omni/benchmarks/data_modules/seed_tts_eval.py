@@ -335,12 +335,19 @@ def _ensure_utmos_jit_model() -> Any | None:
 
             repo = os.environ.get("SEED_TTS_UTMOS_HF_REPO", "balacoon/utmos").strip() or "balacoon/utmos"
             fname = os.environ.get("SEED_TTS_UTMOS_JIT_FILE", "utmos.jit").strip() or "utmos.jit"
+            revision = os.environ.get("SEED_TTS_UTMOS_HF_REVISION", "").strip() or None
             logger.warning(
-                "Loading UTMOS TorchScript from Hugging Face %r file %r (one-time download/cache)...",
+                "Loading UTMOS TorchScript from Hugging Face %r file %r at revision %r (one-time download/cache)...",
                 repo,
                 fname,
+                revision,
             )
-            path = hf_hub_download(repo_id=repo, filename=fname, repo_type="model")
+            path = hf_hub_download(
+                repo_id=repo,
+                filename=fname,
+                repo_type="model",
+                revision=revision,
+            )
 
             # TODO The model weights in UTMOS must be loaded in cuda:0; otherwise, the model execution will fail.
             want = "cuda:0"

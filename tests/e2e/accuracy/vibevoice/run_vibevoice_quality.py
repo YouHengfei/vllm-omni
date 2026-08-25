@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
-"""Opt-in VibeVoice Seed-TTS WER/CER and speaker-similarity evaluation.
+"""Opt-in VibeVoice Seed-TTS WER/CER, similarity, and UTMOS evaluation.
 
 This client expects an already-running VibeVoice OpenAI server. It reuses the
 repository's pinned Seed-TTS judges while selecting VibeVoice's supported
@@ -24,6 +24,8 @@ from tests.e2e.accuracy.qwen3_omni.qwen3_omni_acc_bench_core import (
     find_vllm_cli,
     load_benchmark_result,
 )
+
+UTMOS_HF_REVISION = "b44d848644aa5d89a6e4f180ea50452d8c162db2"
 
 
 def _default_result_dir() -> Path:
@@ -68,6 +70,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--eval-device", default=os.environ.get("SEED_TTS_EVAL_DEVICE", "cpu"))
     parser.add_argument("--sim-device", default=os.environ.get("SEED_TTS_SIM_DEVICE", "cpu"))
     parser.add_argument("--disable-sim", action="store_true")
+    parser.add_argument("--enable-utmos", action="store_true")
+    parser.add_argument(
+        "--utmos-revision",
+        default=UTMOS_HF_REVISION,
+        help="Pinned balacoon/utmos revision used when UTMOS is enabled.",
+    )
     parser.add_argument(
         "--min-evaluated",
         type=int,
@@ -76,6 +84,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--max-mean-content-error", type=float)
     parser.add_argument("--min-mean-sim", type=float)
+    parser.add_argument("--min-mean-utmos", type=float)
     parser.add_argument("--ready-check-timeout-sec", type=int, default=300)
     return parser
 
@@ -88,6 +97,8 @@ def _validate_result(
     max_mean_content_error: float | None,
     min_mean_sim: float | None,
     sim_enabled: bool,
+    min_mean_utmos: float | None = None,
+    utmos_enabled: bool = False,
 ) -> list[str]:
     errors: list[str] = []
     if setup_error := result.get("seed_tts_eval_setup_error"):
@@ -152,6 +163,17 @@ def _validate_result(
         mean_sim = result.get("seed_tts_sim_mean")
         if min_mean_sim is not None and (mean_sim is None or float(mean_sim) < min_mean_sim):
             errors.append(f"mean speaker similarity={mean_sim!r} < {min_mean_sim:.6f}")
+
+    if utmos_enabled:
+        utmos_evaluated = int(result.get("seed_tts_utmos_evaluated", 0) or 0)
+        if utmos_evaluated != evaluated:
+            errors.append(f"UTMOS evaluated={utmos_evaluated} != content evaluated {evaluated}")
+        utmos_failed = int(result.get("seed_tts_utmos_failed", 0) or 0)
+        if utmos_failed:
+            errors.append(f"UTMOS failures={utmos_failed}")
+        mean_utmos = result.get("seed_tts_utmos_mean")
+        if min_mean_utmos is not None and (mean_utmos is None or float(mean_utmos) < min_mean_utmos):
+            errors.append(f"mean UTMOS={mean_utmos!r} < {min_mean_utmos:.6f}")
     return errors
 
 
@@ -222,7 +244,8 @@ def _run_locale(args: argparse.Namespace, locale: str, vllm_cli: str) -> tuple[P
             "no_proxy": "127.0.0.1,localhost",
             "SEED_TTS_WER_EVAL": "1",
             "SEED_TTS_SIM_EVAL": "0" if args.disable_sim else "1",
-            "SEED_TTS_UTMOS_EVAL": "0",
+            "SEED_TTS_UTMOS_EVAL": "1" if args.enable_utmos else "0",
+            "SEED_TTS_UTMOS_HF_REVISION": args.utmos_revision,
             "SEED_TTS_EVAL_DEVICE": args.eval_device,
             "SEED_TTS_SIM_DEVICE": args.sim_device,
             "VLLM_OMNI_BENCH_AUDIO_SAMPLE_RATE": "24000",
@@ -244,11 +267,14 @@ def _run_locale(args: argparse.Namespace, locale: str, vllm_cli: str) -> tuple[P
         max_mean_content_error=args.max_mean_content_error,
         min_mean_sim=args.min_mean_sim,
         sim_enabled=not args.disable_sim,
+        min_mean_utmos=args.min_mean_utmos,
+        utmos_enabled=args.enable_utmos,
     )
     metric_name = "CER" if locale == "zh" else "WER"
     print(
         f"[{locale}] {metric_name} mean={result.get('seed_tts_content_error_mean')} "
-        f"SIM mean={result.get('seed_tts_sim_mean')} result={result_path}",
+        f"SIM mean={result.get('seed_tts_sim_mean')} "
+        f"UTMOS mean={result.get('seed_tts_utmos_mean')} result={result_path}",
         flush=True,
     )
     return result_path, errors
@@ -264,6 +290,10 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("--output-len must be positive")
     if args.min_evaluated is not None and not 1 <= args.min_evaluated <= args.num_prompts:
         raise ValueError("--min-evaluated must be between 1 and --num-prompts")
+    if args.enable_utmos and not args.utmos_revision.strip():
+        raise ValueError("--utmos-revision must be non-empty when UTMOS is enabled")
+    if args.min_mean_utmos is not None and not args.enable_utmos:
+        raise ValueError("--min-mean-utmos requires --enable-utmos")
 
     locales = ("en", "zh") if args.locale == "both" else (args.locale,)
     vllm_cli = find_vllm_cli()

@@ -29,6 +29,9 @@ def _scored_result() -> dict:
         "seed_tts_sim_mean": 0.8,
         "seed_tts_sim_failed": 0,
         "seed_tts_sim_skipped_no_ref": 0,
+        "seed_tts_utmos_evaluated": 2,
+        "seed_tts_utmos_mean": 3.5,
+        "seed_tts_utmos_failed": 0,
         "seed_tts_finish_reason_counts": {"stop": 2},
         "seed_tts_length_capped": 0,
         "seed_tts_terminal_stop_required": 2,
@@ -96,6 +99,57 @@ def test_validate_result_applies_locale_metrics_and_thresholds() -> None:
     assert "speaker similarity evaluated=1 != content evaluated 2" in errors
     assert "speaker similarity failures=1" in errors
 
+    utmos_result = _scored_result()
+    utmos_result["seed_tts_utmos_evaluated"] = 1
+    utmos_result["seed_tts_utmos_failed"] = 1
+    utmos_result["seed_tts_utmos_mean"] = 2.9
+    errors = _validate_result(
+        utmos_result,
+        locale="en",
+        min_evaluated=2,
+        max_mean_content_error=None,
+        min_mean_sim=None,
+        sim_enabled=False,
+        min_mean_utmos=3.0,
+        utmos_enabled=True,
+    )
+    assert "UTMOS evaluated=1 != content evaluated 2" in errors
+    assert "UTMOS failures=1" in errors
+    assert "mean UTMOS=2.9 < 3.000000" in errors
+
+
+def test_utmos_loader_honors_pinned_revision(monkeypatch) -> None:
+    import huggingface_hub
+    import torch
+
+    from vllm_omni.benchmarks.data_modules import seed_tts_eval
+
+    calls = {}
+
+    class FakeModel:
+        def eval(self):
+            return self
+
+    def fake_download(**kwargs):
+        calls.update(kwargs)
+        return "/tmp/utmos.jit"
+
+    fake_model = FakeModel()
+    monkeypatch.setenv("SEED_TTS_UTMOS_HF_REVISION", "fixed-revision")
+    monkeypatch.setattr(seed_tts_eval, "_utmos_jit_model", None)
+    monkeypatch.setattr(seed_tts_eval, "_utmos_jit_load_failed", False)
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", fake_download)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(torch.jit, "load", lambda path, map_location: fake_model)
+
+    assert seed_tts_eval._ensure_utmos_jit_model() is fake_model
+    assert calls == {
+        "repo_id": "balacoon/utmos",
+        "filename": "utmos.jit",
+        "repo_type": "model",
+        "revision": "fixed-revision",
+    }
+
 
 def test_min_evaluated_defaults_to_requested_prompt_count() -> None:
     args = build_arg_parser().parse_args(["--num-prompts", "7"])
@@ -116,6 +170,9 @@ def test_run_locale_selects_vibevoice_schema_and_sse_transport(tmp_path: Path, m
             str(tmp_path / "audio"),
             "--num-prompts",
             "2",
+            "--enable-utmos",
+            "--min-mean-utmos",
+            "3.0",
         ]
     )
     captured = {}
@@ -146,5 +203,6 @@ def test_run_locale_selects_vibevoice_schema_and_sse_transport(tmp_path: Path, m
         "response_format": "pcm",
     }
     assert captured["env"]["SEED_TTS_SIM_EVAL"] == "1"
-    assert captured["env"]["SEED_TTS_UTMOS_EVAL"] == "0"
+    assert captured["env"]["SEED_TTS_UTMOS_EVAL"] == "1"
+    assert captured["env"]["SEED_TTS_UTMOS_HF_REVISION"] == "b44d848644aa5d89a6e4f180ea50452d8c162db2"
     assert captured["env"]["SEED_TTS_WER_SAVE_AUDIO_DIR"].endswith("/en")
