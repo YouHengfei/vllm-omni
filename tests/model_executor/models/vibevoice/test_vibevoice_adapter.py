@@ -6,11 +6,14 @@ from __future__ import annotations
 
 import asyncio
 import copy
-import wave
+import hashlib
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
+import soundfile as sf
 from vllm import SamplingParams
 from vllm.multimodal.media import MediaConnector
 
@@ -173,19 +176,50 @@ def test_bundled_default_references_are_packaged_and_resolvable() -> None:
         "default_3.wav",
     )
 
+    expected_sources = (
+        (
+            "tests/assets/cosyvoice3/zero_shot_prompt.wav",
+            "c7b31d6dbe7cc6a716dded00550db5b50940bf209e424e4ad207b12e657c8ff6",
+        ),
+        (
+            "vllm_omni/model_executor/models/step_audio2/assets/default_female.wav",
+            "5fc92ddcd9bc9af10437d9630642378777a98fc260f16508a9777db12c830a41",
+        ),
+        (
+            "tests/assets/indextts2/ref_audio.wav",
+            "e33e6ee0107a1dd58e1d66dd90c13df3d55a8683047cc3d7ea206dad84ed3fc8",
+        ),
+        (
+            "tests/assets/qwen3_tts/clone_2.wav",
+            "480f55f41c71c3d79c2a9acc48f0bfb3c5a46222e6e9ebf3e2888e93501a6b5c",
+        ),
+    )
+    repository_root = Path(__file__).resolve().parents[4]
+    manifest_path = get_default_reference_audio_path(0).parent.parent / "ASSET_MANIFEST.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    records = manifest["assets"]
+    assert [record["slot"] for record in records] == list(range(4))
+    assert [Path(record["packaged_path"]).name for record in records] == list(DEFAULT_REFERENCE_AUDIO_FILENAMES)
+    assert manifest["excluded_candidates"][0]["path"] == "tests/assets/glm_tts/jiayan_zh.wav"
+
     adapter = _adapter()
-    for index in range(4):
+    for index, (source_relative_path, expected_sha256) in enumerate(expected_sources):
         path = get_default_reference_audio_path(index)
-        with wave.open(str(path), "rb") as wav_file:
-            assert wav_file.getframerate() == 24_000
-            assert wav_file.getnchannels() == 1
-            assert wav_file.getsampwidth() == 2
-            assert 0 < wav_file.getnframes() <= 60 * 24_000
+        source_path = repository_root / source_relative_path
+        assert path.read_bytes() == source_path.read_bytes()
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == expected_sha256
+        assert records[index]["sha256"] == expected_sha256
+        assert records[index]["canonical_vllm_omni_path"] == source_relative_path
+        assert records[index]["license"] == "Apache-2.0"
+
+        info = sf.info(path)
+        assert info.channels == 1
+        assert 0 < info.duration <= 60
 
         waveform, sample_rate = asyncio.run(adapter._resolve_default_reference(index))
-        assert sample_rate == 24_000
+        assert sample_rate == records[index]["sample_rate_hz"]
         assert waveform.ndim == 1
-        assert 0 < waveform.size <= 60 * 24_000
+        assert 0 < waveform.size <= 60 * sample_rate
         assert np.isfinite(waveform).all()
         assert float(np.sqrt(np.mean(np.square(waveform, dtype=np.float64)))) > 1e-5
 
