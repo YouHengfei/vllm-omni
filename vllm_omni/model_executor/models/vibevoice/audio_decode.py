@@ -225,8 +225,11 @@ class VibeVoiceDecodeGraphExecutor:
     The graph is per-request: it is captured against the request's own
     acoustic/semantic cache buffer addresses and stored on the acoustic cache
     object (``_vv_decode_graph``) so it lives exactly as long as the cache.
-    Segment boundaries zero the caches in place (``_reset_conv_caches``),
-    keeping addresses stable so the graph stays valid across segments.
+    Each request graph uses an independent CUDA graph memory pool. Sharing one
+    pool across request graphs is unsafe because continuous batching can replay
+    and destroy them in a different order from capture. Segment boundaries zero
+    the caches in place (``_reset_conv_caches``), keeping addresses stable so
+    the graph stays valid across segments.
 
     Replay output tensors are borrowed views of graph-owned static buffers and
     remain valid only until the next replay for the same graph entry. Callers
@@ -241,7 +244,6 @@ class VibeVoiceDecodeGraphExecutor:
         capture_failure_fatal: bool = False,
     ) -> None:
         self._decoder = decoder
-        self._pool: Any = None
         self._disabled = False
         self._capture_failure_fatal = capture_failure_fatal
 
@@ -340,11 +342,12 @@ class VibeVoiceDecodeGraphExecutor:
             torch.cuda.current_stream(device).wait_stream(side)
             self._restore(snap, acoustic_cache, semantic_cache)
 
-            if self._pool is None:
-                self._pool = torch.cuda.graph_pool_handle()
+            # The default creates a private pool for this graph. Do not pass a
+            # shared pool: request graphs are replayed and destroyed in dynamic
+            # continuous-batching order, which violates shared-pool ordering.
             graph = torch.cuda.CUDAGraph()
             snap2 = self._snapshot(acoustic_cache, semantic_cache)
-            with torch.cuda.graph(graph, pool=self._pool):
+            with torch.cuda.graph(graph):
                 out = run()
             self._restore(snap2, acoustic_cache, semantic_cache)
 

@@ -182,6 +182,10 @@ class VibeVoiceStatefulInference:
         self.default_num_diffusion_steps = validate_num_diffusion_steps(default_num_diffusion_steps)
         self._states: dict[str, VibeVoiceRequestState] = {}
         self._deferred_cleanup_ids: set[str] = set()
+        # Captured decode graphs are bound to convolution-cache addresses.
+        # Recycle completed request cache pairs so continuous batching neither
+        # destroys nor recaptures CUDA graphs in an unbounded lifecycle loop.
+        self._decode_cache_pool: list[tuple[Any, Any]] = []
         self._negative_kv_branch: VibeVoiceNegativeKVBranch | None = None
 
     def bind_negative_branch(
@@ -301,6 +305,8 @@ class VibeVoiceStatefulInference:
         state.negative_condition = None
         state.negative_input_embedding = None
         state.negative_reset_pending = True
+        if state.acoustic_cache is None and state.semantic_cache is None and self._decode_cache_pool:
+            state.acoustic_cache, state.semantic_cache = self._decode_cache_pool.pop()
         self._reset_conv_caches(state)
         if self._negative_kv_branch is not None:
             self._negative_kv_branch.reset_audio_segment(state.request_id)
@@ -505,7 +511,9 @@ class VibeVoiceStatefulInference:
             )
             state.acoustic_cache = decoded.acoustic_cache
             state.semantic_cache = decoded.semantic_cache
-            state.next_embedding = decoded.next_embedding.reshape(1, -1)
+            # Decode-graph outputs are borrowed static buffers. The next AR
+            # step outlives this replay, so retain request-owned storage.
+            state.next_embedding = decoded.next_embedding.reshape(1, -1).detach().clone()
             state.waveform_chunks_cpu.append(self._stage_waveform_chunk(state, decoded.audio))
             state.audio_token_count += 1
             # Conditions are one-step values. Keeping either one would allow a
@@ -612,7 +620,19 @@ class VibeVoiceStatefulInference:
             state = self._states.pop(request_id, None)
             try:
                 if state is not None:
+                    acoustic_cache = state.acoustic_cache
+                    semantic_cache = state.semantic_cache
+                    reusable = (
+                        acoustic_cache is not None
+                        and semantic_cache is not None
+                        and getattr(acoustic_cache, "_vv_decode_graph", None) is not None
+                    )
+                    # Synchronize any pending waveform transfer before making
+                    # the graph-owned cache addresses available to another
+                    # request. ``clear`` then detaches them from the old state.
                     state.clear()
+                    if reusable:
+                        self._decode_cache_pool.append((acoustic_cache, semantic_cache))
             finally:
                 self._deferred_cleanup_ids.discard(request_id)
 
@@ -620,6 +640,7 @@ class VibeVoiceStatefulInference:
         for request_id in set(self._states) | self._deferred_cleanup_ids:
             self.cleanup_request(request_id)
         self._deferred_cleanup_ids.clear()
+        self._decode_cache_pool.clear()
 
 
 __all__ = [

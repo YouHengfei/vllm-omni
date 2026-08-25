@@ -10,6 +10,7 @@ failure must fall back to eager permanently.
 from __future__ import annotations
 
 import os
+import random
 
 import pytest
 import torch
@@ -214,6 +215,69 @@ def test_decode_graph_survives_segment_reset() -> None:
         torch.testing.assert_close(graph_value.float(), eager_value.float(), rtol=1e-3, atol=1e-3)
     for graph_value, eager_value in zip(out4_values, ref4_values, strict=True):
         torch.testing.assert_close(graph_value.float(), eager_value.float(), rtol=1e-3, atol=1e-3)
+
+
+def test_decode_graph_survives_dynamic_request_order_and_cache_reuse() -> None:
+    """Private graph pools remain valid as request cache slots are reused."""
+    (executor, decoder, at, se, ap, sc, ls, lb, latent_size) = _build()
+    rng = random.Random(42)
+
+    def fresh_cache_pair():
+        latent = torch.randn(1, 1, latent_size, device="cuda", dtype=torch.bfloat16)
+        eager = decoder_decode(decoder, at, se, ap, sc, ls, lb, latent, None, None)
+        captured = _decode(
+            executor,
+            decoder,
+            at,
+            se,
+            ap,
+            sc,
+            ls,
+            lb,
+            latent,
+            eager.acoustic_cache,
+            eager.semantic_cache,
+            use_graph=True,
+        )
+        captured.audio.clone()
+        captured.semantic_latent.clone()
+        captured.next_embedding.clone()
+        return eager.acoustic_cache, eager.semantic_cache
+
+    with torch.inference_mode():
+        slots = [fresh_cache_pair() for _ in range(4)]
+        torch.accelerator.synchronize()
+        for step in range(200):
+            order = list(range(4))
+            rng.shuffle(order)
+            for index in order:
+                acoustic_cache, semantic_cache = slots[index]
+                latent = torch.randn(1, 1, latent_size, device="cuda", dtype=torch.bfloat16)
+                out = _decode(
+                    executor,
+                    decoder,
+                    at,
+                    se,
+                    ap,
+                    sc,
+                    ls,
+                    lb,
+                    latent,
+                    acoustic_cache,
+                    semantic_cache,
+                    use_graph=True,
+                )
+                out.audio.clone()
+                out.semantic_latent.clone()
+                out.next_embedding.clone()
+            if step and step % 2 == 0:
+                for cache in slots[rng.randrange(4)]:
+                    for layer in cache.layers.values():
+                        if getattr(layer, "is_initialized", False) and layer.cache is not None:
+                            layer.cache.zero_()
+            # Surface asynchronous graph memory faults at the iteration that
+            # caused them instead of at unrelated later model work.
+            torch.accelerator.synchronize()
 
 
 def test_decode_graph_without_initialized_cache_uses_eager() -> None:

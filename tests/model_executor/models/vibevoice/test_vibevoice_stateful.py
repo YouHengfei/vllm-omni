@@ -834,6 +834,40 @@ def test_request_cleanup_drops_unpublished_waveform_after_abort() -> None:
     assert negative_branch.freed_ids == ["aborted"]
 
 
+def test_request_cleanup_recycles_captured_decode_cache_pair() -> None:
+    stateful = _stateful()
+
+    class _Layer:
+        is_initialized = True
+
+        def __init__(self) -> None:
+            self.cache = torch.ones(2)
+
+    class _Cache:
+        def __init__(self, *, captured: bool) -> None:
+            self.layers = {"layer": _Layer()}
+            if captured:
+                self._vv_decode_graph = object()
+
+    acoustic_cache = _Cache(captured=True)
+    semantic_cache = _Cache(captured=False)
+    old_state = stateful.get_or_create("old")
+    old_state.acoustic_cache = acoustic_cache
+    old_state.semantic_cache = semantic_cache
+
+    stateful.cleanup_request("old")
+    assert old_state.acoustic_cache is None
+    assert old_state.semantic_cache is None
+
+    stateful.start_audio_segment("new")
+    new_state = stateful.get("new")
+    assert new_state is not None
+    assert new_state.acoustic_cache is acoustic_cache
+    assert new_state.semantic_cache is semantic_cache
+    assert torch.count_nonzero(acoustic_cache.layers["layer"].cache) == 0
+    assert torch.count_nonzero(semantic_cache.layers["layer"].cache) == 0
+
+
 def test_request_cleanup_waits_for_pending_waveform_copy() -> None:
     stateful = _stateful()
     state = stateful.get_or_create("request-a")

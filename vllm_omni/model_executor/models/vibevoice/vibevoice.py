@@ -489,9 +489,6 @@ class VibeVoiceModel(nn.Module):
                     self.audio_token_decoder,
                     capture_failure_fatal=self.cuda_graph_capture_failure_fatal,
                 )
-                if self._shared_graph_pool is None:
-                    self._shared_graph_pool = torch.cuda.graph_pool_handle()
-                self._decode_graph_executor._pool = self._shared_graph_pool
             replayed = self._decode_graph_executor.decode(
                 audio_tower=self.audio_tower,
                 semantic_encoder=self.semantic_tokenizer_encoder,
