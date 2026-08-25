@@ -1,7 +1,7 @@
 # VibeVoice Review and Remediation Plan
 
 > **Status:** `STATIC_VERIFIED | DEV_MACHINE_TEST_PENDING | CI_PENDING |
-> BROWSER_PENDING | ASSET_BLOCKED`
+> BROWSER_PENDING | ASSET_RESOLVED`
 >
 > **Original implementation branch:** `feat/vibevoice-support`
 >
@@ -11,7 +11,7 @@
 >
 > **Original review range:** `67c54777...e0290cbc` (`cadf0a60` included)
 >
-> **Last updated:** 2026-08-22
+> **Last updated:** 2026-08-25
 
 ## 1. Purpose
 
@@ -142,7 +142,8 @@ community merge. The primary blockers are:
 5. missing real E2E, speaker-conditioning, quality, TP=2, and CI gates;
 6. model-specific branches in shared TTS serving code;
 7. a large shared runner extension without a linked RFC;
-8. bundled voice files without recorded provenance and redistribution rights.
+8. bundled voice files without recorded provenance and redistribution rights
+   (resolved by replacing them with canonical Apache-2.0 project assets).
 
 ## 6. Standards findings
 
@@ -383,15 +384,15 @@ M3C captures and replays the Tensor-valued semantic latent rather than returning
 eager execution over consecutive tokens and segment reset. CUDA execution
 remains `DEV_MACHINE_TEST_PENDING`.
 
-### FN-05 — Default voice asset provenance (`AUDITED; BLOCKED`)
+### FN-05 — Default voice asset provenance (`RESOLVED`)
 
-The tracked [asset provenance audit](ASSET_PROVENANCE.md) records hashes,
-technical metadata, repository history, immutable first-party source searches,
-and the evidence required for redistribution. No source, asset license, creator,
-voice identity/consent, or redistribution permission was established. The files
-remain only for preserved-branch validation and must be removed from the final
-submission unless sufficient primary evidence and maintainer/legal approval are
-recorded.
+The original untraceable files were replaced byte-for-byte with canonical
+Apache-2.0 reference/default assets already distributed for CosyVoice3,
+Step-Audio2, IndexTTS2, and Qwen3-TTS. The tracked
+[asset provenance audit](ASSET_PROVENANCE.md) and wheel-distributed
+`ASSET_MANIFEST.json` record immutable sources, hashes, technical metadata,
+licenses, attribution, and approved reuse scopes. The CC BY-NC GLM-TTS prompt
+was explicitly excluded from runtime defaults.
 
 ## 9. Test coverage review
 
@@ -483,7 +484,7 @@ branch, the same module separation still applies to commits and review.
 | M4 | TTS Adapter and runner module seams/RFC | `DEV_MACHINE_TEST_PENDING` | VibeVoice shared-serving branches removed; named-KV lifecycle documented/tested |
 | M5 | GPU hot-path and CUDA graph optimization | `M5A TEST_PENDING; M5B EVIDENCE_PENDING` | Per-token control-ID D2H sync removed; further clone/graph changes require measurements |
 | M6 | Full validation pyramid and CI | `CI/GPU/MANUAL_PENDING` | Abort/mixed-control E2E, H100 merge job, and browser client are checked in |
-| M7 | User docs, assets, submission history, and final rebase | `ASSET_BLOCKED; REBASE_PENDING` | Provenance audit found no redistribution evidence; final history/schema decisions remain |
+| M7 | User docs, assets, submission history, and final rebase | `ASSET_RESOLVED; REBASE_PENDING` | Canonical Apache-2.0 defaults and a wheel manifest resolve provenance; final history/schema decisions remain |
 | M8 | Pre-development validation hardening | `STATIC_VERIFIED; DEV_MACHINE_TEST_PENDING` | Fail-closed consumers, strict graph evidence, independent completion, docs/example/CI alignment, and tonight's runbook are checked in |
 
 ### M0 — Baseline preservation and tracker
@@ -632,11 +633,12 @@ appropriate Buildkite pipeline.
 
 ### M7 — Docs, assets, and submission
 
-M7A provenance research was recorded in `b2d43567`. The audit found no primary
-evidence for source, licensing, redistribution, creator, or voice consent. User
-docs now identify the block and recommend explicit references. The binaries are
-not removed in this batch, but the final upstream submission must remove them
-unless the evidence gate is satisfied.
+M7A provenance research was recorded in `b2d43567` and found no evidence for
+the original four files. Those files were subsequently replaced with canonical
+Apache-2.0 CosyVoice3, Step-Audio2, IndexTTS2, and Qwen3-TTS references. User
+docs and the wheel-distributed manifest now record immutable sources, hashes,
+licenses, attribution, and intended use; the non-commercial GLM-TTS prompt was
+excluded.
 
 Remaining scope:
 
@@ -747,7 +749,7 @@ Record:
 | Bound request controls and graph admission | Guidance `[0, 20]`, steps `[1, 50]`; only official controls use graphs | `IMPLEMENTED IN M3A; TEST_PENDING` |
 | Implement full nested config normalization now | No; decide against the actual final upstream Transformers class | `DEFERRED TO FINAL REBASE` |
 | Retain TP=2 support claim | No until a real TP=2 rank-consistency/generation gate passes | `CLAIM WITHDRAWN; EVIDENCE_PENDING` |
-| Retain bundled default voices | Only after provenance/license/consent approval | `BLOCKED; AUDIT FOUND NO EVIDENCE` |
+| Retain bundled default voices | Reuse canonical project-approved Apache-2.0 reference assets with a manifest | `APPROVED; ASSET EVIDENCE RECORDED` |
 | Remove additional hidden-state clones now | No; require profiler/benchmark evidence | `EVIDENCE_PENDING` |
 | Keep manual CUDA graph optimization in the first model PR | No; prefer eager correctness first and a measured follow-up | `EVIDENCE_PENDING` |
 | Rebase remediation branch onto latest upstream immediately | No; validate this batch, then create a separate submission branch | `DEFERRED` |
@@ -858,8 +860,8 @@ Record:
     - `e483fa8c`, `aa436be0` — add and harden the browser AudioWorklet client;
     - `b2d43567` — record the bundled-voice provenance audit;
     - `122baf1f` — complete SPDX metadata on modified Adapter files.
-- Status: `DEV_MACHINE_TEST_PENDING | CI_PENDING | BROWSER_PENDING |
-  ASSET_BLOCKED`
+- Status at that checkpoint: `DEV_MACHINE_TEST_PENDING | CI_PENDING |
+  BROWSER_PENDING`; the later canonical-asset replacement resolved the asset gate.
 - Static results:
     - `git diff --check` — passed;
     - Ruff 0.14.10 check/format over all batch Python files — passed;
@@ -880,14 +882,15 @@ Record:
     - shared serving contains no executable VibeVoice model-name branch;
     - named-KV runner behavior is unchanged except for additional tests/docs;
     - M5 does not change clones, graph kernels, graph defaults, or timing;
-    - M3B, TP=2, asset removal, thresholds, rebase, and history rewrite remain
-    deferred.
+    - M3B, TP=2, thresholds, rebase, and history rewrite remained deferred;
+      the later canonical-asset replacement superseded asset removal.
 - Remaining gates:
     - execute the CPU and CUDA batch commands on the development machine;
     - run the source-gated H100 Buildkite job;
     - complete raw/SSE browser evidence and four-request isolation;
     - collect eager/graph performance and one-hour stability evidence;
-    - remove bundled defaults unless the asset evidence gate is resolved;
+    - resolve the bundled-default asset evidence gate (completed later with
+      canonical Apache-2.0 project assets);
     - perform M3B/final submission work only after locking upstream.
 
 ### M8 — Pre-development validation hardening
@@ -898,8 +901,9 @@ Record:
     - `28b699ea` — fail closed in benchmark/browser streaming clients;
     - `3c903aad` — harden runtime metadata, graph, config, and cleanup contracts;
     - `6d4724bf` — sharpen official E2E, quality, stability, and H100 CI gates.
-- Status: `STATIC_VERIFIED | DEV_MACHINE_TEST_PENDING | CI_PENDING |
-  BROWSER_PENDING | ASSET_BLOCKED`
+- Status at that checkpoint: `STATIC_VERIFIED | DEV_MACHINE_TEST_PENDING |
+  CI_PENDING | BROWSER_PENDING`; the later canonical-asset replacement resolved
+  the asset gate.
 - Static results:
     - `git diff --check` — passed;
     - Ruff 0.14.10 check/format over 29 changed Python files — passed;
@@ -956,4 +960,5 @@ Copy this block when completing a module:
 | 2026-08-22 | Removed control-token `.item()` synchronization while leaving clone/graph changes evidence-gated. |
 | 2026-08-22 | Added abort/mixed-control E2E, H100 merge CI, and the browser AudioWorklet example; execution remains pending. |
 | 2026-08-22 | Audited bundled voice assets and recorded an unresolved redistribution/consent block. |
+| 2026-08-25 | Replaced the untraceable defaults with canonical Apache-2.0 CosyVoice3, Step-Audio2, IndexTTS2, and Qwen3-TTS assets; added a wheel manifest and excluded the CC BY-NC GLM-TTS prompt. |
 | 2026-08-22 | Completed M8 pre-development hardening, strict evidence overlays, fail-closed clients, independent completion gates, and the development-machine handoff runbook. |

@@ -1,131 +1,142 @@
-# VibeVoice Bundled Voice Asset Provenance Audit
+# VibeVoice bundled voice asset provenance
 
-> **Audit date:** 2026-08-22
+> **Audit date:** 2026-08-25
 >
-> **Status:** `UNRESOLVED — NOT READY FOR UPSTREAM REDISTRIBUTION`
+> **Status:** `RESOLVED — CANONICAL APACHE-2.0 PROJECT ASSETS REUSED`
 >
 > **Scope:** `vllm_omni/model_executor/models/vibevoice/assets/default_{0..3}.wav`
 
-## Conclusion
+## Decision
 
-No primary-source record currently establishes who created or recorded the four
-WAV files, where they came from, which license applies to them, whether they
-contain a real person's voice, or whether redistribution and voice-cloning
-consent were granted.
+The original four VibeVoice default references had no traceable source or asset
+license. They have been replaced with byte-for-byte copies of canonical
+reference/default voice assets already distributed by vLLM-Omni and their
+source projects under Apache-2.0.
 
-The files can remain on the preserved development/remediation branch while the
-question is investigated, but they must not be represented as
-“framework-owned” or included in a final upstream submission without evidence.
-If the evidence listed below cannot be produced, the final submission should
-remove the files and require explicit `ref_audio` or an uploaded voice.
+No clip is transcoded, trimmed, normalized, or otherwise transformed. The
+packaged SHA-256 therefore matches the canonical source SHA-256. VibeVoice
+resamples references at request-processing time without modifying the packaged
+files.
 
-This conclusion is intentionally narrower than a copyright determination. An
-absence of evidence is not proof that redistribution is forbidden; it is also
-not evidence that redistribution is allowed.
+The machine-readable manifest shipped in the wheel is:
+
+```text
+vllm_omni/model_executor/models/vibevoice/ASSET_MANIFEST.json
+```
+
+It records source revisions, paths, hashes, media properties, licenses,
+attribution, intended-use evidence, and approved reuse scopes.
 
 ## Inventory
 
-| File | SHA-256 | Git blob | Duration | Encoding |
-| --- | --- | --- | ---: | --- |
-| `default_0.wav` | `7dfbfe7061982d0f91997bbc0b8593e816e50aab8a7c1158620e6043ddd2c1b7` | `37b14d09664e425dc75e554cc3c56f7fc82e8093` | 9.042250 s | PCM s16le, mono, 24 kHz |
-| `default_1.wav` | `4aeab909c89e0617f8a339973f463a4467c61492572694607df27b89c04dd2c5` | `82e26d41de7cc2378dd57bd125599017ff182691` | 7.700000 s | PCM s16le, mono, 24 kHz |
-| `default_2.wav` | `f3161536a6dac1b9fbb3aac7894c5cc43fff75e58e1df9e57064069267e16be3` | `4a67e844abe8bb60ca4fa04dcad1d617167ba6d7` | 5.469167 s | PCM s16le, mono, 24 kHz |
-| `default_3.wav` | `8de5520c8e54b3b1d420f15e23be89b2d16d9c0a2bd6edb06075816e53b33876` | `66fb4a82b02760e8ec64e2f1de93791a61b3a63f` | 8.080000 s | PCM s16le, mono, 24 kHz |
+| Slot | Packaged file | Canonical project asset | SHA-256 | License |
+| ---: | --- | --- | --- | --- |
+| 0 | `default_0.wav` | `tests/assets/cosyvoice3/zero_shot_prompt.wav` | `c7b31d6dbe7cc6a716dded00550db5b50940bf209e424e4ad207b12e657c8ff6` | Apache-2.0 |
+| 1 | `default_1.wav` | `vllm_omni/model_executor/models/step_audio2/assets/default_female.wav` | `5fc92ddcd9bc9af10437d9630642378777a98fc260f16508a9777db12c830a41` | Apache-2.0 |
+| 2 | `default_2.wav` | `tests/assets/indextts2/ref_audio.wav` | `e33e6ee0107a1dd58e1d66dd90c13df3d55a8683047cc3d7ea206dad84ed3fc8` | Apache-2.0 |
+| 3 | `default_3.wav` | `tests/assets/qwen3_tts/clone_2.wav` | `480f55f41c71c3d79c2a9acc48f0bfb3c5a46222e6e9ebf3e2888e93501a6b5c` | Apache-2.0 |
 
-Each file contains only the minimal RIFF `fmt` and `data` chunks. `ffprobe`
-reported no title, artist, comment, copyright, encoder, source, or other format
-tag that could identify its origin.
+| Slot | Duration | Source rate | Channels | Encoding |
+| ---: | ---: | ---: | ---: | --- |
+| 0 | 3.480000 s | 24 kHz | 1 | WAV IEEE float |
+| 1 | 9.042250 s | 48 kHz | 1 | WAV PCM 16-bit |
+| 2 | 2.438708 s | 48 kHz | 1 | WAV IEEE float |
+| 3 | 8.080000 s | 24 kHz | 1 | WAV IEEE float |
 
-The audit deliberately did not infer speaker identity, demographic attributes,
-or consent from the sound of the recordings.
+Every clip is mono and shorter than the 60-second per-reference limit.
 
-## Repository history
+## Sources and attribution
 
-All four files first appear together in:
+### Slot 0 — CosyVoice zero-shot prompt
 
-- commit [`e0290cbc33054596380565ad56fd65aa934dd69e`](https://github.com/YouHengfei/vllm-omni/commit/e0290cbc33054596380565ad56fd65aa934dd69e);
-- author/committer: `YouHengfei <474029121@qq.com>`;
-- message: `feat:add defauil ref audio for only text input`.
+- vLLM-Omni introduction:
+  [`b1ff69502920df1f65f2f62c7e661169eb2bca65`](https://github.com/vllm-project/vllm-omni/commit/b1ff69502920df1f65f2f62c7e661169eb2bca65)
+- upstream revision:
+  [`QwenAudio/CosyVoice@074ca6dc`](https://github.com/QwenAudio/CosyVoice/tree/074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc)
+- upstream file:
+  [`asset/zero_shot_prompt.wav`](https://github.com/QwenAudio/CosyVoice/blob/074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc/asset/zero_shot_prompt.wav)
+- license:
+  [Apache-2.0](https://github.com/QwenAudio/CosyVoice/blob/074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc/LICENSE)
+- attribution: CosyVoice contributors.
 
-The commit adds the binary files and describes fallback behavior, but does not
-record a source URL, source revision, creator, speaker, transcript, license,
-consent, generation method, or attribution. The commit has no Git note carrying
-that information. Earlier history on the preserved branch contains no version
-of these paths.
+The source project publishes the clip as its zero-shot reference prompt, and
+vLLM-Omni already uses it for CosyVoice reference conditioning.
 
-A commit author records who added a file to this repository; it does not by
-itself establish authorship of the recording or the voice represented in it.
+### Slot 1 — Step-Audio2 default female prompt
 
-## Primary-source searches
+- vLLM-Omni introduction:
+  [`9bc8705c98788ca1429c55e512383b559afcec12`](https://github.com/vllm-project/vllm-omni/commit/9bc8705c98788ca1429c55e512383b559afcec12)
+- upstream revision:
+  [`stepfun-ai/Step-Audio2@76e272b5`](https://github.com/stepfun-ai/Step-Audio2/tree/76e272b56c3917a8d7188f18bbb5a65dfc8a0845)
+- upstream file:
+  [`assets/default_female.wav`](https://github.com/stepfun-ai/Step-Audio2/blob/76e272b56c3917a8d7188f18bbb5a65dfc8a0845/assets/default_female.wav)
+- license:
+  [Apache-2.0](https://github.com/stepfun-ai/Step-Audio2/blob/76e272b56c3917a8d7188f18bbb5a65dfc8a0845/LICENSE)
+- attribution: Step-Audio2 contributors.
 
-### Microsoft VibeVoice source repository
+The source project and vLLM-Omni already ship the exact bytes as the default
+female speaker prompt for Step-Audio2.
 
-The recursive first-party GitHub tree at revision
-[`94da20d98b2fa7688e9cbfaf7692ddb4954f7600`](https://api.github.com/repos/microsoft/VibeVoice/git/trees/94da20d98b2fa7688e9cbfaf7692ddb4954f7600?recursive=1)
-contains no `default_0.wav` through `default_3.wav` and no raw TTS reference WAV
-with a matching path or checksum. It does contain separately named ASR demo
-media and serialized Realtime voice presets. No claim is made that those files
-are related to the four audited WAVs.
+### Slot 2 — IndexTTS2 voice 01
 
-The repository's MIT
-[`LICENSE`](https://github.com/microsoft/VibeVoice/blob/303b2833e01cff4578ec278bbfe536da54bd19fe/LICENSE)
-applies to material distributed by that repository under its terms. Because the
-four audited files were not found there and have no recorded derivation from
-it, that license cannot be assigned to them by inference.
+- vLLM-Omni introduction:
+  [`044240d8ebeae9c19a7be01db9d37a1cd1a57c8a`](https://github.com/vllm-project/vllm-omni/commit/044240d8ebeae9c19a7be01db9d37a1cd1a57c8a)
+- upstream Space revision:
+  [`IndexTeam/IndexTTS-2-Demo@b01840e8`](https://huggingface.co/spaces/IndexTeam/IndexTTS-2-Demo/tree/b01840e8e4fd9753743a6d0466cd73ae1d634a68)
+- upstream file:
+  [`examples/voice_01.wav`](https://huggingface.co/spaces/IndexTeam/IndexTTS-2-Demo/blob/b01840e8e4fd9753743a6d0466cd73ae1d634a68/examples/voice_01.wav)
+- license:
+  [Apache-2.0](https://huggingface.co/spaces/IndexTeam/IndexTTS-2-Demo/blob/b01840e8e4fd9753743a6d0466cd73ae1d634a68/LICENSE)
+- attribution: IndexTTS contributors.
 
-### Microsoft VibeVoice-1.5B model repository
+The Apache-2.0 demo Space publishes the clip as `voice_01.wav` for reference
+voice cloning. vLLM-Omni's `ref_audio.wav` contains the same bytes.
 
-The first-party Hugging Face tree at model revision
-[`c00898d257e6b46004e3e2866a47534085fb685a`](https://huggingface.co/api/models/microsoft/VibeVoice-1.5B/tree/c00898d257e6b46004e3e2866a47534085fb685a?recursive=true&expand=false)
-contains model/configuration files and no WAV/MP3/FLAC voice asset. Its
-[`README.md`](https://huggingface.co/microsoft/VibeVoice-1.5B/blob/c00898d257e6b46004e3e2866a47534085fb685a/README.md)
-does not identify or license these four recordings.
+### Slot 3 — Qwen3-TTS clone 2
 
-The model card is directly relevant to the consent gate. It says that voice
-impersonation without explicit, recorded consent is outside intended use and
-that users are responsible for sourcing data legally and ethically, including
-securing appropriate rights. A model-repository MIT label does not establish
-those facts for an unidentified recording added elsewhere.
+- vLLM-Omni introduction:
+  [`b1ff69502920df1f65f2f62c7e661169eb2bca65`](https://github.com/vllm-project/vllm-omni/commit/b1ff69502920df1f65f2f62c7e661169eb2bca65)
+- official source:
+  [`clone_2.wav`](https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-TTS-Repo/clone_2.wav)
+- Qwen3-TTS audited revision:
+  [`QwenLM/Qwen3-TTS@022e286b`](https://github.com/QwenLM/Qwen3-TTS/tree/022e286b98fbec7e1e916cb940cdf532cd9f488e)
+- license:
+  [Apache-2.0](https://github.com/QwenLM/Qwen3-TTS/blob/022e286b98fbec7e1e916cb940cdf532cd9f488e/LICENSE)
+- attribution: Qwen3-TTS contributors.
 
-### Local primary-source checkout
+Qwen publishes the clip as an official voice-cloning reference. The immutable
+vLLM-Omni commit and SHA-256 pin the bytes because the object-storage URL does
+not contain a revision.
 
-The local `microsoft/VibeVoice` checkout at
-`303b2833e01cff4578ec278bbfe536da54bd19fe` and its reachable history were
-searched for tracked WAV/MP3/FLAC paths and for the audited checksums. No match
-was found. This local result corroborates the immutable first-party tree queries
-above but is not treated as a substitute for them.
+## Identity and intended use
 
-## Evidence required to resolve the gate
+vLLM-Omni does not assign a name, demographic description, or claimed identity
+to any bundled reference. The slot numbers are implementation indices only.
+Each source project publishes its clip specifically as a default speaker prompt
+or reference-conditioning/voice-cloning example. Reuse for VibeVoice preserves
+that purpose without claiming that the voice belongs to the framework.
 
-For each file, retain a durable record of:
+Users providing their own references remain responsible for obtaining all
+rights and consent required for those recordings. Explicit `ref_audio` and
+uploaded `voice` values never mix with the bundled defaults.
 
-1. immutable source URL and source revision;
-2. original filename and checksum;
-3. recording or generation method;
-4. recording author/producer and copyright holder;
-5. applicable asset license and required attribution;
-6. permission to redistribute the recording in this repository;
-7. whether the voice is synthetic or belongs to a real person;
-8. if real, explicit recorded consent for this redistribution and voice-cloning
-   use;
-9. any geographic, research-only, or commercial-use restrictions;
-10. a maintainer/legal decision that the evidence is sufficient.
+## Excluded candidate
 
-An email or issue response should be archived or linked from this document; a
-verbal statement or filename such as `default_0` is insufficient.
+`tests/assets/glm_tts/jiayan_zh.wav` was considered but deliberately excluded.
+Its upstream prompt-audio license is CC BY-NC 4.0 and states that commercial use
+is strictly prohibited. It is therefore not suitable as a general-purpose
+runtime default in the vLLM-Omni wheel.
 
-The first-party model card gives `VibeVoice@microsoft.com` as the contact for
-questions and undesired behavior. Contacting that address may clarify whether
-Microsoft published a suitable, licensed reference set, but it cannot identify
-the current files without their original source information.
+## Verification and update rule
 
-## Final-submission decision rule
+Tests verify that:
 
-- **Evidence complete:** add an asset manifest with the facts above, required
-  attribution, checksums, and the approving decision; then retain only the
-  files covered by that evidence.
-- **Evidence incomplete:** remove all four WAVs, remove the bundled-default
-  fallback, require explicit reference audio/uploaded voice, and update tests
-  and user documentation.
+1. all four packaged files match their manifest SHA-256;
+2. slot numbers and filenames are unique and ordered;
+3. every file is decodable, mono, non-empty, and no longer than 60 seconds;
+4. VibeVoice resolves each file to finite 24 kHz mono samples;
+5. the built wheel contains all four WAVs and this manifest.
 
-No quality or convenience result overrides this gate.
+Any future replacement must update the manifest and this audit in the same
+change. A filename-only replacement or transformed file without a documented
+source hash is not acceptable.

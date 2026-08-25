@@ -60,12 +60,13 @@ both `ref_audio` and `voice` are omitted, the adapter assigns the first N
 defaults to the N speakers in first-appearance order. Plain text therefore uses
 default voice 0, and a four-speaker script uses all four defaults.
 
-!!! warning
-    The files' source, redistribution license, and voice consent are unresolved.
-    See the [asset provenance audit](../design/vibevoice/ASSET_PROVENANCE.md).
-    Use explicit reference audio for reproducible validation. The files must be
-    removed from the final upstream submission unless sufficient evidence is
-    recorded.
+!!! note
+    The four files are byte-for-byte copies of Apache-2.0 reference/default
+    assets already distributed for CosyVoice3, Step-Audio2, IndexTTS2, and
+    Qwen3-TTS. See the
+    [asset provenance manifest and audit](../design/vibevoice/ASSET_PROVENANCE.md)
+    for immutable sources, hashes, licenses, and attribution. Slot numbers do
+    not assert speaker identity.
 
 Explicit references remain all-or-nothing: once `ref_audio` is provided, its
 length must exactly match the number of speakers. A partial list is rejected
