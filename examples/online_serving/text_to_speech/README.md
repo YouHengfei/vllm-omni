@@ -758,8 +758,8 @@ disabled.
    are expected; sustained growth means generation is slower than playback.
 7. Save browser/server logs and one output capture per tab.
 
-The complete CPU/GPU, graph, quality, performance, and stability procedure is
-in [`docs/design/vibevoice/TESTING.md`](../../../docs/design/vibevoice/TESTING.md).
+Model usage, request limits, and serving semantics are documented in the
+[VibeVoice model guide](../../../docs/models/vibevoice.md).
 
 ---
 
