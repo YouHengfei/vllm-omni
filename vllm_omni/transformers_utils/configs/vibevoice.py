@@ -28,11 +28,6 @@ from transformers.models.vibevoice_acoustic_tokenizer.configuration_vibevoice_ac
 )
 from transformers.utils import auto_docstring
 
-_REQUIRED_SUB_CONFIG_MODEL_TYPES = {
-    "qwen2",
-    "vibevoice_acoustic_tokenizer",
-    "vibevoice_acoustic_tokenizer_encoder",
-}
 _ORIGINAL_TOKENIZER_CONFIG_KEYS_TO_REMOVE = {
     "decoder_depths",
     "decoder_n_filters",

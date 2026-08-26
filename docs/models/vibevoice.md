@@ -131,8 +131,6 @@ The terminal event includes `finish_reason`. Clients must treat
 Applications that evaluate output quality should aggregate only samples with
 `finish_reason="stop"`.
 
-A same-origin browser AudioWorklet player is documented in the
-[VibeVoice online example](../user_guide/examples/online_serving/text_to_speech.md#vibevoice).
 Raw PCM streaming is available with `stream_format="audio"`. Because raw audio
 has no structured terminal event, clients that require `finish_reason` must use
 SSE.
