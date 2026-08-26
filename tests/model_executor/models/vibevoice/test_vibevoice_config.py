@@ -426,7 +426,7 @@ def test_single_stage_deploy_defaults_match_vibevoice_generation_contract():
     assert stage.stage_id == 0
     assert stage.devices == "0"
     assert stage.tensor_parallel_size == 1
-    assert stage.enforce_eager is False
+    assert stage.enforce_eager is True
     assert stage.async_scheduling is True
     assert stage.max_model_len == 65536
     assert stage.max_num_seqs == 4

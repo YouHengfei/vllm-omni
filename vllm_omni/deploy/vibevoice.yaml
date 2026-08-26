@@ -63,7 +63,7 @@ stages:
     # transition work moved to preprocess_finalize). The negative branch and
     # diffusion/M4a stay eager outside the capture region. FULL decode graphs
     # eliminate per-layer FA3 metadata build + launch overhead.
-    enforce_eager: false
+    enforce_eager: true
     async_scheduling: true
     # The pinned v1 profiler first runs the dummy placeholder text without MM
     # data, which intentionally trips VibeVoice's symmetric placeholder check.
