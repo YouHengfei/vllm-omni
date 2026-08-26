@@ -447,7 +447,7 @@ class _DiffusionGraphCaptureError(RuntimeError):
 class VibeVoiceDiffusionGraphExecutor:
     """Manual CUDA-graph replay of the fixed-step DPM denoising loop.
 
-    Phase C1 of the performance plan. The capture replays exactly the eager
+    The capture replays exactly the eager
     kernel sequence of ``sample_audio_latent`` (plus a step-invariant
     ``cond_proj`` hoist, which is bitwise identical because the projection is
     deterministic), so replay output is bitwise equal to eager for the same

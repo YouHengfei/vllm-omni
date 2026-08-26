@@ -7,7 +7,7 @@
 The kernel is intentionally stateless: causal Acoustic Decoder and Semantic
 Encoder caches are supplied by the caller and returned in the result. Request
 ownership, dynamic-batch cache packing, cleanup, and waveform serving belong to
-M4c rather than this module.
+the stateful inference module rather than this module.
 """
 
 from __future__ import annotations
@@ -215,7 +215,7 @@ class _DecodeGraphEntry:
 class VibeVoiceDecodeGraphExecutor:
     """Manual CUDA-graph replay of ``decode_audio_token`` for one request.
 
-    Phase C2 of the performance plan. The decode path is stateful: every
+    The decode path is stateful: every
     causal Conv1d layer updates its padding cache in place, so the cache is
     both an input and an output of the graph. Capture/warmup consume cache
     state; a save/restore protocol (clone before, copy_ after) keeps the

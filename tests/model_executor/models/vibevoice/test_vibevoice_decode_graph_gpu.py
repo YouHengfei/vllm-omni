@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
-"""GPU acceptance for the Phase C2 M4a decode CUDA-graph executor.
+"""GPU acceptance for the audio decode CUDA-graph executor.
 
 Replay must be bitwise identical to eager across consecutive tokens (cache
 accumulates), different inputs, and segment boundaries (cache reset). Capture

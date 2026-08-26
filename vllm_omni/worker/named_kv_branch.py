@@ -166,11 +166,11 @@ class NamedCausalKVBranch:
         self.allocated_memory_bytes = self.num_blocks * bytes_per_block
         self._preflight_device_memory()
         self._allocator = _FixedBlockAllocator(self.num_blocks)
-        # Phase A perf: every append schedules exactly one token for one
+        # Every append schedules exactly one token for one
         # request, so query_start_loc is the constant [0, 1] on both sides.
         # Hoist the two allocations+H2D out of the per-step path. The dynamic
         # scalars (slot_mapping/seq_lens/position) stay per-append: pinned
-        # staging would need ring-buffer hazard handling that the Phase B
+        # staging would need ring-buffer hazard handling that the batched
         # batched-metadata rewrite replaces anyway.
         self._query_start_cpu = torch.tensor([0, 1], dtype=torch.int32)
         self._query_start_gpu = self._query_start_cpu.to(self.device)
@@ -464,7 +464,7 @@ class NamedCausalKVBranch:
     ) -> Iterator[NamedKVBranchStep]:
         """Append one causal slot per request and enter one shared context.
 
-        Phase B of the performance plan: the negative Qwen branch advances
+        The negative Qwen branch advances
         every active request in ONE varlen decode forward instead of B
         sequential forwards. One metadata build, one kv_cache swap, one
         forward-context override. Fault handling drops the whole logical

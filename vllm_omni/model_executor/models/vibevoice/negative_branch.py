@@ -56,7 +56,7 @@ class VibeVoiceNegativeBranch:
                 raise TypeError("VibeVoice negative input embedding must be floating-point.")
 
         try:
-            # Phase B: advance the whole logical batch in ONE varlen decode
+            # Advance the whole logical batch in ONE varlen decode
             # forward. The store owns one independent block table per request;
             # a single batched attention context never exposes two negative
             # kv_cache bindings at once, identical to the sequential path.

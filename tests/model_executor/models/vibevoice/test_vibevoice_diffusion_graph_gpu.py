@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
-"""GPU acceptance for the Phase C1 diffusion-loop CUDA-graph executor.
+"""GPU acceptance for the diffusion-loop CUDA-graph executor.
 
 Replay must be bitwise identical to the eager loop for the same inputs,
 across consecutive tokens (proving no cross-replay state leakage) and across
