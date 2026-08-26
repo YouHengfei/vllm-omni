@@ -725,15 +725,14 @@ vllm serve microsoft/VibeVoice-1.5B \
 
 ### Manual acceptance
 
-1. Confirm playback begins before generation completes in raw and SSE modes.
-2. With `max_new_tokens=2`, confirm two SSE deltas, each containing exactly
-   3,200 samples, followed by one `speech.audio.done`.
-3. Confirm an SSE error or truncated stream is displayed as an error, not a
-   completed request.
-4. Abort after the first audible chunk and immediately start another request.
-5. Confirm `overflowSamples` remains zero. Initial underruns during model TTFP
-   are expected; sustained growth means generation is slower than playback.
-6. Save server logs and one output capture per scenario.
+1. With `max_new_tokens=2`, confirm two SSE `speech.audio.delta` events,
+   each containing exactly 3,200 samples, followed by one
+   `speech.audio.done` with `finish_reason="length"`.
+2. Confirm an SSE `speech.audio.error` or EOF before
+   `speech.audio.done` is treated as a failed request.
+3. Abort after the first SSE delta and immediately start another request;
+   confirm the server remains healthy (probe returns 200).
+4. Save server logs and one output capture per scenario.
 
 Model usage, request limits, and serving semantics are documented in the
 [VibeVoice model guide](../../../docs/models/vibevoice.md).
