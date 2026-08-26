@@ -351,7 +351,7 @@ def _negative_kv_conformance_worker(port: int, queue: Any) -> None:
             branch.free("request")
             all_blocks_freed = branch.num_free_blocks == branch.num_blocks
 
-            # Phase B batched-path conformance: two staggered requests share
+            # Batched-path conformance: two staggered requests share
             # one batched attention context per step; every row is compared
             # against its own Transformers cached reference.
             branch.reset("batch-a")

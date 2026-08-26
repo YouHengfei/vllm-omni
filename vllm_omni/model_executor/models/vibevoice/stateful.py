@@ -115,7 +115,7 @@ class VibeVoiceRequestState:
     in_audio_segment: bool = False
     negative_reset_pending: bool = False
     audio_token_count: int = 0
-    # Pinned-D2H bookkeeping (Phase A perf): id(buffer) -> (event, buffer)
+    # Pinned-D2H bookkeeping: id(buffer) -> (event, buffer)
     # for chunks copied off-device without stalling the decode pipeline, and
     # the free pool of reusable pinned buffers. Entries are consumed and the
     # buffers recycled only by drain_waveform_chunks after the copy event has
@@ -143,7 +143,7 @@ class VibeVoiceRequestState:
 
 
 class VibeVoiceStatefulInference:
-    """Request-indexed state machine around the frozen M4a/M4b kernels.
+    """Request-indexed state machine around the frozen diffusion/decode kernels.
 
     Convolution caches and waveform chunks are parent-request state. Qwen KV is
     intentionally absent: positive KV belongs to ``GPUARModelRunner`` and the
@@ -415,7 +415,7 @@ class VibeVoiceStatefulInference:
         token_embeddings: list[torch.Tensor],
         kernel: VibeVoiceInferenceKernel,
     ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
-        """Batch M4a over the active subset, then decode per-request caches."""
+        """Batch diffusion sampling over the active subset, then decode per-request caches."""
         if not request_ids:
             return [], []
         if len(request_ids) != len(token_embeddings):

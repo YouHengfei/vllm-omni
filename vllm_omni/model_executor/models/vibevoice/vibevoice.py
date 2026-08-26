@@ -321,17 +321,17 @@ class VibeVoiceModel(nn.Module):
         # Pure model-side numerical helper. It creates a fresh DPM solver for
         # each audio token and owns no request/KV/cache state.
         self.diffusion_sampler = VibeVoiceDiffusionSampler.from_model_config(config)
-        # Phase C1: lazily-created CUDA-graph replay of the denoising loop.
+        # Lazily-created CUDA-graph replay of the denoising loop.
         # The flag is set by the outer model from the deployment runtime
         # config; the executor itself falls back to eager on any capture
         # failure or non-CUDA input.
         self.diffusion_graph_enabled = False
         self._diffusion_graph_executor = None
-        # Phase C2: lazily-created CUDA-graph replay of the M4a decode path.
+        # Lazily-created CUDA-graph replay of the audio decode path.
         self.decode_graph_enabled = False
         self.cuda_graph_capture_failure_fatal = False
         self._decode_graph_executor = None
-        # Shared graph pool for C1 (diffusion) and C2 (decode): PyTorch's
+        # Shared graph pool for diffusion and decode graphs: PyTorch's
         # CUDACachingAllocator requires co-resident graphs to share one pool
         # (capture_begin checks global pool use_count; separate pools trigger
         # the ``use_count > 0`` assertion). See make_graphed_callables.
@@ -363,7 +363,7 @@ class VibeVoiceModel(nn.Module):
         num_inference_steps: int,
         guidance_scale: float,
     ) -> None:
-        """Pre-capture configured C1 diffusion graph keys without consuming RNG."""
+        """Pre-capture configured diffusion graph keys without consuming RNG."""
         if not self.diffusion_graph_enabled:
             return
         requested_batch_sizes = tuple(batch_sizes)
@@ -810,7 +810,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         elif len(input_token_ids_cpu) == 1:
             token_id = input_token_ids_cpu[0]
             if token_id == self._stateful.audio_token_id:
-                # Defer M4a so all active audio-token requests in this runner
+                # Defer audio-token decode so all active audio-token requests
                 # step consume one official [2B, latent] RNG draw.
                 self._pending_audio_transitions.append((request_id, self._pending_num_input_rows))
             else:
@@ -1077,7 +1077,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Run audio-token transitions before the graph-capturable forward.
 
-        Phase C3: moving the negative-branch advance, diffusion, M4a decode,
+        Moving the negative-branch advance, diffusion, audio decode,
         embed splice, and negative-input recording out of ``forward()`` makes
         ``forward()`` a pure ``self.model(...)`` call that vLLM can capture as a
         FULL decode CUDA graph. The deferred-RNG ordering is preserved because
@@ -1206,8 +1206,8 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         history.
         """
         self._warn_if_named_kv_capability_unavailable()
-        # Phase C3: all audio-token transition work (negative branch,
-        # diffusion, M4a decode, embed splice, negative-input recording) has
+        # All audio-token transition work (negative branch,
+        # diffusion, audio decode, embed splice, negative-input recording) has
         # moved to preprocess_finalize, which the runner calls before this
         # forward. sampling_extra_args is now consumed there; it is accepted
         # here only for backward compatibility with runners that have not

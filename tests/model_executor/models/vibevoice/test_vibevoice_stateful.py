@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
-"""CPU contracts for VibeVoice M4c request-local state transitions."""
+"""CPU contracts for VibeVoice request-local state transitions."""
 
 from __future__ import annotations
 
@@ -914,7 +914,7 @@ def test_request_cleanup_drops_state_when_waveform_event_fails() -> None:
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="Pinned host allocation requires CUDA")
 def test_drain_recycles_pinned_buffers_and_publishes_owning_copies() -> None:
-    """Phase A pinned-D2H contract, exercised with host-pinned tensors."""
+    """Pinned-D2H contract, exercised with host-pinned tensors."""
     stateful = _stateful()
     state = stateful.get_or_create("request-a")
 

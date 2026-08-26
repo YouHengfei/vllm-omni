@@ -27,16 +27,16 @@ VIBEVOICE_RUNTIME_CONTROL_KEYS = frozenset(
 class VibeVoiceRuntimeConfig:
     negative_kv_cache_memory_bytes: int = 4 * 1024**3
     negative_kv_activation_margin_bytes: int = 512 * 1024**2
-    # Phase C1: replay the fixed-step DPM denoising loop through manual CUDA
+    # Replay the fixed-step DPM denoising loop through manual CUDA
     # graphs (bitwise identical to eager). Disable to force the eager loop.
     diffusion_cuda_graph: bool = True
     # Pre-capture each configured active diffusion sub-batch before the first
     # request. None resolves to 1..max_num_seqs; an empty tuple disables only
     # startup warmup while preserving lazy runtime capture.
     diffusion_graph_warmup_batch_sizes: tuple[int, ...] | None = None
-    # Phase C2: replay the M4a decode (acoustic decoder + semantic encoder +
+    # Replay the audio decode (acoustic decoder + semantic encoder +
     # projectors) through a per-request manual CUDA graph (bitwise identical
-    # to eager). Shares a graph pool with the C1 diffusion graph executor to
+    # to eager). Shares a graph pool with the diffusion graph executor to
     # satisfy PyTorch's CUDACachingAllocator co-residency requirement.
     decode_cuda_graph: bool = True
     # Development/CI diagnostic: eligible graph capture failures normally fall
@@ -106,7 +106,7 @@ class VibeVoiceRuntimeConfig:
         self,
         max_num_seqs: int,
     ) -> tuple[int, ...]:
-        """Resolve and validate the startup C1 graph keys for one runner."""
+        """Resolve and validate the startup diffusion graph keys for one runner."""
         if isinstance(max_num_seqs, bool) or not isinstance(max_num_seqs, Integral) or max_num_seqs <= 0:
             raise ValueError(f"VibeVoice max_num_seqs must be a positive integer, got {max_num_seqs!r}.")
         max_num_seqs = int(max_num_seqs)
