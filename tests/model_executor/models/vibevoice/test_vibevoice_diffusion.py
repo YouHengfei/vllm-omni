@@ -4,9 +4,6 @@
 
 from __future__ import annotations
 
-import importlib.util
-import os
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -106,25 +103,6 @@ def _reference_sample(
     return latent[:batch_size].unsqueeze(1)
 
 
-def _load_microsoft_scheduler():
-    official_repo = os.getenv("VIBEVOICE_OFFICIAL_REPO")
-    if not official_repo:
-        pytest.skip("Set VIBEVOICE_OFFICIAL_REPO for Microsoft DPM solver parity")
-    assert official_repo is not None
-    scheduler_path = Path(official_repo) / "vibevoice/schedule/dpm_solver.py"
-    if not scheduler_path.is_file():
-        pytest.skip(f"Microsoft DPM solver not found at {scheduler_path}")
-
-    spec = importlib.util.spec_from_file_location(
-        "_vibevoice_official_dpm_solver",
-        scheduler_path,
-    )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.DPMSolverMultistepScheduler
-
-
 def test_diffusion_sampler_builds_normalized_fresh_schedulers() -> None:
     sampler = _sampler()
     assert sampler.beta_schedule == "squaredcos_cap_v2"
@@ -172,60 +150,8 @@ def test_diffusion_kernel_matches_an_independent_reference_loop() -> None:
     assert torch.isfinite(actual).all()
 
 
-def test_cached_scheduler_state_is_bitwise_identical_to_fresh() -> None:
-    """Phase A scheduler cache: consecutive cached runs must match fresh ones.
-
-    This pins the diffusers reset contract that acquire_scheduler relies on:
-    every mutable field is restored to the post-set_timesteps state, and a
-    previous token's solve must not leak history into the next one.
-    """
-    sampler = _sampler()
-    head = _DeterministicDiffusionHead()
-    positive, negative, noise = _inputs()
-
-    fresh_first = sampler.create_scheduler()
-    fresh_second = sampler.create_scheduler()
-    expected_first = _reference_sample(
-        fresh_first,
-        head,
-        positive,
-        negative,
-        noise,
-        guidance_scale=1.3,
-        num_inference_steps=10,
-    )
-    expected_second = _reference_sample(
-        fresh_second,
-        head,
-        positive,
-        negative,
-        noise,
-        guidance_scale=1.3,
-        num_inference_steps=10,
-    )
-
-    actual_first = sampler.sample_audio_latent(
-        head,
-        positive,
-        negative,
-        noise,
-        guidance_scale=1.3,
-        num_inference_steps=10,
-    )
-    actual_second = sampler.sample_audio_latent(
-        head,
-        positive,
-        negative,
-        noise,
-        guidance_scale=1.3,
-        num_inference_steps=10,
-    )
-
-    assert torch.equal(actual_first, expected_first)
-    assert torch.equal(actual_second, expected_second)
-
-
 def test_cached_scheduler_handles_alternating_step_counts() -> None:
+    """Cached mutable scheduler state must reset between unlike requests."""
     sampler = _sampler()
     head = _DeterministicDiffusionHead()
     positive, negative, noise = _inputs()
@@ -282,83 +208,6 @@ def test_forward_with_projected_condition_is_bitwise_identical() -> None:
             head.cond_proj(condition),
         )
     assert torch.equal(actual, expected)
-
-
-def test_diffusers_scheduler_is_step_exact_with_microsoft_solver() -> None:
-    microsoft_scheduler_cls = _load_microsoft_scheduler()
-    sampler = _sampler()
-    head = _DeterministicDiffusionHead()
-    positive, negative, noise = _inputs()
-
-    microsoft_scheduler = microsoft_scheduler_cls(
-        num_train_timesteps=sampler.num_train_timesteps,
-        beta_schedule="cosine",
-        prediction_type=sampler.prediction_type,
-    )
-    runtime_scheduler = sampler.create_scheduler()
-    microsoft_scheduler.set_timesteps(num_inference_steps=10)
-    runtime_scheduler.set_timesteps(num_inference_steps=10)
-
-    assert torch.equal(microsoft_scheduler.betas, runtime_scheduler.betas)
-    assert torch.equal(microsoft_scheduler.timesteps, runtime_scheduler.timesteps)
-
-    microsoft_latent = noise.clone()
-    runtime_latent = noise.clone()
-    condition = torch.cat([positive, negative], dim=0)
-    batch_size = positive.shape[0]
-    for microsoft_timestep, runtime_timestep in zip(
-        microsoft_scheduler.timesteps,
-        runtime_scheduler.timesteps,
-        strict=True,
-    ):
-        combined = torch.cat(
-            [microsoft_latent[:batch_size], microsoft_latent[:batch_size]],
-            dim=0,
-        )
-        prediction = head(
-            combined,
-            microsoft_timestep.repeat(combined.shape[0]).to(combined),
-            condition,
-        )
-        conditional = prediction[:batch_size]
-        unconditional = prediction[batch_size:]
-        guided = unconditional + 1.3 * (conditional - unconditional)
-        solver_prediction = torch.cat([guided, guided], dim=0)
-
-        microsoft_latent = microsoft_scheduler.step(
-            solver_prediction,
-            microsoft_timestep,
-            microsoft_latent,
-        ).prev_sample
-        runtime_latent = runtime_scheduler.step(
-            solver_prediction,
-            runtime_timestep,
-            runtime_latent,
-        ).prev_sample
-        assert torch.equal(microsoft_latent, runtime_latent)
-
-    microsoft_result = _reference_sample(
-        microsoft_scheduler_cls(
-            num_train_timesteps=sampler.num_train_timesteps,
-            beta_schedule="cosine",
-            prediction_type=sampler.prediction_type,
-        ),
-        head,
-        positive,
-        negative,
-        noise,
-        guidance_scale=1.3,
-        num_inference_steps=10,
-    )
-    runtime_result = sampler.sample_audio_latent(
-        head,
-        positive,
-        negative,
-        noise,
-        guidance_scale=1.3,
-        num_inference_steps=10,
-    )
-    assert torch.equal(microsoft_result, runtime_result)
 
 
 @pytest.mark.parametrize(

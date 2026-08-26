@@ -11,11 +11,8 @@ from typing import Any
 
 import numpy as np
 import torch
-from transformers import (
-    BatchFeature,
-    PreTrainedConfig,
-    VibeVoiceAcousticTokenizerFeatureExtractor,
-)
+from transformers import BatchFeature, PreTrainedConfig
+from transformers.models.vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokenizerFeatureExtractor
 from vllm.config.multimodal import BaseDummyOptions
 from vllm.inputs import ModalityData, MultiModalDataDict
 from vllm.logger import init_logger

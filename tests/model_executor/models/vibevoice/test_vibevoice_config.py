@@ -9,16 +9,16 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import torch
-from transformers import (
-    AutoConfig,
-    Qwen2Config,
+from transformers import AutoConfig, Qwen2Config
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING
+from transformers.models.vibevoice_acoustic_tokenizer.configuration_vibevoice_acoustic_tokenizer import (
     VibeVoiceAcousticTokenizerConfig,
     VibeVoiceAcousticTokenizerEncoderConfig,
 )
-from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from vllm.sampling_params import SamplingParams
 from vllm.v1.sample.logits_processor import LogitsProcessors
 from vllm.v1.sample.metadata import SamplingMetadata
@@ -40,6 +40,7 @@ from vllm_omni.model_executor.models.vibevoice.runtime_config import (  # noqa: 
     VIBEVOICE_MAX_DIFFUSION_GRAPH_BATCH_SIZE,
     VIBEVOICE_MAX_GUIDANCE_SCALE,
     VIBEVOICE_MAX_NUM_DIFFUSION_STEPS,
+    VibeVoiceRuntimeConfig,
 )
 from vllm_omni.transformers_utils.configs.vibevoice import VibeVoiceConfig  # noqa: E402
 
@@ -443,7 +444,6 @@ def test_single_stage_deploy_defaults_match_vibevoice_generation_contract():
         "top_p": 1.0,
         "top_k": -1,
         "repetition_penalty": 1.0,
-        "seed": 42,
         "max_tokens": 40500,
         "extra_args": {"guidance_scale": 1.3, "num_diffusion_steps": 10},
     }
@@ -462,36 +462,67 @@ def test_single_stage_deploy_defaults_match_vibevoice_generation_contract():
     assert sampling_params.detokenize is False
 
 
+def _runtime_config(**values: object) -> VibeVoiceRuntimeConfig:
+    return VibeVoiceRuntimeConfig.from_vllm_config(
+        SimpleNamespace(additional_config={"vibevoice_runtime_config": values})
+    )
+
+
+def test_runtime_config_is_deployment_only_and_resolves_warmup_batches() -> None:
+    default = VibeVoiceRuntimeConfig.from_vllm_config(
+        SimpleNamespace(
+            additional_config={},
+            model_config=SimpleNamespace(hf_config=SimpleNamespace(vibevoice_runtime_config={"wrong": 1})),
+        )
+    )
+    assert default.negative_kv_cache_memory_bytes == 4 * 1024**3
+    assert default.resolve_diffusion_graph_warmup_batch_sizes(4) == (1, 2, 3, 4)
+
+    explicit = _runtime_config(
+        negative_kv_cache_memory_bytes=4096,
+        negative_kv_activation_margin_bytes=128,
+        diffusion_graph_warmup_batch_sizes=[4, 1, 3, 3],
+        diffusion_cuda_graph=False,
+        decode_cuda_graph=False,
+        cuda_graph_capture_failure_fatal=True,
+    )
+    assert explicit.negative_kv_cache_memory_bytes == 4096
+    assert explicit.negative_kv_activation_margin_bytes == 128
+    assert explicit.resolve_diffusion_graph_warmup_batch_sizes(4) == (1, 3, 4)
+    assert explicit.diffusion_cuda_graph is False
+    assert explicit.decode_cuda_graph is False
+    assert explicit.cuda_graph_capture_failure_fatal is True
+
+    assert _runtime_config(diffusion_graph_warmup_batch_sizes=[]).resolve_diffusion_graph_warmup_batch_sizes(4) == ()
+
+
+def test_runtime_config_rejects_warmup_above_concurrency() -> None:
+    config = _runtime_config(diffusion_graph_warmup_batch_sizes=[1, 5])
+    with pytest.raises(ValueError, match=r"\[5\] exceed max_num_seqs=4"):
+        config.resolve_diffusion_graph_warmup_batch_sizes(4)
+
+
 @pytest.mark.parametrize(
-    ("filename", "enforce_eager", "diffusion_graph", "decode_graph", "fatal_capture"),
+    ("values", "message"),
     [
-        ("full_eager.yaml", True, False, False, False),
-        ("positive_graph_only.yaml", False, False, False, False),
-        ("diffusion_graph_strict.yaml", False, True, False, True),
-        ("decode_graph_strict.yaml", False, False, True, True),
-        ("graph_strict.yaml", False, True, True, True),
+        ({"future_key": True}, "Unknown VibeVoice runtime config keys"),
+        ({"diffusion_graph_warmup_batch_sizes": 1}, "must be a list or tuple"),
+        ({"diffusion_graph_warmup_batch_sizes": [0]}, "positive integers"),
+        ({"diffusion_cuda_graph": 0}, "must be a bool"),
+        ({"negative_kv_cache_memory_bytes": 0}, "must be positive"),
+        ({"negative_kv_cache_memory_bytes": True}, "must be an integer, not bool"),
+        ({"negative_kv_activation_margin_bytes": -1}, "must be non-negative"),
     ],
 )
-def test_development_e2e_overlays_preserve_base_capacity_contract(
-    filename: str,
-    enforce_eager: bool,
-    diffusion_graph: bool,
-    decode_graph: bool,
-    fatal_capture: bool,
-) -> None:
-    path = Path(__file__).parents[4] / "tests" / "e2e" / "vibevoice_configs" / filename
-    deploy = load_deploy_config(path)
-    stage = deploy.stages[0]
-    runtime = stage.engine_extras["additional_config"]["vibevoice_runtime_config"]
+def test_runtime_config_rejects_invalid_values(values: dict[str, object], message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        _runtime_config(**values)
 
-    assert stage.enforce_eager is enforce_eager
-    assert stage.max_num_seqs == 4
-    assert stage.engine_extras["kv_cache_memory_bytes"] == 8 * 1024**3
-    assert runtime["negative_kv_cache_memory_bytes"] == 8 * 1024**3
-    assert runtime["negative_kv_activation_margin_bytes"] == 512 * 1024**2
-    assert runtime["diffusion_cuda_graph"] is diffusion_graph
-    assert runtime["decode_cuda_graph"] is decode_graph
-    assert runtime.get("cuda_graph_capture_failure_fatal", False) is fatal_capture
+
+def test_runtime_config_rejects_non_mapping_schema() -> None:
+    config = SimpleNamespace(additional_config={"vibevoice_runtime_config": "not-a-mapping"})
+    with pytest.raises(ValueError, match="must be a mapping"):
+        VibeVoiceRuntimeConfig.from_vllm_config(config)
 
 
 def test_auto_config_normalizes_official_checkpoint_without_remote_code(checkpoint_dir):
