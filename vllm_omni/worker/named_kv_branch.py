@@ -53,6 +53,9 @@ class NamedKVBranchStep:
     """Metadata returned to a model while one branch append is active."""
 
     position: torch.Tensor
+    #: Current sequence length for observability and test assertions.
+    #: Production code reads only ``position``; this field is not consumed
+    #: by the model forward path.
     sequence_length: int
 
 

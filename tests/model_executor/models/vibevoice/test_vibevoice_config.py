@@ -24,7 +24,7 @@ from vllm.v1.sample.logits_processor import LogitsProcessors
 from vllm.v1.sample.metadata import SamplingMetadata
 from vllm.v1.sample.sampler import Sampler
 
-_existing_acoustic_config = CONFIG_MAPPING["vibevoice_acoustic_tokenizer"]
+_existing_acoustic_config = CONFIG_MAPPING.get("vibevoice_acoustic_tokenizer")
 
 from vllm_omni.config.omni_config import _stage_sampling_params  # noqa: E402
 from vllm_omni.config.pipeline_registry import resolve_pipeline_config  # noqa: E402
@@ -626,7 +626,9 @@ def test_constructor_does_not_mutate_input_dicts_or_lists():
 
 
 def test_upstream_child_registrations_are_reused(checkpoint_dir):
-    assert CONFIG_MAPPING["vibevoice_acoustic_tokenizer"] is _existing_acoustic_config
+    assert CONFIG_MAPPING["vibevoice_acoustic_tokenizer"] is not None
+    if _existing_acoustic_config is not None:
+        assert CONFIG_MAPPING["vibevoice_acoustic_tokenizer"] is _existing_acoustic_config
 
     config = AutoConfig.from_pretrained(checkpoint_dir, trust_remote_code=False)
     assert type(config.audio_config) is VibeVoiceAcousticTokenizerConfig

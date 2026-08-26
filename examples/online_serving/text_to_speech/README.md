@@ -23,7 +23,7 @@ For the full list of supported architectures across all modalities, see
 | MOSS-TTS-Nano | `OpenMOSS-Team/MOSS-TTS-Nano` | ✓ (`ref_audio` required) | ✓ (PCM stream) | — | ✓ |
 | OmniVoice | `k2-fsa/OmniVoice` | ✓ | — | — | — |
 | Qwen3-TTS | `Qwen/Qwen3-TTS-12Hz-1.7B-{CustomVoice,VoiceDesign,Base}` | ✓ (Base) | ✓ (PCM + WebSocket) | ✓ (presets + `/v1/audio/voices` upload) | ✓ (standard + FastRTC) |
-| VibeVoice | `microsoft/VibeVoice-1.5B` | ✓ (`ref_audio`, up to 4 speakers) | ✓ (raw PCM + SSE + WebSocket PCM) | uploaded audio voice; bundled defaults under provenance review | ✓ (AudioWorklet) |
+| VibeVoice | `microsoft/VibeVoice-1.5B` | ✓ (`ref_audio`, up to 4 speakers) | ✓ (raw PCM + SSE) | uploaded audio voice; [bundled defaults](../design/vibevoice/ASSET_PROVENANCE.md) | — |
 | VoxCPM2 | `openbmb/VoxCPM2` | ✓ | ✓ (AudioWorklet via gradio) | — | ✓ |
 | Voxtral TTS | `mistralai/Voxtral-4B-TTS-2603` | ✓ (gated upstream) | ✓ | ✓ (presets) | ✓ |
 
@@ -723,28 +723,7 @@ vllm serve microsoft/VibeVoice-1.5B \
   --port 8000
 ```
 
-### Browser AudioWorklet demo
-
-From the repository root:
-
-```bash
-python examples/online_serving/text_to_speech/vibevoice/app.py \
-  --upstream http://127.0.0.1:8000 \
-  --host 127.0.0.1 \
-  --port 7860
-```
-
-Open <http://127.0.0.1:7860>. Use **Raw PCM** for the lowest-overhead byte
-stream, or **SSE** when terminal `finish_reason` is required. The browser keeps
-resampling phase across network chunks and applies AudioWorklet backpressure so
-a fast producer does not silently overwrite its request-local ring buffer.
-
-The proxy is a local development tool with no authentication or rate limiting.
-Keep its default loopback host unless access is protected externally. Its
-upstream destination is fixed at startup and inherited HTTP proxy settings are
-disabled.
-
-### Manual browser acceptance
+### Manual acceptance
 
 1. Confirm playback begins before generation completes in raw and SSE modes.
 2. With `max_new_tokens=2`, confirm two SSE deltas, each containing exactly
@@ -752,11 +731,9 @@ disabled.
 3. Confirm an SSE error or truncated stream is displayed as an error, not a
    completed request.
 4. Abort after the first audible chunk and immediately start another request.
-5. Open `/player` in four tabs with distinct references and texts; confirm no
-   waveform or finish metadata crosses tabs.
-6. Confirm `overflowSamples` remains zero. Initial underruns during model TTFP
+5. Confirm `overflowSamples` remains zero. Initial underruns during model TTFP
    are expected; sustained growth means generation is slower than playback.
-7. Save browser/server logs and one output capture per tab.
+6. Save server logs and one output capture per scenario.
 
 Model usage, request limits, and serving semantics are documented in the
 [VibeVoice model guide](../../../docs/models/vibevoice.md).

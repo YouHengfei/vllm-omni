@@ -38,7 +38,7 @@ recipes/
 ## Available Recipes
 
 | Recipe | Task | Hardware |
-|--------|------|----------|
+| -------- | ------ | ---------- |
 | [`Baidu/ERNIE-Image.md`](./Baidu/ERNIE-Image.md) | Text-to-image online serving (ERNIE-Image 8B) | 1x or 2x RTX 4090 24GB |
 | [`Bagel/BAGEL-7B-MoT.md`](./Bagel/BAGEL-7B-MoT.md) | Text-to-image with shared online/offline examples | 1x A100 80GB / 2x CUDA GPUs |
 | [`Boogu/Boogu-Image.md`](./Boogu/Boogu-Image.md) | Text-to-image online serving (Boogu-Image-0.1-Base) | 1x A100/H100 40GB+ |
@@ -89,6 +89,7 @@ recipes/
 | [`zai-org/GLM-TTS.md`](./zai-org/GLM-TTS.md) | Online serving for Chinese/English zero-shot voice-cloned TTS | 1x A40 48GB |
 | [`GLM/GLM-Image.md`](./GLM/GLM-Image.md) | Online serving for image generation | 1x A800 80GB / 2x A800 80GB |
 | [`JD/JoyAI-VL-Interaction.md`](./JD/JoyAI-VL-Interaction.md) | Real-time streaming video-language interaction (proactive speak/silence/delegate) | 1x GPU 24GB+ |
+| [`Microsoft/VibeVoice.md`](./Microsoft/VibeVoice.md) | Zero-shot multi-speaker text-to-speech with reference audio cloning | 1x H100 80GB |
 
 Within a single recipe file, include different hardware support sections such
 as `GPU`, `ROCm`, and `NPU`, and add concrete tested configurations like
