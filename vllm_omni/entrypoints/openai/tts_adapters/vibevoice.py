@@ -72,10 +72,7 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
 
     name = "vibevoice"
     stage_keys = frozenset({"vibevoice"})
-    output_policy = OutputPolicy(
-        include_finish_reason_header=True,
-        websocket_streaming_formats=frozenset({"pcm"}),
-    )
+    output_policy = OutputPolicy(expose_finish_reason=True)
 
     @staticmethod
     def _parse_script(text: str) -> tuple[list[tuple[int, str]], int]:

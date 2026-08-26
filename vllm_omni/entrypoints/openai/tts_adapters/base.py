@@ -70,22 +70,13 @@ def apply_max_new_tokens(
     return sampling_params_list
 
 
-@dataclass
+@dataclass(frozen=True)
 class OutputPolicy:
-    """How the orchestrator aggregates engine output for a model.
-
-    ``accumulate_nonstreaming`` enables MOSS-style cross-step accumulation in the
-    non-streaming path. Streaming cumulative/delta semantics stay engine-side,
-    keyed by request id, and are unaffected by this flag.
-    """
+    """Adapter-gated output behavior for shared Speech transports."""
 
     accumulate_nonstreaming: bool = False
-    #: Include the engine's terminal finish reason on opaque non-stream audio
-    #: responses. SSE already carries this as structured terminal metadata.
-    include_finish_reason_header: bool = False
-    #: Optional allow-list for ``/v1/audio/speech/stream`` response formats.
-    #: ``None`` preserves the default handler behavior.
-    websocket_streaming_formats: frozenset[str] | None = None
+    #: Expose the engine's terminal finish reason over HTTP and SSE.
+    expose_finish_reason: bool = False
 
 
 @dataclass
@@ -101,6 +92,9 @@ class PreparedRequest:
     prompt: dict[str, Any]
     tts_params: dict[str, Any] = field(default_factory=dict)
     model_type: str = "generic"
+    # Retained for compatibility with existing out-of-tree adapters. Shared
+    # transports use the active adapter's class-level policy as authoritative.
+    output_policy: OutputPolicy = field(default_factory=OutputPolicy)
     #: Cross-cutting per-request state the orchestrator still owns (e.g. the
     #: Qwen3-TTS ref-audio warmup artifact key tracked after ``generate()``).
     warmup_artifact_key: str | None = None

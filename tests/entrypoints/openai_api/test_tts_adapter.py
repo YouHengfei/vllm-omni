@@ -85,18 +85,8 @@ def test_default_adapter_lifecycle_hooks_are_identity() -> None:
 
     assert adapter.finalize_prepared_request(prepared, "speech-1") is prepared
     assert adapter.apply_sampling_overrides(sampling_params, request=None) is sampling_params  # type: ignore[arg-type]
-    assert adapter.output_policy.include_finish_reason_header is False
-    assert adapter.output_policy.websocket_streaming_formats is None
-
-
-def test_vibevoice_output_policy_requires_pcm_for_websocket_streaming() -> None:
-    adapter_cls = resolve_adapter("vibevoice")
-
-    assert adapter_cls is not None
-    assert adapter_cls.output_policy == OutputPolicy(
-        include_finish_reason_header=True,
-        websocket_streaming_formats=frozenset({"pcm"}),
-    )
+    assert adapter.output_policy == OutputPolicy()
+    assert prepared.output_policy == OutputPolicy()
 
 
 def test_resolve_each_model_type():

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
+
 """vLLM-Omni extensions for the ``vllm bench serve`` CLI.
 
 Core functions:
@@ -193,7 +194,6 @@ _OMNI_BENCH_DATASET_CHOICES = (
     "seed-tts",
     "seed-tts-text",
     "seed-tts-design",
-    "seed-tts-vibevoice",
     "ttsd",
     "sound-effect",
 )

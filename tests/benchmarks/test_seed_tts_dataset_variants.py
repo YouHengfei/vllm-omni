@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
+
 """Tests for SeedTTSTextDataset, SeedTTSTextSampleRequest, SeedTTSDesignDataset,
 and SeedTTSDesignSampleRequest.
 
@@ -37,7 +38,6 @@ from vllm_omni.benchmarks.data_modules.seed_tts_dataset import (  # noqa: E402
     SeedTTSTextDataset,
     SeedTTSTextSampleRequest,
     SeedTTSTurn,
-    SeedTTSVibeVoiceDataset,
 )
 
 # ---------------------------------------------------------------------------
@@ -177,28 +177,7 @@ def test_seed_tts_text_dataset_omits_ref_audio(seed_tts_root, mock_tokenizer):
         assert isinstance(req, SeedTTSTextSampleRequest)
         assert req.seed_tts_speech_extra is None or "ref_audio" not in (req.seed_tts_speech_extra or {})
         assert req.seed_tts_ref_wav_path == ""
-        assert req.seed_tts_require_terminal_stop is False
         assert "target text" in req.prompt
-
-
-def test_seed_tts_vibevoice_dataset_only_sends_supported_fields(seed_tts_root, mock_tokenizer):
-    ds = SeedTTSVibeVoiceDataset(
-        dataset_path=str(seed_tts_root),
-        random_seed=0,
-        locale="en",
-        disable_shuffle=True,
-    )
-    requests = ds.sample(mock_tokenizer, num_requests=3, output_len=321)
-
-    assert len(requests) == 3
-    for req in requests:
-        assert req.seed_tts_speech_extra is not None
-        assert set(req.seed_tts_speech_extra) == {"ref_audio", "max_new_tokens"}
-        assert req.seed_tts_speech_extra["ref_audio"].startswith("data:audio/wav;base64,")
-        assert req.seed_tts_speech_extra["max_new_tokens"] == 321
-        assert req.seed_tts_ref_wav_path.endswith(".wav")
-        assert req.seed_tts_require_terminal_stop is True
-        assert req.prompt_len == 3
 
 
 # ---------------------------------------------------------------------------
@@ -284,80 +263,6 @@ def test_attach_sets_seed_tts_row_even_without_extra_body():
     row_pos = src.index("seed_tts_row")
     not_ex_pos = src.index("if not ex:")
     assert row_pos < not_ex_pos, "seed_tts_row must be set before 'if not ex: return'"
-
-
-def test_seed_tts_eval_records_sse_finish_reason(monkeypatch):
-    from vllm_omni.benchmarks.data_modules import seed_tts_eval
-
-    request = SeedTTSSampleRequest(
-        prompt="hello",
-        prompt_len=1,
-        expected_output_len=10,
-        multi_modal_data=None,
-        request_id="vibe-quality-0",
-        seed_tts_speech_extra={"ref_audio": "data:audio/wav;base64,"},
-        seed_tts_utterance_id="utt-0",
-        seed_tts_locale="en",
-        seed_tts_ref_wav_path="",
-        seed_tts_require_terminal_stop=True,
-    )
-    output = types.SimpleNamespace(
-        success=True,
-        error="",
-        tts_output_pcm_bytes=np.zeros(2400, dtype=np.int16).tobytes(),
-        speech_finish_reason="length",
-    )
-    monkeypatch.setenv("SEED_TTS_SIM_EVAL", "0")
-    monkeypatch.setenv("SEED_TTS_UTMOS_EVAL", "0")
-    monkeypatch.setattr(seed_tts_eval, "_missing_deps_message", lambda _lang: None)
-    monkeypatch.setattr(seed_tts_eval, "_transcribe_en_f32_16k", lambda _wav: "hello")
-    monkeypatch.setattr(seed_tts_eval, "process_one_official", lambda _hyp, _truth, _lang: (0.0, "hello", "hello"))
-
-    metrics = seed_tts_eval.compute_seed_tts_wer_metrics(
-        [request],
-        [output],
-        include_per_item=True,
-    )
-
-    assert metrics is not None
-    assert metrics["seed_tts_finish_reason_counts"] == {"length": 1}
-    assert metrics["seed_tts_length_capped"] == 1
-    assert metrics["seed_tts_content_evaluated"] == 0
-    assert metrics["seed_tts_content_error_mean"] is None
-    assert metrics["seed_tts_required_stop_count"] == 0
-    assert metrics["seed_tts_non_stop_excluded"] == 1
-    assert metrics["seed_tts_wer_eval_items"] == [
-        {
-            "utterance_id": "utt-0",
-            "locale": "en",
-            "error": "length_capped",
-            "finish_reason": "length",
-        }
-    ]
-
-    # Existing Seed-TTS transports without structured terminal metadata retain
-    # their historical behavior unless their dataset explicitly enables the
-    # stop requirement.
-    request.seed_tts_require_terminal_stop = False
-    generic_metrics = seed_tts_eval.compute_seed_tts_wer_metrics(
-        [request],
-        [output],
-        include_per_item=True,
-    )
-    assert generic_metrics is not None
-    assert generic_metrics["seed_tts_content_evaluated"] == 1
-    assert generic_metrics["seed_tts_content_metric"] == "wer"
-    assert "seed_tts_non_stop_excluded" not in generic_metrics
-    assert "seed_tts_finish_reason_counts" not in generic_metrics
-    assert generic_metrics["seed_tts_wer_eval_items"] == [
-        {
-            "utterance_id": "utt-0",
-            "locale": "en",
-            "wer": 0.0,
-            "reference_raw": "hello",
-            "asr_raw": "hello",
-        }
-    ]
 
 
 def test_seed_tts_whisper_transcribe_passes_attention_mask(monkeypatch):

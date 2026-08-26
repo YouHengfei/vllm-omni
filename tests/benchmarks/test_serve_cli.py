@@ -28,7 +28,6 @@ pytestmark = [pytest.mark.core_model, pytest.mark.cpu, pytest.mark.benchmark]
         "seed-tts",
         "seed-tts-text",
         "seed-tts-design",
-        "seed-tts-vibevoice",
         "ttsd",
         "sound-effect",
     ],

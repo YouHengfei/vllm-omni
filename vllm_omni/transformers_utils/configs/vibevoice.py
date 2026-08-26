@@ -20,6 +20,12 @@ from typing import Any
 from huggingface_hub.dataclasses import strict
 from transformers import AutoConfig, PreTrainedConfig
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
+from transformers.models.vibevoice_acoustic_tokenizer.configuration_vibevoice_acoustic_tokenizer import (
+    VibeVoiceAcousticTokenizerConfig as _VibeVoiceAcousticTokenizerConfig,
+)
+from transformers.models.vibevoice_acoustic_tokenizer.configuration_vibevoice_acoustic_tokenizer import (
+    VibeVoiceAcousticTokenizerEncoderConfig as _VibeVoiceAcousticTokenizerEncoderConfig,
+)
 from transformers.utils import auto_docstring
 
 _REQUIRED_SUB_CONFIG_MODEL_TYPES = {
@@ -244,11 +250,22 @@ class VibeVoiceConfig(PreTrainedConfig):
         return int(getattr(self.text_config, "hidden_size"))
 
 
-# Registration is intentionally limited to Transformers versions that already
-# contain the Acoustic Tokenizer child configs. Do not force-overwrite a future
-# built-in VibeVoiceConfig; once PR #40546 lands, this shim should be removed in
-# favor of the upstream class.
-if "vibevoice" not in CONFIG_MAPPING and _REQUIRED_SUB_CONFIG_MODEL_TYPES.issubset(CONFIG_MAPPING):
+# Ensure the Acoustic Tokenizer sub-config model types are registered in
+# CONFIG_MAPPING. Some Transformers versions in the >=5.10.1,<5.15 range
+# ship the submodules but do not register the plain "vibevoice_acoustic_tokenizer"
+# key in CONFIG_MAPPING. Register from the submodule classes so the shim works
+# across the full declared range.
+for _model_type, _config_cls in (
+    ("vibevoice_acoustic_tokenizer", _VibeVoiceAcousticTokenizerConfig),
+    ("vibevoice_acoustic_tokenizer_encoder", _VibeVoiceAcousticTokenizerEncoderConfig),
+):
+    if _model_type not in CONFIG_MAPPING:
+        AutoConfig.register(_model_type, _config_cls)
+
+# Register the top-level config only if Transformers hasn't already added a
+# built-in VibeVoiceConfig. Once PR #40546 fully lands, this shim should be
+# removed in favor of the upstream class.
+if "vibevoice" not in CONFIG_MAPPING:
     AutoConfig.register("vibevoice", VibeVoiceConfig)
 
 

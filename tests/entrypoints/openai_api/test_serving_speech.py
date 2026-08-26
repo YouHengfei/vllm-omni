@@ -47,6 +47,7 @@ from vllm_omni.entrypoints.openai.serving_speech import (
 from vllm_omni.entrypoints.openai.tts_adapters.base import (
     DEFAULT_TTS_LANGUAGES,
     ARTTSAdapter,
+    OutputPolicy,
     PreparedRequest,
     SpeechServingContext,
 )
@@ -70,6 +71,91 @@ from vllm_omni.outputs import OmniRequestOutput
 pytestmark = [pytest.mark.core_model, pytest.mark.cpu]
 
 logger = logging.getLogger(__name__)
+
+
+async def _collect_audio_chunk_values(results: list[SimpleNamespace]) -> list[bytes]:
+    async def generate():
+        for result in results:
+            yield result
+
+    def create_audio(audio_obj) -> SimpleNamespace:
+        value = int(audio_obj.audio_tensor.reshape(-1)[0])
+        return SimpleNamespace(audio_data=bytes([value]))
+
+    service = SimpleNamespace(
+        _tts_model_type="test",
+        _extract_audio_output=OmniOpenAIServingSpeech._extract_audio_output,
+        create_audio=create_audio,
+        _mark_ref_audio_artifact_ready_for_request=lambda _request_id: None,
+        _discard_ref_audio_artifact_warmup=lambda _request_id: None,
+    )
+    return [
+        chunk
+        async for chunk in OmniOpenAIServingSpeech._generate_audio_chunks(
+            service,
+            generate(),
+            "request-a",
+        )
+    ]
+
+
+def test_explicit_delta_audio_lists_emit_every_new_chunk() -> None:
+    results = [
+        SimpleNamespace(
+            multimodal_output={
+                "audio": [np.asarray([value], dtype=np.float32)],
+                "sr": 24_000,
+                "meta": {"audio_chunk_semantics": "delta"},
+            }
+        )
+        for value in (1.0, 2.0)
+    ]
+
+    assert asyncio.run(_collect_audio_chunk_values(results)) == [b"\x01", b"\x02"]
+
+
+def test_unmarked_cumulative_audio_lists_keep_legacy_tail_behavior() -> None:
+    results = [
+        SimpleNamespace(multimodal_output={"audio": [np.asarray([1.0], dtype=np.float32)], "sr": 24_000}),
+        SimpleNamespace(
+            multimodal_output={
+                "audio": [
+                    np.asarray([1.0], dtype=np.float32),
+                    np.asarray([2.0], dtype=np.float32),
+                ],
+                "sr": [24_000],
+            }
+        ),
+    ]
+
+    assert asyncio.run(_collect_audio_chunk_values(results)) == [b"\x01", b"\x02"]
+
+
+@pytest.mark.parametrize("expose_finish_reason", [False, True])
+def test_sse_finish_reason_is_adapter_gated(expose_finish_reason: bool) -> None:
+    async def generate_audio_chunks(*_args, generation_metadata_out=None, **_kwargs):
+        if generation_metadata_out is not None:
+            generation_metadata_out["finish_reason"] = "length"
+        if False:  # pragma: no cover - keep this an async generator
+            yield b""
+
+    service = SimpleNamespace(
+        _get_tts_adapter=lambda: SimpleNamespace(output_policy=OutputPolicy(expose_finish_reason=expose_finish_reason)),
+        _generate_audio_chunks=generate_audio_chunks,
+    )
+
+    async def collect() -> list[str]:
+        return [
+            event
+            async for event in OmniOpenAIServingSpeech._generate_audio_sse_events(
+                service,
+                object(),
+                "request-a",
+            )
+        ]
+
+    done_event = asyncio.run(collect())[-1]
+    assert ('"finish_reason":"length"' in done_event) is expose_finish_reason
 
 
 class TestAudioMixin:
@@ -882,7 +968,14 @@ class TestTTSMethods:
         async def mock_generate():
             yield create_mock_audio_output_for_test()
 
-        speech_server._tts_model_type = "vibevoice"
+        mocker.patch.object(
+            speech_server,
+            "_get_tts_adapter",
+            return_value=SimpleNamespace(
+                output_policy=OutputPolicy(expose_finish_reason=True),
+                native_speed_control=False,
+            ),
+        )
         mocker.patch.object(
             speech_server,
             "_prepare_speech_generation",

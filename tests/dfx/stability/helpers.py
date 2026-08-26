@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
+
 """Stability helpers for resource monitoring and benchmark execution."""
 
 from __future__ import annotations
@@ -139,59 +140,9 @@ def _normalize_bench_metrics(raw: dict[str, Any]) -> dict[str, Any]:
     failed = int(raw.get("failed", raw.get("failed_requests", 0) or 0))
     duration = float(raw.get("duration", 0.0) or 0.0)
     errors = list(raw.get("errors") or [])
-    if completed == 0 and failed == 0:
-        # ``run_benchmark`` writes an all-zero fallback template when its
-        # subprocess exits before producing a result (for example after the
-        # server dies). Treat that as a failed batch rather than allowing a
-        # long stability loop to spin on connection-refused templates.
-        failed = 1
-        errors.append("benchmark produced no completed or failed request records")
-    elif failed and not errors:
+    if failed and not errors:
         errors = [f"{failed} benchmark request(s) failed"]
-    normalized: dict[str, Any] = {
-        "completed": completed,
-        "failed": failed,
-        "duration": duration,
-        "errors": errors,
-    }
-    finish_reason_counts = raw.get("speech_finish_reason_counts")
-    if isinstance(finish_reason_counts, dict):
-        normalized["speech_finish_reason_counts"] = {
-            str(reason): int(count) for reason, count in finish_reason_counts.items()
-        }
-    return normalized
-
-
-def classify_speech_batch(result: dict[str, Any]) -> dict[str, Any]:
-    """Classify structured Speech terminal reasons for VibeVoice stability."""
-    classified = dict(result)
-    completed = int(result.get("completed", 0) or 0)
-    transport_failures = int(result.get("failed", 0) or 0)
-    raw_counts = result.get("speech_finish_reason_counts")
-    counts = raw_counts if isinstance(raw_counts, dict) else {}
-    natural_stops = int(counts.get("stop", 0) or 0)
-    truncated = int(counts.get("length", 0) or 0)
-    unexpected = sum(int(count or 0) for reason, count in counts.items() if reason not in {"stop", "length"})
-    missing = max(0, completed - natural_stops - truncated - unexpected)
-    successful = natural_stops + truncated
-    request_failures = transport_failures + unexpected + missing
-
-    errors = list(result.get("errors") or [])
-    if unexpected:
-        errors.append(f"{unexpected} speech request(s) returned an unexpected finish reason")
-    if missing:
-        errors.append(f"{missing} completed speech request(s) omitted finish_reason")
-
-    classified.update(
-        completed=successful,
-        failed=request_failures,
-        errors=errors,
-        successful_requests=successful,
-        natural_stop_requests=natural_stops,
-        truncated_requests=truncated,
-        request_failures=request_failures,
-    )
-    return classified
+    return {"completed": completed, "failed": failed, "duration": duration, "errors": errors}
 
 
 def _build_base_args(params: dict[str, Any], host: str, port: int) -> list[str]:
@@ -362,7 +313,6 @@ def _run_one_vllm_bench_batch(
     batch_index: int,
 ) -> dict[str, Any]:
     base = _build_base_args(params, host, port)
-    flow: float | int | None
     if request_rate is not None:
         args = base + ["--request-rate", str(request_rate), "--num-prompts", str(num_prompts)]
         flow = request_rate
@@ -488,15 +438,6 @@ def merge_batch_results(batch_results: list[dict[str, Any]], total_duration_sec:
     }
     for result in batch_results:
         merged["errors"].extend(result.get("errors") or [])
-    classification_keys = (
-        "successful_requests",
-        "natural_stop_requests",
-        "truncated_requests",
-        "request_failures",
-    )
-    if any(any(key in result for key in classification_keys) for result in batch_results):
-        for key in classification_keys:
-            merged[key] = sum(int(result.get(key, 0) or 0) for result in batch_results)
     return merged
 
 
@@ -508,9 +449,6 @@ def print_merged_report(result: dict[str, Any]) -> None:
     duration = float(result.get("duration", 0.0) or 0.0)
     print("\n============ Stability Benchmark Summary ============")
     print(fmt.format("Successful requests:", completed))
-    if "natural_stop_requests" in result:
-        print(fmt.format("Natural-stop requests:", result.get("natural_stop_requests", 0)))
-        print(fmt.format("Truncated requests:", result.get("truncated_requests", 0)))
     print(fmt.format("Failed requests:", failed))
     print(fmt_float.format("Total duration (s):", duration))
     print("==================================================\n")
@@ -554,11 +492,6 @@ def run_stability_benchmark_loop(
         )
         batch_results.append(result)
         batch_index += 1
-        # Stability is fail-closed: once requests fail or the benchmark
-        # subprocess produces no usable result, continuing only obscures the
-        # first root cause and wastes host resources after a dead server.
-        if int(result.get("failed", 0) or 0) > 0 or result.get("errors"):
-            break
         if (time.perf_counter() - start_time) >= duration_sec:
             break
 

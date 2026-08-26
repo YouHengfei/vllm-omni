@@ -272,13 +272,15 @@ def _ensure_tensor_values(payload: dict[str, object]) -> dict[str, torch.Tensor]
             try:
                 result[key] = torch.tensor(val)
             except (ValueError, TypeError, RuntimeError):
-                logger.warning(
+                log_warning = logger.warning_once if key == "meta.audio_chunk_semantics" else logger.warning
+                log_warning(
                     "Dropping non-tensorizable multimodal output key '%s' (type=%s) from wire payload.",
                     key,
                     type(val).__name__,
                 )
         else:
-            logger.warning(
+            log_warning = logger.warning_once if key == "meta.audio_chunk_semantics" else logger.warning
+            log_warning(
                 "Dropping non-tensor multimodal output key '%s' (type=%s) from wire payload.",
                 key,
                 type(val).__name__,

@@ -18,7 +18,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import aiohttp
@@ -56,7 +56,6 @@ from vllm_omni.benchmarks.data_modules.seed_tts_dataset import (
     SeedTTSDesignDataset,
     SeedTTSSampleRequest,
     SeedTTSTextDataset,
-    SeedTTSVibeVoiceDataset,
 )
 from vllm_omni.benchmarks.data_modules.sound_effect_dataset import SoundEffectDataset
 from vllm_omni.benchmarks.data_modules.ttsd_dataset import TTSDDataset
@@ -103,14 +102,6 @@ def set_print_stage(enabled: bool) -> None:
     """Set whether this benchmark run prints the stage benchmark section."""
     global _PRINT_STAGE
     _PRINT_STAGE = bool(enabled)
-
-
-def _normalize_speech_stream_format(value: Any) -> Literal["audio", "sse"]:
-    """Validate the Speech transport selected by the final request payload."""
-    normalized = str(value or "audio").strip().lower()
-    if normalized not in ("audio", "sse"):
-        raise ValueError(f"Speech stream_format must be 'audio' or 'sse', got {value!r}.")
-    return cast(Literal["audio", "sse"], normalized)
 
 
 def _audio_continuity_threshold_s() -> float:
@@ -259,7 +250,6 @@ def get_samples(args, tokenizer):
         "seed-tts",
         "seed-tts-text",
         "seed-tts-design",
-        "seed-tts-vibevoice",
         "ttsd",
         "sound-effect",
     )
@@ -422,7 +412,6 @@ def get_samples(args, tokenizer):
             "seed-tts": SeedTTSDataset,
             "seed-tts-text": SeedTTSTextDataset,
             "seed-tts-design": SeedTTSDesignDataset,
-            "seed-tts-vibevoice": SeedTTSVibeVoiceDataset,
             "ttsd": TTSDDataset,
             "sound-effect": SoundEffectDataset,
         }
@@ -479,18 +468,6 @@ if _serve_mod is not None:
     _serve_mod.get_samples = get_samples
 
 
-def _speech_finish_reason_counts(outputs: Iterable[object]) -> dict[str, int]:
-    """Count structured OpenAI Speech terminal reasons without model branching."""
-    counts: dict[str, int] = {}
-    for output in outputs:
-        reason = getattr(output, "speech_finish_reason", None)
-        if reason is None:
-            continue
-        normalized = str(reason)
-        counts[normalized] = counts.get(normalized, 0) + 1
-    return counts
-
-
 @dataclass
 class MixRequestFuncOutput(RequestFuncOutput):
     audio_ttfp: float = 0.0
@@ -512,8 +489,6 @@ class MixRequestFuncOutput(RequestFuncOutput):
     #: Number of inter-chunk intervals during which the player buffer went
     #: negative.
     audio_underrun_event_count: int = 0
-    #: Terminal metadata from OpenAI Speech SSE; unavailable for raw audio streams.
-    speech_finish_reason: str | None = None
     #: Raw PCM s16le mono at 24 kHz for Seed-TTS WER: from ``/v1/audio/speech`` stream or
     #: resampled export after ``openai-chat-omni`` audio deltas.
     tts_output_pcm_bytes: bytes | None = None
@@ -1223,10 +1198,9 @@ async def async_request_openai_audio_speech(
 ) -> MixRequestFuncOutput:
     """Streaming request to /v1/audio/speech endpoint.
 
-    Raw PCM streaming is the default. An explicit
-    ``extra_body={"stream_format": "sse"}`` consumes OpenAI
-    ``speech.audio.delta`` events instead, allowing quality evaluation to
-    capture terminal metadata without changing other Speech benchmarks.
+    Sends ``stream=true`` with ``stream_format=audio`` and ``response_format=pcm``
+    so the server returns raw PCM chunks as they are decoded. This allows measuring
+    TTFP (time to first audio packet) separately from E2EL.
     """
     api_url = request_func_input.api_url
     _validate_api_url(api_url, "OpenAI Audio Speech API", "audio/speech")
@@ -1239,14 +1213,11 @@ async def async_request_openai_audio_speech(
         "response_format": "pcm",
     }
     _update_payload_common(payload, request_func_input)
-    # Seed-TTS + WER: ``--extra-body`` may set stream=false / other formats;
-    # quality capture still requires streaming PCM, but preserves an explicit
-    # raw-audio or SSE transport selected by that request.
+    # Seed-TTS + WER: ``--extra-body`` may set stream=false / other formats; speech must stream PCM.
     if getattr(request_func_input, "seed_tts_row", False) and _seed_tts_capture_pcm_for_wer():
         payload["stream"] = True
+        payload["stream_format"] = "audio"
         payload["response_format"] = "pcm"
-    stream_format = _normalize_speech_stream_format(payload.get("stream_format"))
-    payload["stream_format"] = stream_format
 
     headers = {
         "Content-Type": "application/json",
@@ -1268,72 +1239,22 @@ async def async_request_openai_audio_speech(
     pcm_capture = bytearray() if capture_wer_pcm else None
     chunk_arrival_times_s: list[float] = []
     chunk_sizes: list[int] = []
-    saw_sse_done = False
     try:
         async with session.post(url=api_url, json=payload, headers=headers) as response:
             if response.status == 200:
-                sse_handler = StreamedResponseHandler() if stream_format == "sse" else None
                 async for chunk in response.content.iter_any():
                     if not chunk:
                         continue
-                    pcm_chunks: list[bytes] = []
-                    if sse_handler is None:
-                        pcm_chunks.append(chunk)
-                    else:
-                        for message in sse_handler.add_chunk(chunk):
-                            if isinstance(message, bytes):
-                                message = message.decode("utf-8")
-                            if message.startswith(":"):
-                                continue
-                            # SSE messages may carry an ``event:`` line before the
-                            # ``data:`` payload (OpenAI speech.audio.delta). Parse
-                            # only the ``data:`` line.
-                            data_lines = [
-                                line.removeprefix("data: ") for line in message.split("\n") if line.startswith("data: ")
-                            ]
-                            if not data_lines:
-                                continue
-                            data_text = data_lines[-1]
-                            if data_text == "[DONE]":
-                                continue
-                            event = json.loads(data_text)
-                            event_type = event.get("type")
-                            if event_type == "speech.audio.error":
-                                error = event.get("error")
-                                message = error.get("message") if isinstance(error, dict) else error
-                                raise RuntimeError(f"SSE speech stream failed: {message or 'unknown server error'}")
-                            if event_type == "speech.audio.done":
-                                if saw_sse_done:
-                                    raise RuntimeError("SSE speech stream emitted speech.audio.done more than once")
-                                saw_sse_done = True
-                                finish_reason = event.get("finish_reason")
-                                if finish_reason is not None:
-                                    output.speech_finish_reason = str(finish_reason)
-                                continue
-                            if event_type != "speech.audio.delta":
-                                continue
-                            if saw_sse_done:
-                                raise RuntimeError("SSE speech stream emitted audio after speech.audio.done")
-                            encoded_audio = event.get("audio")
-                            if encoded_audio:
-                                pcm_chunks.append(base64.b64decode(encoded_audio))
-
-                    for pcm_chunk in pcm_chunks:
-                        if not pcm_chunk:
-                            continue
-                        timestamp = time.perf_counter()
-                        if output.audio_ttfp == 0.0:
-                            # TTS speech endpoint emits no text tokens, so TTFT is
-                            # not defined here; only audio TTFP is meaningful.
-                            output.audio_ttfp = timestamp - st
-                        total_pcm_bytes += len(pcm_chunk)
-                        chunk_arrival_times_s.append(timestamp - st)
-                        chunk_sizes.append(len(pcm_chunk))
-                        if pcm_capture is not None:
-                            pcm_capture.extend(pcm_chunk)
-
-                if sse_handler is not None and not saw_sse_done:
-                    raise RuntimeError("SSE speech stream ended before speech.audio.done")
+                    timestamp = time.perf_counter()
+                    if output.audio_ttfp == 0.0:
+                        # TTS speech endpoint emits no text tokens, so TTFT is
+                        # not defined here; only audio TTFP is meaningful.
+                        output.audio_ttfp = timestamp - st
+                    total_pcm_bytes += len(chunk)
+                    chunk_arrival_times_s.append(timestamp - st)
+                    chunk_sizes.append(len(chunk))
+                    if pcm_capture is not None:
+                        pcm_capture.extend(chunk)
 
                 end_time = time.perf_counter()
                 output.latency = end_time - st
@@ -1376,10 +1297,9 @@ async def async_request_openai_audio_speech(
                     ct = response.headers.get("Content-Type", "")
                     logger.warning(
                         "Seed-TTS WER: HTTP 200 but no PCM bytes (Content-Type=%r, url=%s). "
-                        "Check stream=true, stream_format=%s, and response_format=pcm on the server.",
+                        "Check stream=true, stream_format=audio, and response_format=pcm on the server.",
                         ct,
                         api_url,
-                        stream_format,
                     )
                 output.success = True
             else:
@@ -1470,10 +1390,8 @@ async def async_request_openai_realtime_duplex(
                 )
                 await client.send({"type": "response.create"})
                 await wait_for(
-                    lambda: (
-                        client.events.count("response.done") > done_before
-                        or len(client.events.errors()) > errors_before
-                    ),
+                    lambda: client.events.count("response.done") > done_before
+                    or len(client.events.errors()) > errors_before,
                     timeout_s=180.0,
                     label=f"Seed-TTS Realtime TTS turn {request_index} response.done",
                 )
@@ -1962,10 +1880,6 @@ async def benchmark(
             "input_lens": [output.prompt_len for output in outputs],
             "errors": [output.error for output in outputs],
         }
-    speech_finish_reason_counts = _speech_finish_reason_counts(outputs)
-    if speech_finish_reason_counts:
-        result["speech_finish_reason_counts"] = speech_finish_reason_counts
-
     # Plain-vLLM backends (e.g. the vLLM-text perf config) return upstream
     # RequestFuncOutput objects without the Mix duplex fields; read them
     # tolerantly or the whole benchmark result is discarded ("fallback to

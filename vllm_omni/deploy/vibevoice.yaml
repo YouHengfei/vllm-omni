@@ -78,7 +78,6 @@ stages:
       top_p: 1.0
       top_k: -1
       repetition_penalty: 1.0
-      seed: 42
       max_tokens: 40500
       extra_args:
         # Match the official Transformers generation_config.json.

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
+
 """Seed-TTS WER aligned with Bytedance ``seed-tts-eval`` / ``run_wer.py``.
 
 Matches the published protocol (see Hugging Face dataset card and
@@ -335,19 +336,12 @@ def _ensure_utmos_jit_model() -> Any | None:
 
             repo = os.environ.get("SEED_TTS_UTMOS_HF_REPO", "balacoon/utmos").strip() or "balacoon/utmos"
             fname = os.environ.get("SEED_TTS_UTMOS_JIT_FILE", "utmos.jit").strip() or "utmos.jit"
-            revision = os.environ.get("SEED_TTS_UTMOS_HF_REVISION", "").strip() or None
             logger.warning(
-                "Loading UTMOS TorchScript from Hugging Face %r file %r at revision %r (one-time download/cache)...",
+                "Loading UTMOS TorchScript from Hugging Face %r file %r (one-time download/cache)...",
                 repo,
                 fname,
-                revision,
             )
-            path = hf_hub_download(
-                repo_id=repo,
-                filename=fname,
-                repo_type="model",
-                revision=revision,
-            )
+            path = hf_hub_download(repo_id=repo, filename=fname, repo_type="model")
 
             # TODO The model weights in UTMOS must be loaded in cuda:0; otherwise, the model execution will fail.
             want = "cuda:0"
@@ -591,10 +585,6 @@ def compute_seed_tts_wer_metrics(
     first = input_requests[0]
     assert isinstance(first, SeedTTSSampleRequest)
     lang = "zh" if (first.seed_tts_locale or "en").lower().startswith("zh") else "en"
-    required_terminal_stop = sum(bool(req.seed_tts_require_terminal_stop) for req in input_requests)
-    # Preserve the historical WER schema for generic Seed-TTS consumers. The
-    # VibeVoice variant opts into explicit CER labeling for Chinese rows.
-    content_metric = "cer" if required_terminal_stop and lang == "zh" else "wer"
 
     setup_err = _missing_deps_message(lang)
     if setup_err:
@@ -608,7 +598,7 @@ def compute_seed_tts_wer_metrics(
             "seed_tts_request_failed": 0,
             "seed_tts_no_pcm": 0,
             "seed_tts_asr_failed": 0,
-            "seed_tts_content_metric": content_metric,
+            "seed_tts_content_metric": "wer",
         }
 
     import soundfile as sf
@@ -623,10 +613,6 @@ def compute_seed_tts_wer_metrics(
     sim_failed = 0
     sim_skipped_no_ref = 0
     utmos_failed = 0
-    finish_reason_counts: dict[str, int] = {}
-    required_stop_count = 0
-    missing_finish_reason = 0
-    non_stop_excluded = 0
     utmos_on = _eval_submetric_enabled("SEED_TTS_UTMOS_EVAL", default=False)
     save_audio_raw = os.environ.get("SEED_TTS_WER_SAVE_AUDIO_DIR", "").strip()
     save_audio_dir = Path(save_audio_raw).expanduser() if save_audio_raw else None
@@ -640,16 +626,6 @@ def compute_seed_tts_wer_metrics(
         row_lang = "zh" if locale.lower().startswith("zh") else "en"
         utmos_v: float | None = None
         audio_path: str | None = None
-        finish_reason_raw = getattr(out, "speech_finish_reason", None)
-        finish_reason = str(finish_reason_raw) if finish_reason_raw is not None else None
-        requires_stop = bool(req.seed_tts_require_terminal_stop)
-        if finish_reason:
-            finish_reason_counts[finish_reason] = finish_reason_counts.get(finish_reason, 0) + 1
-        if requires_stop:
-            if finish_reason is None:
-                missing_finish_reason += 1
-            elif finish_reason == "stop":
-                required_stop_count += 1
 
         if not out.success:
             request_failed += 1
@@ -693,31 +669,6 @@ def compute_seed_tts_wer_metrics(
                 req.seed_tts_utterance_id,
                 e,
             )
-
-        # VibeVoice exposes structured terminal metadata over SSE. Preserve a
-        # non-stop WAV for diagnosis, but never let truncated or metadata-less
-        # audio enter ASR, content-error, speaker-similarity, or UTMOS
-        # aggregates. Generic Seed-TTS transports opt out through the request
-        # capability flag because they may not expose terminal metadata.
-        if requires_stop and finish_reason != "stop":
-            non_stop_excluded += 1
-            if include_per_item:
-                if finish_reason == "length":
-                    terminal_error = "length_capped"
-                elif finish_reason is None:
-                    terminal_error = "missing_finish_reason"
-                else:
-                    terminal_error = "unexpected_finish_reason"
-                terminal_row: dict[str, Any] = {
-                    "utterance_id": req.seed_tts_utterance_id,
-                    "locale": locale,
-                    "error": terminal_error,
-                    "finish_reason": finish_reason,
-                }
-                if audio_path:
-                    terminal_row["audio_path"] = audio_path
-                items.append(terminal_row)
-            continue
 
         # Request functions normalize ``tts_output_pcm_bytes`` to Seed-TTS WER
         # format before it reaches this evaluator: 24 kHz mono int16 PCM.
@@ -848,28 +799,20 @@ def compute_seed_tts_wer_metrics(
                 sim_skipped_no_ref += 1
 
         if include_per_item:
-            quality_row: dict[str, Any] = {
+            row: dict[str, Any] = {
                 "utterance_id": req.seed_tts_utterance_id,
                 "locale": locale,
                 "wer": wer,
                 "reference_raw": raw_truth,
                 "asr_raw": raw_hypo,
             }
-            if requires_stop:
-                # VibeVoice makes the locale-specific metric explicit while
-                # retaining ``wer`` for compatibility with existing tooling.
-                quality_row["content_error"] = wer
-                if row_lang == "zh":
-                    quality_row["cer"] = wer
             if audio_path:
-                quality_row["audio_path"] = audio_path
+                row["audio_path"] = audio_path
             if sim_v is not None:
-                quality_row["sim"] = sim_v
+                row["sim"] = sim_v
             if utmos_v is not None:
-                quality_row["utmos"] = utmos_v
-            if requires_stop and finish_reason is not None:
-                quality_row["finish_reason"] = finish_reason
-            items.append(quality_row)
+                row["utmos"] = utmos_v
+            items.append(row)
 
     result: dict[str, Any] = {
         "seed_tts_eval_protocol": "seed-tts-eval",
@@ -881,7 +824,7 @@ def compute_seed_tts_wer_metrics(
         "seed_tts_request_failed": request_failed,
         "seed_tts_no_pcm": no_pcm,
         "seed_tts_asr_failed": asr_failed,
-        "seed_tts_content_metric": content_metric,
+        "seed_tts_content_metric": "wer",
         "seed_tts_sim_evaluated": len(sim_values),
         "seed_tts_sim_mean": statistics.fmean(sim_values) if sim_values else None,
         "seed_tts_sim_median": statistics.median(sim_values) if sim_values else None,
@@ -894,18 +837,6 @@ def compute_seed_tts_wer_metrics(
         "seed_tts_saved_audio": saved_audio,
         "seed_tts_save_audio_failed": save_audio_failed,
     }
-    if required_terminal_stop:
-        result.update(
-            {
-                "seed_tts_finish_reason_counts": finish_reason_counts,
-                "seed_tts_length_capped": int(finish_reason_counts.get("length", 0)),
-                "seed_tts_terminal_stop_required": required_terminal_stop,
-                "seed_tts_required_stop_count": required_stop_count,
-                "seed_tts_missing_finish_reason": missing_finish_reason,
-                "seed_tts_non_stop_excluded": non_stop_excluded,
-                "seed_tts_total_requests": len(input_requests),
-            }
-        )
     if save_audio_dir is not None:
         result["seed_tts_save_audio_dir"] = str(save_audio_dir)
     if include_per_item:
@@ -929,14 +860,13 @@ def print_seed_tts_wer_summary(metrics: dict[str, Any]) -> None:
     if ev == 0 and rf == 0 and npc == 0 and af == 0 and sim_ev == 0 and ut_ev == 0:
         return
     print("{s:{c}^{n}}".format(s=" Seed-TTS eval (seed-tts-eval protocol) ", n=50, c="="))
-    metric = str(metrics.get("seed_tts_content_metric") or "wer").upper()
-    print("{:<40} {:<10}".format(f"Evaluated ({metric}, lower is better):", ev))
+    print("{:<40} {:<10}".format("Evaluated (WER, lower is better):", ev))
     mean = metrics.get("seed_tts_content_error_mean")
     if mean is not None:
-        print("{:<40} {:<10.4f}".format(f"Mean {metric}:", float(mean)))
+        print("{:<40} {:<10.4f}".format("Mean WER:", float(mean)))
     med = metrics.get("seed_tts_content_error_median")
     if med is not None:
-        print("{:<40} {:<10.4f}".format(f"Median {metric}:", float(med)))
+        print("{:<40} {:<10.4f}".format("Median WER:", float(med)))
     print("{:<40} {:<10}".format("Request failed:", metrics.get("seed_tts_request_failed", 0)))
     print("{:<40} {:<10}".format("No PCM captured:", metrics.get("seed_tts_no_pcm", 0)))
     print("{:<40} {:<10}".format("ASR / WER failed:", metrics.get("seed_tts_asr_failed", 0)))
