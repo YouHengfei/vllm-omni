@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
 import time as _time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -65,6 +66,12 @@ from vllm_omni.metrics.utils import DIFFUSION_METRICS_ONLY_REQUEST_ID
 from vllm_omni.outputs import OmniRequestOutput
 
 logger = init_logger(__name__)
+
+
+def cleanup_request_artifact_dirs(artifact_dirs: set[str] | list[str]) -> None:
+    for artifact_dir in artifact_dirs:
+        shutil.rmtree(artifact_dir, ignore_errors=True)
+
 
 # VLLM_OMNI_EVENT_DRIVEN_ORCH=1 switches the orchestration loop (and the
 # serving-side final-output drain in entrypoints/async_omni.py) from the legacy
@@ -220,6 +227,7 @@ class OrchestratorRequestState:
     duplex_stage_fences: dict[int, DuplexFence] = field(default_factory=dict)
     duplex_config_generation: int = -1
     running_counter_registered: bool = False
+    request_artifact_dirs: set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -379,6 +387,7 @@ class Orchestrator:
     # Class-level defaults so tests that bypass __init__ via object.__new__
     # don't AttributeError when transfer / counter emit paths access them.
     _running_counter: OmniRequestCounter | None = None
+    _engines_waiting_counter: OmniRequestCounter | None = None
     _transfer_emitter: Any = None
     _prom_metrics: Any = None
     _stat_logger: OmniPrometheusStatLogger | None = None
@@ -395,6 +404,7 @@ class Orchestrator:
         pd_config: dict[str, Any] | None = None,
         membership_controller: MembershipController | None = None,
         running_counter: OmniRequestCounter | None = None,
+        engines_waiting_counter: OmniRequestCounter | None = None,
         transfer_emitter: Any = None,
         prom_metrics: Any = None,
         log_stats: bool = False,
@@ -431,7 +441,13 @@ class Orchestrator:
             self._pd_bootstrap_addr = pd_config.get("bootstrap_addr")
             self._pd_prefill_engine_id = pd_config.get("prefill_engine_id")
         self.request_states: dict[str, OrchestratorRequestState] = {}
-        self._init_metrics_state(stage_pools, running_counter, transfer_emitter, log_stats=log_stats)
+        self._init_metrics_state(
+            stage_pools,
+            running_counter,
+            transfer_emitter,
+            engines_waiting_counter=engines_waiting_counter,
+            log_stats=log_stats,
+        )
 
         self._cfg_tracker = CfgCompanionTracker()
         self._stage_input_processors: dict[int, Any] = {}
@@ -477,6 +493,7 @@ class Orchestrator:
         stage_pools: list[StagePool],
         running_counter: OmniRequestCounter | None,
         transfer_emitter: Any,
+        engines_waiting_counter: OmniRequestCounter | None = None,
         log_stats: bool = False,
     ) -> None:
         """Wire up all metric-related orchestrator state.
@@ -502,6 +519,7 @@ class Orchestrator:
         from iteration_stats independently of scheduler gauges.
         """
         self._running_counter = running_counter
+        self._engines_waiting_counter = engines_waiting_counter
         self._transfer_emitter = transfer_emitter
 
         # Flat engine_idx ↔ (stage, replica) maps. The reverse map is
@@ -723,6 +741,7 @@ class Orchestrator:
             final_output_stage_ids=final_output_stage_ids,
             request_timestamp=float(msg.request_timestamp or _time.time()),
             mm_features=getattr(prompt, "mm_features", None),
+            request_artifact_dirs=set(msg.request_artifact_dirs or ()),
         )
         self.request_states[request_id] = req_state
         self._register_running_request(req_state)
@@ -1449,11 +1468,20 @@ class Orchestrator:
         """Update one replica snapshot and expose the stage-wide total."""
         self._stage_replica_waiting[(stage_id, replica_id)] = max(int(n_waiting), 0)
         self._set_stage_waiting_total(stage_id)
+        self._sync_engines_waiting_counter()
 
     def _remove_stage_replica_waiting(self, stage_id: int, replica_id: int) -> None:
         """Drop a dead replica's snapshot and refresh the stage total."""
         self._stage_replica_waiting.pop((stage_id, replica_id), None)
         self._set_stage_waiting_total(stage_id)
+        self._sync_engines_waiting_counter()
+
+    def _sync_engines_waiting_counter(self) -> None:
+        """Aggregate per-replica waiting into the counter shared with the
+        frontend so engine-queued requests show as waiting, not running."""
+        counter = self._engines_waiting_counter
+        if counter is not None:
+            counter.value = sum(self._stage_replica_waiting.values())
 
     def _set_stage_waiting_total(self, stage_id: int) -> None:
         if self._prom_metrics is None:
@@ -1720,6 +1748,8 @@ class Orchestrator:
             for request_id in cleanup_ids:
                 self._pd_kv_params.pop(request_id, None)
                 req_state = self.request_states.pop(request_id, None)
+                if req_state is not None:
+                    cleanup_request_artifact_dirs(getattr(req_state, "request_artifact_dirs", ()))
                 if req_state is not None and req_state.running_counter_registered and self._running_counter is not None:
                     self._running_counter.decrement()
                     req_state.running_counter_registered = False
@@ -2627,13 +2657,28 @@ class Orchestrator:
                 req_state.prompt,
                 streaming_context=req_state.streaming,
             )
-        except Exception:
+        except Exception as exc:
             logger.exception(
                 "[Orchestrator] req=%s process_engine_inputs FAILED for stage-%s",
                 req_id,
                 next_logical,
             )
-            raise
+            if not self._is_duplex_session_request(req_state):
+                raise
+            await self.output_async_queue.put(
+                ErrorMessage(
+                    request_id=req_id,
+                    stage_id=next_logical,
+                    error=f"Stage-{next_logical} input processor failed: {type(exc).__name__}: {exc}",
+                    error_type=type(exc).__name__,
+                )
+            )
+            await self._cleanup_request_ids(
+                [req_id, *self._cfg_tracker.cleanup_parent(req_id)],
+                abort=True,
+                close_duplex_sessions=True,
+            )
+            return
         finally:
             req_state.streaming.source_token_decoder = previous_decoder
 
