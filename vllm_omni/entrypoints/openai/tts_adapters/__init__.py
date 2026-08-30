@@ -20,6 +20,7 @@ from vllm_omni.entrypoints.openai.tts_adapters.base import (
     OutputPolicy,
     PreparedRequest,
     SpeechServingContext,
+    TTSGenerationError,
     TTSModelAdapter,
 )
 
@@ -128,6 +129,7 @@ __all__ = [
     "OutputPolicy",
     "PreparedRequest",
     "SpeechServingContext",
+    "TTSGenerationError",
     "TTSModelAdapter",
     "TTS_ADAPTER_REGISTRY",
     "all_tts_model_types",
