@@ -52,6 +52,11 @@ stages:
         vibevoice_runtime_config:
           negative_kv_cache_memory_bytes: 8589934592  # 8 GiB
           negative_kv_activation_margin_bytes: 536870912  # 512 MiB
+          # Side-graph policy: explicitly on. These are independent of
+          # enforce_eager (which only controls vLLM's AR graph). See the
+          # enforce_eager comment below for the A/B rationale.
+          diffusion_cuda_graph: true
+          decode_cuda_graph: true
 
     # The official backbone supports 64k positions and generation_config.json
     # defaults to 40,500 new tokens. Chunked prefill bounds each scheduler
@@ -59,10 +64,13 @@ stages:
     max_model_len: 65536
     max_num_batched_tokens: 8192
 
-    # Phase C3: the positive Qwen forward is now graph-capturable (audio-token
-    # transition work moved to preprocess_finalize). The negative branch and
-    # diffusion/M4a stay eager outside the capture region. FULL decode graphs
-    # eliminate per-layer FA3 metadata build + launch overhead.
+    # enforce_eager disables vLLM's AR (Qwen2) CUDA-graph capture. A/B on H100
+    # (vLLM 0.28.0) showed AR graph capture is harmful for this 1.5B model at
+    # both B1 and B4 (+12~18% TTFP/RTF), so the shipped default keeps it off.
+    # VibeVoice's side graphs (diffusion + decode) are independent: they are
+    # explicitly enabled above because they cut B4 RTF by ~50% vs full-eager.
+    # Decoupling from enforce_eager is intentional — tying them together would
+    # discard the side-graph optimisation that makes this model practical.
     enforce_eager: true
     async_scheduling: true
     # The pinned v1 profiler first runs the dummy placeholder text without MM
