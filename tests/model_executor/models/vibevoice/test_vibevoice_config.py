@@ -435,6 +435,8 @@ def test_single_stage_deploy_defaults_match_vibevoice_generation_contract():
         "vibevoice_runtime_config": {
             "negative_kv_cache_memory_bytes": 8 * 1024**3,
             "negative_kv_activation_margin_bytes": 512 * 1024**2,
+            "diffusion_cuda_graph": True,
+            "decode_cuda_graph": True,
         }
     }
     assert stage.engine_extras["limit_mm_per_prompt"] == {"audio": 8}
@@ -460,6 +462,14 @@ def test_single_stage_deploy_defaults_match_vibevoice_generation_contract():
     assert sampling_params.allowed_token_ids == VIBEVOICE_VALID_TOKEN_IDS
     assert sampling_params.stop_token_ids == [151643]
     assert sampling_params.detokenize is False
+
+    # Verify the deploy-level runtime config is parsed correctly by the model.
+    runtime_config = VibeVoiceRuntimeConfig.from_vllm_config(
+        SimpleNamespace(additional_config=stage.engine_extras["additional_config"])
+    )
+    assert runtime_config.diffusion_cuda_graph is True
+    assert runtime_config.decode_cuda_graph is True
+    assert stage.enforce_eager is True
 
 
 def _runtime_config(**values: object) -> VibeVoiceRuntimeConfig:

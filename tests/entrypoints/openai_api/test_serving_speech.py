@@ -87,6 +87,7 @@ async def _collect_audio_chunk_values(results: list[SimpleNamespace]) -> list[by
 
     service = SimpleNamespace(
         _tts_model_type="test",
+        _get_tts_adapter=lambda: SimpleNamespace(validates_generation=False),
         _extract_audio_output=OmniOpenAIServingSpeech._extract_audio_output,
         create_audio=create_audio,
         _mark_ref_audio_artifact_ready_for_request=lambda _request_id: None,
@@ -977,6 +978,8 @@ class TestTTSMethods:
             return_value=SimpleNamespace(
                 output_policy=OutputPolicy(expose_finish_reason=True),
                 native_speed_control=False,
+                validates_generation=False,
+                validate_generation=lambda *a, **kw: None,
             ),
         )
         mocker.patch.object(
