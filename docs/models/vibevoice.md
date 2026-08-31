@@ -221,6 +221,47 @@ only those sizes. Duplicate values are removed and the list is sorted. Values
 above `max_num_seqs`, booleans, numeric strings, and non-integers fail startup
 validation. `enforce_eager: true` always skips startup graph capture.
 
+## Memory tuning
+
+VibeVoice's KV pools are fixed budgets because KV-pressure preemption is
+unsafe for the stateful negative branch. Both the positive and negative pools
+must stay equal (CFG trajectories are the same length), and neither may be
+sized below the residency floor.
+
+```text
+KV cost/token = 28 layers x 2 KV heads x 128 head_dim x 2 (K+V) x 2 B (bf16)
+              = 28,672 B = 28 KiB
+block = 16 tokens = 448 KiB (vLLM allocation granularity)
+audio rate = 7.5 tokens/s (3,200 samples @ 24 kHz)
+```
+
+```text
+floor per pool = max_num_seqs x max_model_len x 28 KiB
+```
+
+| Profile | max_num_seqs | max_model_len | Pool floor | Suggested per pool | Both pools | Est. total VRAM | Max audio |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Default | 4 | 65,536 | 7.0 GiB | 8 GiB | 16 GiB | ~24 GiB | ~90 min |
+| 2 concurrent | 2 | 65,536 | 3.5 GiB | 4 GiB | 8 GiB | ~16 GiB | ~90 min |
+| 1 concurrent | 1 | 65,536 | 1.75 GiB | 2 GiB | 4 GiB | ~12 GiB | ~90 min |
+| 1 concurrent, capped | 1 | 32,768 | 896 MiB | 1 GiB | 2 GiB | ~10 GiB | ~72 min |
+
+Total VRAM = weights (~5.4 GiB) + both pools + graph pools/context (~2.5 GiB).
+The default profile's ~24 GiB estimate matches the measured peak of 24,177 MiB.
+
+Three disciplines for safe tuning:
+
+1. **Keep both pools equal.** Any asymmetric shrink lets the negative branch
+   exhaust first.
+2. **Never go below the residency floor.** The startup guard rejects it; do
+   not bypass the guard.
+3. **Adjust linked settings together.** Lowering `max_num_seqs` also scales
+   the diffusion graph warmup sizes; lowering `max_model_len` must still fit
+   `prompt_tokens + expected_audio_tokens`.
+
+The deploy YAML's `kv_cache_memory_bytes` comment block carries the compact
+profile table for reference during local edits.
+
 ## Experimental TP=2 deployment
 
 TP=1 is the only topology currently covered by an official-weight generation
