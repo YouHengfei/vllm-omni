@@ -46,6 +46,19 @@ stages:
     # The 1.5B Qwen2 backbone has only two KV heads. Eight GiB is sufficient
     # for four complete 64k positive sequences on one GPU while leaving ample
     # H100 VRAM for the negative CFG branch and the acoustic/semantic modules.
+    # KV pool sizing (both pools MUST stay equal — CFG positive/negative
+    # trajectories are the same length):
+    #   bytes/token = 28 KiB (28L x 2 KV heads x 128 dim x bf16); block = 16 tokens.
+    #   floor per pool = max_num_seqs x max_model_len x 28 KiB.
+    # The pools are fixed budgets because KV-pressure preemption is unsafe for
+    # the stateful negative branch — never size below the residency floor.
+    # Profiles (floor -> suggested):
+    #   4 seqs x 64k (default): 7.0 GiB -> 8 GiB per pool  (~24 GiB total)
+    #   2 seqs x 64k:           3.5 GiB -> 4 GiB per pool  (~16 GiB total)
+    #   1 seq  x 64k:           1.75 GiB -> 2 GiB per pool (~12 GiB total)
+    #   1 seq  x 32k:           896 MiB -> 1 GiB per pool  (~10 GiB total, <=72 min audio)
+    # Lower-concurrency profiles also require max_num_seqs (and optionally
+    # max_model_len) below; diffusion graph warmup sizes follow max_num_seqs.
     kv_cache_memory_bytes: 8589934592  # 8 GiB
     engine_extras:
       additional_config:
