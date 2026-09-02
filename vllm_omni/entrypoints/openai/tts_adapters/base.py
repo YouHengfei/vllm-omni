@@ -172,6 +172,9 @@ class TTSModelAdapter(ABC):
     native_speed_control: ClassVar[bool] = False
     #: Model-wide output behavior consumed by generic serving transports.
     output_policy: ClassVar[OutputPolicy] = OutputPolicy()
+    #: Target sample rates validated for this adapter's output path. An empty
+    #: set means that the adapter does not expose per-request resampling.
+    supported_output_sample_rates: ClassVar[frozenset[int]] = frozenset()
 
     max_new_tokens_min = 1
 

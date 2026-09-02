@@ -175,6 +175,23 @@ class DummyReqState:
     additional_information_cpu: dict[str, object]
 
 
+def test_model_forward_passes_request_ids_to_decode_metadata(monkeypatch):
+    received = {}
+    model = SimpleNamespace(
+        supports_omni_decode_step_metadata=True,
+        update_decode_step_metadata=lambda **kwargs: received.update(kwargs),
+    )
+    runner = object.__new__(OmniGPUModelRunner)
+    runner.model = model
+    runner.input_batch = DummyInputBatch(["request-a", "request-b"])
+    runner._build_model_kwargs_extra = lambda: {}
+    monkeypatch.setattr(GPUModelRunner, "_model_forward", lambda *_args, **_kwargs: torch.zeros(1))
+
+    OmniGPUModelRunner._model_forward(runner, input_ids=torch.ones(2, dtype=torch.long))
+
+    assert received["req_ids"] == ["request-a", "request-b"]
+
+
 class MiMoAudioForConditionalGeneration(torch.nn.Module):
     """Dummy model whose class name must exactly match the production check."""
 
