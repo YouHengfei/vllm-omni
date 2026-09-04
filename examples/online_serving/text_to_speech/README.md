@@ -573,11 +573,16 @@ curl -X POST http://localhost:8091/v1/audio/voices \
     -F "speaker_description=warm narrator"
 ```
 
-Uploaded voices are then usable as `voice="custom_voice_1"` on subsequent requests.
+For Qwen3-TTS, uploaded voices are Base voice-cloning inputs and require a Base
+checkpoint. When a request names an uploaded voice, the server infers
+`task_type="Base"`. Built-in presets such as `vivian` and `ryan` remain
+CustomVoice speakers and require a CustomVoice checkpoint.
 
 ### Precomputed custom voices
 
-For reused Base voice-cloning speakers, precompute the reference artifacts once and load them at server startup:
+For reused Base voice-cloning speakers, precompute the reference artifacts once
+and load them at server startup. Precomputed voices use the same Base task and
+checkpoint-matching rules as uploaded voices:
 
 ```bash
 python qwen3_tts/precompute_custom_voice.py \
