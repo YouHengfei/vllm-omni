@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import copy
+import uuid
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
@@ -72,7 +73,11 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
 
     name = "vibevoice"
     stage_keys = frozenset({"vibevoice"})
-    output_policy = OutputPolicy(expose_finish_reason=True)
+    # Downgrade adaptation (Plan B): ``expose_finish_reason`` (and the serving
+    # plumbing that honors it) is unavailable on this baseline, so use the
+    # default output policy. Terminal finish-reason metadata is not exposed
+    # over HTTP/SSE here; audio generation is unaffected.
+    output_policy = OutputPolicy()
 
     @staticmethod
     def _parse_script(text: str) -> tuple[list[tuple[int, str]], int]:
@@ -253,10 +258,17 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
             "prompt": self._render_prompt(parsed, num_speakers),
             "multi_modal_data": {"audio": audio_items},
         }
-        return PreparedRequest(
+        prepared = PreparedRequest(
             prompt=prompt,
             model_type=self.name,
         )
+        # Downgrade adaptation (Plan B): this baseline's serving orchestrator
+        # does not invoke the ``finalize_prepared_request`` hook (added to the
+        # adapter base class later), so finalize inline here. A fresh per-build
+        # scope keeps the multi_modal_uuids request-unique; the hook below is
+        # idempotent so the same adapter still works under the newer
+        # orchestrator that does call it.
+        return self.finalize_prepared_request(prepared, request_id=uuid.uuid4().hex)
 
     def _tokenize_prompt(self, prompt: str) -> list[int]:
         # Pinned vLLM forwards multi_modal_uuids through its token-prompt path,
@@ -271,6 +283,10 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
         prepared: PreparedRequest,
         request_id: str,
     ) -> PreparedRequest:
+        # Idempotent: ``build()`` already finalizes inline on baselines whose
+        # orchestrator lacks this hook, so skip re-tokenizing / re-stamping.
+        if "prompt_token_ids" in prepared.prompt:
+            return prepared
         audio_items = prepared.prompt.get("multi_modal_data", {}).get("audio", [])
         prepared.prompt["prompt_token_ids"] = self._tokenize_prompt(prepared.prompt["prompt"])
         prepared.prompt["multi_modal_uuids"] = {
