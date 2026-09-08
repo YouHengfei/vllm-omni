@@ -29,18 +29,17 @@ from vllm.model_executor.models.utils import (
 from vllm.multimodal import MULTIMODAL_REGISTRY
 from vllm.sequence import IntermediateTensors
 
-from vllm_omni.model_executor.model_runner_metadata import (
-    OMNI_INPUT_TOKEN_IDS_CPU_KEY,
-    OMNI_IS_PREFILL_KEY,
-    OMNI_NUM_COMPUTED_TOKENS_KEY,
-    OMNI_PROMPT_LEN_KEY,
-    OMNI_REQUEST_ID_KEY,
-)
 from vllm_omni.model_executor.models.output_templates import OmniOutput
-from vllm_omni.worker.named_kv_branch import (
-    NamedCausalKVBranch,
-    NamedKVBranchRequest,
-)
+
+# Downgrade adaptation (Plan B): the runner-owned ``model_runner_metadata`` /
+# ``named_kv_branch`` framework capabilities are unavailable on this baseline.
+# The support-tecoomni runner already publishes these per-request preprocess
+# keys (see ``gpu_model_runner._preprocess``); the request id travels under the
+# legacy ``request_id`` key rather than the canonical ``_omni_req_id``.
+OMNI_REQUEST_ID_KEY = "request_id"
+OMNI_IS_PREFILL_KEY = "_omni_is_prefill"
+OMNI_NUM_COMPUTED_TOKENS_KEY = "_omni_num_computed_tokens"
+OMNI_PROMPT_LEN_KEY = "_omni_prompt_len"
 
 from .audio_decode import (
     VibeVoiceAudioTokenDecodeOutput,
@@ -51,7 +50,7 @@ from .diffusion import (
     VibeVoiceDiffusionSampler,
     VibeVoiceRMSNorm,
 )
-from .negative_branch import VibeVoiceNegativeBranch
+from .negative_branch import VibeVoiceSelfManagedNegativeKVStore
 from .processing_vibevoice import (
     AUDIO_BOS_TOKEN,
     AUDIO_EOS_TOKEN,
@@ -538,8 +537,6 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         super().__init__()
         self.has_preprocess = True
         self.has_postprocess = True
-        self.requires_omni_request_id = True
-        self.requires_omni_input_token_ids_cpu = True
         self.have_multimodal_outputs = True
         # VibeVoice serves decoded waveform only. Hidden rows remain internal
         # positive conditions and must never be exposed as audio payloads.
@@ -548,10 +545,6 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         # condition; never reconstruct a full prefix-cache hidden span.
         self.requires_full_prefix_cached_hidden_states = False
         self.postprocess_uses_multimodal_outputs = False
-        # Sparse waveform routing may include only the decode subset of a
-        # mixed prefill/decode batch. Every scheduled hidden tail is still a
-        # request-local positive condition required by the next AR step.
-        self.postprocess_requires_all_scheduled_requests = True
         self.vllm_config = vllm_config
         self.config = vllm_config.model_config.hf_config
         self.model = VibeVoiceModel(
@@ -574,6 +567,10 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
             default_guidance_scale=VIBEVOICE_DEFAULT_GUIDANCE_SCALE,
             default_num_diffusion_steps=VIBEVOICE_DEFAULT_NUM_DIFFUSION_STEPS,
         )
+        # Downgrade adaptation (Plan B): the negative Qwen KV branch is owned
+        # by the model (no runner ``NamedCausalKVBranch`` on this baseline).
+        # The store is constructed lazily on first use because the backbone
+        # weights/buffers are not on their final device at ``__init__`` time.
         self._negative_kv_branch: VibeVoiceNegativeKVBranch | None = None
         self._runtime_config = VibeVoiceRuntimeConfig.from_vllm_config(vllm_config)
         self._diffusion_graph_warmup_batch_sizes = self._runtime_config.resolve_diffusion_graph_warmup_batch_sizes(
@@ -582,18 +579,10 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         self.model.diffusion_graph_enabled = self._runtime_config.diffusion_cuda_graph
         self.model.decode_graph_enabled = self._runtime_config.decode_cuda_graph
         self.model.cuda_graph_capture_failure_fatal = self._runtime_config.cuda_graph_capture_failure_fatal
-        self.named_kv_branch_request = NamedKVBranchRequest(
-            name="negative",
-            memory_bytes=self._runtime_config.negative_kv_cache_memory_bytes,
-            activation_margin_bytes=(self._runtime_config.negative_kv_activation_margin_bytes),
-        )
         self._pending_request_ids: list[str] = []
         self._pending_request_spans: list[tuple[str, int, int]] = []
         self._pending_audio_transitions: list[tuple[str, int]] = []
         self._pending_num_input_rows = 0
-        # GPUARModelRunner consumes these declarative hooks only after sampling
-        # a token that reaches a hard length cap. Other models pay no cost.
-        self.terminal_sample_drain_token_ids = frozenset({self._stateful.audio_token_id})
 
     def get_language_model(self) -> Qwen2Model:
         return self.model.language_model
@@ -737,20 +726,22 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
             is_multimodal,
         )
 
-    def bind_named_kv_branch(
-        self,
-        store: NamedCausalKVBranch,
-    ) -> None:
-        """Wrap and bind the runner-owned negative-Qwen PagedAttention store."""
-        if self._negative_kv_branch is not None:
-            raise RuntimeError("VibeVoice negative KV branch was bound twice.")
-        branch = VibeVoiceNegativeBranch(
-            store=store,
-            language_model=self.model.language_model,
-            hidden_size=int(self.config.text_config.hidden_size),
-        )
-        self._stateful.bind_negative_branch(branch)
-        self._negative_kv_branch = branch
+    def _ensure_negative_kv_branch(self) -> VibeVoiceNegativeKVBranch:
+        """Lazily construct and bind the model-owned negative Qwen KV store.
+
+        Downgrade adaptation (Plan B): on this baseline there is no runner
+        ``NamedCausalKVBranch`` to bind, so the model owns the negative KV via
+        :class:`VibeVoiceSelfManagedNegativeKVStore`. Buffers are allocated on
+        first use (inside the store) once the backbone is on its final device.
+        """
+        if self._negative_kv_branch is None:
+            branch = VibeVoiceSelfManagedNegativeKVStore(
+                language_model=self.model.language_model,
+                hidden_size=int(self.config.text_config.hidden_size),
+            )
+            self._stateful.bind_negative_branch(branch)
+            self._negative_kv_branch = branch
+        return self._negative_kv_branch
 
     def record_negative_condition(
         self,
@@ -765,15 +756,12 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         input_ids: torch.Tensor,
         info_dict: dict[str, Any],
     ) -> tuple[int, ...]:
-        values = info_dict.get(OMNI_INPUT_TOKEN_IDS_CPU_KEY)
-        expected_count = int(input_ids.numel())
-        if not isinstance(values, (list, tuple)) or len(values) != expected_count:
-            actual_count = len(values) if isinstance(values, (list, tuple)) else None
-            raise ValueError(
-                "VibeVoice preprocess requires request-aligned "
-                f"_omni_input_token_ids_cpu (expected {expected_count}, got {actual_count})."
-            )
-        return tuple(int(value) for value in values)
+        # Downgrade adaptation (Plan B): the runner does not publish a CPU
+        # mirror of the scheduled token ids on this baseline, so read them off
+        # the GPU ``input_ids`` directly. The scheduled span is small (one
+        # token on decode, one chunked-prefill span on prefill) and VibeVoice
+        # runs eagerly, so the D2H sync cost is negligible here.
+        return tuple(int(value) for value in input_ids.detach().to("cpu", torch.long).tolist())
 
     def preprocess(
         self,
@@ -863,25 +851,6 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         self._pending_audio_transitions = []
         self._pending_num_input_rows = 0
 
-    def _warn_if_named_kv_capability_unavailable(self) -> None:
-        if (
-            not bool(
-                getattr(
-                    self,
-                    "named_kv_branch_capability_acknowledged",
-                    False,
-                )
-            )
-            and self._negative_kv_branch is None
-        ):
-            logger.warning_once(
-                "VibeVoice waveform generation requires the vLLM-Omni named-KV "
-                "runner capability. This runner did not acknowledge or bind "
-                "that capability; stock vllm.LLM may emit tokens but cannot "
-                "execute the complete VibeVoice waveform path. Use "
-                "AsyncOmni with GPUARModelRunner."
-            )
-
     def drain_terminal_sampled_tokens(
         self,
         request_ids: list[str],
@@ -892,8 +861,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
             return {}
         if len(request_ids) != len(set(request_ids)):
             raise ValueError("VibeVoice terminal drain contains duplicate request IDs.")
-        if self._negative_kv_branch is None:
-            raise RuntimeError("VibeVoice terminal audio-token drain requires the bound negative Qwen branch.")
+        self._ensure_negative_kv_branch()
 
         negative_inputs: list[torch.Tensor] = []
         for request_id in request_ids:
@@ -1116,6 +1084,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
                 self._stateful.set_runtime_controls(request_id, extra_args)
 
         if pending_audio_transitions and inputs_embeds is not None:
+            self._ensure_negative_kv_branch()
             if self._negative_kv_branch is not None:
                 negative_request_ids = [request_id for request_id, _ in pending_audio_transitions]
                 negative_inputs: list[torch.Tensor] = []
@@ -1205,13 +1174,12 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         final concatenation; this model never republishes cumulative waveform
         history.
         """
-        self._warn_if_named_kv_capability_unavailable()
         # All audio-token transition work (negative branch,
         # diffusion, audio decode, embed splice, negative-input recording) has
-        # moved to preprocess_finalize, which the runner calls before this
-        # forward. sampling_extra_args is now consumed there; it is accepted
-        # here only for backward compatibility with runners that have not
-        # adopted the hook yet.
+        # moved to preprocess_finalize. The support-tecoomni runner does not
+        # invoke that hook, so this forward runs it inline as the documented
+        # backward-compatibility fallback (enforce_eager keeps the positive
+        # forward non-graph-captured, which the deploy config already sets).
         if self._pending_request_ids:
             self.preprocess_finalize(
                 input_ids=input_ids if input_ids is not None else torch.empty(0),
@@ -1246,7 +1214,7 @@ __all__ = [
     "VibeVoiceForConditionalGeneration",
     "VibeVoiceModel",
     "VibeVoiceMultiModalProjector",
-    "VibeVoiceNegativeBranch",
+    "VibeVoiceSelfManagedNegativeKVStore",
     "VibeVoiceRMSNorm",
     "_build_vibevoice_weights_mapper",
 ]
