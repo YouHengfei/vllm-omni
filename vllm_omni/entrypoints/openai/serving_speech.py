@@ -2282,11 +2282,22 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
                     sr_val = sr_raw[-1] if isinstance(sr_raw, list) and sr_raw else sr_raw
                     sample_rate_val = sr_val.item() if hasattr(sr_val, "item") else int(sr_val)
 
+                meta = audio_output.get("meta")
+                chunk_semantics = meta.get("audio_chunk_semantics") if isinstance(meta, Mapping) else None
+                if isinstance(chunk_semantics, list):
+                    chunk_semantics = chunk_semantics[-1] if chunk_semantics else None
+                is_delta = isinstance(chunk_semantics, str) and chunk_semantics.lower() == "delta"
+
                 audio_val = audio_output[audio_key]
                 if isinstance(audio_val, list):
-                    # Cumulative mode: each update grows the list; emit only new tail.
-                    new_chunks = audio_val[prev_count:]
-                    prev_count = len(audio_val)
+                    if is_delta:
+                        # VibeVoice explicitly marks each list snapshot as
+                        # request-local deltas; every item is new audio.
+                        new_chunks = audio_val
+                    else:
+                        # Cumulative mode: each update grows the list; emit only new tail.
+                        new_chunks = audio_val[prev_count:]
+                        prev_count = len(audio_val)
                 else:
                     # Per-step mode: each update is a single tensor; emit directly.
                     if audio_val is not None:

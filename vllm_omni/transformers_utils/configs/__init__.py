@@ -29,6 +29,7 @@ _CLASS_TO_MODULE: dict[str, str] = {
     "MingFlashOmniConfig": "vllm_omni.transformers_utils.configs.ming_flash_omni",
     "Qwen3VLMoeVisionConfig": "vllm_omni.transformers_utils.configs.ming_flash_omni",
     "WhisperEncoderConfig": "vllm_omni.transformers_utils.configs.ming_flash_omni",
+    "VibeVoiceConfig": "vllm_omni.transformers_utils.configs.vibevoice",
 }
 
 __all__ = [
@@ -51,6 +52,7 @@ __all__ = [
     "MingFlashOmniConfig",
     "Qwen3VLMoeVisionConfig",
     "WhisperEncoderConfig",
+    "VibeVoiceConfig",
 ]
 
 
@@ -76,5 +78,6 @@ from vllm_omni.transformers_utils.configs import higgs_audio_v3 as _higgs_audio_
 from vllm_omni.transformers_utils.configs import mammoth_moda2 as _mammoth_moda2  # noqa: F401, E402
 from vllm_omni.transformers_utils.configs import ming_flash_omni as _ming_flash_omni  # noqa: F401, E402
 from vllm_omni.transformers_utils.configs import omnivoice as _omnivoice  # noqa: F401, E402
+from vllm_omni.transformers_utils.configs import vibevoice as _vibevoice  # noqa: F401, E402
 from vllm_omni.transformers_utils.configs import voxcpm2 as _voxcpm2  # noqa: F401, E402
 from vllm_omni.transformers_utils.configs import voxtral_tts as _voxtral_tts  # noqa: F401, E402
