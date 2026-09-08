@@ -569,9 +569,14 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         )
         # Downgrade adaptation (Plan B): the negative Qwen KV branch is owned
         # by the model (no runner ``NamedCausalKVBranch`` on this baseline).
-        # The store is constructed lazily on first use because the backbone
-        # weights/buffers are not on their final device at ``__init__`` time.
+        # The store holds no GPU tensors at construction (its per-request KV
+        # buffers are allocated lazily on first forward_step), so it is safe to
+        # build eagerly here. It MUST exist before the first ``preprocess`` so
+        # that ``start_audio_segment`` -> ``reset_audio_segment`` (which runs
+        # during preprocess, ahead of the first forward) actually resets the
+        # branch instead of being skipped on a not-yet-created store.
         self._negative_kv_branch: VibeVoiceNegativeKVBranch | None = None
+        self._ensure_negative_kv_branch()
         self._runtime_config = VibeVoiceRuntimeConfig.from_vllm_config(vllm_config)
         self._diffusion_graph_warmup_batch_sizes = self._runtime_config.resolve_diffusion_graph_warmup_batch_sizes(
             vllm_config.scheduler_config.max_num_seqs,

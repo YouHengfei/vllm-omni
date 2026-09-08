@@ -1704,6 +1704,12 @@ class OmniGPUModelRunner(GPUModelRunner):
                 decode_start_offsets.extend(start_offsets_b)
                 decode_batch_items.clear()
 
+            # Models whose preprocess consumes the scheduled token ids (e.g.
+            # VibeVoice control-token detection) need a real input_ids tensor
+            # even on the multimodal path, where input_ids is None. Fall back
+            # to the runner's scheduled-id buffer in that case. Models that do
+            # not read input_ids in preprocess are unaffected.
+            preprocess_input_ids = input_ids if input_ids is not None else self.input_ids.gpu[:num_input_tokens]
             for req_index, req_id in enumerate(self.input_batch.req_ids):
                 req_infos = self.model_intermediate_buffer.get(req_id, {})
 
@@ -1733,14 +1739,15 @@ class OmniGPUModelRunner(GPUModelRunner):
 
                 embed_slice = inputs_embeds[s:e] if inputs_embeds is not None else None
                 req_input_ids, req_embeds, update_dict = self.model.preprocess(
-                    input_ids=input_ids[s:e], input_embeds=embed_slice, **req_infos
+                    input_ids=preprocess_input_ids[s:e], input_embeds=embed_slice, **req_infos
                 )
                 if inputs_embeds is None:
                     inputs_embeds = torch.empty(
-                        (input_ids.shape[0], req_embeds.shape[-1]),
+                        (preprocess_input_ids.shape[0], req_embeds.shape[-1]),
                         device=req_embeds.device,
                         dtype=req_embeds.dtype,
                     )
+                    input_ids = preprocess_input_ids
 
                 if self.has_talker_mtp and span_len == 1 and not is_prefill:
                     last_talker_hidden, text_step = update_dict.pop("mtp_inputs")
@@ -1759,7 +1766,9 @@ class OmniGPUModelRunner(GPUModelRunner):
                 seg_len = min(span_len, req_embeds.shape[0])
                 inputs_embeds[s : s + seg_len] = req_embeds[:seg_len]
                 if isinstance(req_input_ids, torch.Tensor) and req_input_ids.numel() == seg_len:
-                    input_ids[s : s + seg_len] = req_input_ids
+                    preprocess_input_ids[s : s + seg_len] = req_input_ids
+            if input_ids is None:
+                input_ids = preprocess_input_ids
 
             flush_decode_batch()
 
