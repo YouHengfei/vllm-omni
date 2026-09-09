@@ -125,8 +125,17 @@
 | diffusion / decode 侧 CUDA graph | ⚠️ 测试配置关闭 | 可开启；`forward()` 非纯调用使 AR graph 本就关闭（`enforce_eager=true`），侧 graph 独立可开 |
 | `preprocess_finalize` runner hook | ⚠️ 走 forward 兜底 | 功能等价，仅 forward 无法被 vLLM 捕获为 FULL decode graph（VibeVoice 默认 eager，无实际损失） |
 | `_omni_input_token_ids_cpu` CPU 镜像 | ⚠️ 改为从 GPU `input_ids` 读取 | 每步一次小 D2H 同步；eager 模式下开销可忽略 |
+| 在线 serving（`/v1/audio/speech`） | ✅ 已验证 | 需修复 `_TTS_MODEL_STAGES` 注册（见 §7）+ `NO_PROXY` 绕过代理 |
 
-### 4.3 环境要求（实测发现）
+### 4.3 在线 serving
+
+| 项 | 结果 |
+|---|---|
+| `POST /v1/audio/speech`（参考音频 voice cloning） | ✅ 200，返回 24kHz WAV（3.87s，finite，非静音） |
+| 前置修复 | vibevoice 加入 `_TTS_MODEL_STAGES`（否则 `_find_tts_stage` 返回 None → 走 raw-text 兜底） |
+| 环境 | 必须 `NO_PROXY=127.0.0.1,localhost` 绕过代理（否则 localhost 请求被代理拦截返回空 503） |
+
+### 4.4 环境要求（实测发现）
 
 - `transformers >= 5.10.1`（config 依赖 `vibevoice_acoustic_tokenizer`；实测环境 5.16.1）。
   support-tecoomni 现 pin `>=5.5.3`，**需提升下界**。
@@ -147,6 +156,20 @@
 | 长文本（147 token / 19.6s 音频） | RTF 0.30，24.8 tok/s | RTF 随长度稳定 |
 | 负 KV buffer 扩展性 | 147 token 无退化 | `torch.cat` 增长在典型 TTS 长度（数十~数百 token）无可见 O(n²) 影响 |
 
+### 5.1 侧 CUDA graph（diffusion + decode）A/B
+
+侧 graph 经**懒捕获**生效（首次使用某 batch key 时 capture），**无需 runner 改动**——只需
+`vibevoice_runtime_config.diffusion_cuda_graph/decode_cuda_graph: true`（shipped `vibevoice.yaml` 默认已开）。
+
+稳态 RTF（warmup 后 3 次平均，长文本非流式）：
+
+| 配置 | RTF | 吞吐 |
+|---|---|---|
+| eager（侧 graph 关） | **0.304** | ~25 tok/s |
+| 侧 graph 开 | **0.189** | ~40 tok/s |
+
+→ 侧 graph 带来 **~1.6× RTF 提速**（RTF 降 ~38%），与上游 "~50% RTF 收益" 同量级。
+
 > **性能结论**：RTF 0.30–0.35（非流式）意味着生成速度约为实时的 **3 倍**，单请求 TTS
 > 完全实用。流式 RTF ~0.73 仍快于实时。**自管负分支未引入可测的性能退化**（CFG 本身
 > 使每步需跑正+负两次 Qwen，这是模型固有成本，非方案 B 引入）。
@@ -164,6 +187,8 @@
 | 多请求连续 serving | ✅ 4/4 连续请求成功，无状态泄漏 |
 | 全模块导入 / 注册完整性 | ✅ pipeline/model/config/adapter 注册全部成功 |
 | 负分支 conformance 回归（eager init 改动后） | ✅ 仍通过 |
+| 在线 serving（`/v1/audio/speech`） | ✅ PASS：200，24kHz WAV 3.87s，finite，非静音 |
+| 侧 graph A/B（eager vs graph） | ✅ RTF 0.304 → 0.189（~1.6× 提速），懒捕获生效 |
 
 ---
 
@@ -181,6 +206,17 @@
    **修复**：其逻辑（`prompt_token_ids` + `multi_modal_uuids`）并入 `build()`，hook 保持幂等以兼容两分支。
 5. **环境**：缺 `ninja`（flashinfer JIT）→ `VLLM_USE_FLASHINFER_SAMPLER=0`；tokenizer 网络
    瞬时失败 → `HF_HUB_OFFLINE=1`。
+6. **在线 serving：vibevoice 未注册为 TTS stage**（`fb567460`）：`_find_tts_stage` 依据
+   `model_stage in _TTS_MODEL_STAGES`，vibevoice 的 `model_stage="vibevoice"` 缺失 →
+   `_tts_stage=None` → adapter 不被解析 → 走 raw-text 兜底（prompt 不渲染、无 audio_bos、
+   负分支饿死）。修复：加 `_VIBEVOICE_TTS_MODEL_STAGES` + `_detect_tts_model_type` 分支。
+7. **代理拦截 localhost**：环境设了 `http_proxy`，对 `127.0.0.1` 的请求被代理拦截返回空
+   503。在线测试/客户端必须设 `NO_PROXY=127.0.0.1,localhost`（fix 分支在线测试也这么做）。
+
+> **更正此前的“流式崩溃”记录**：经查证那不是 bug——`generate(py_generator=True)` 的
+> `_run_generation_with_generator` 在 finally 中 `self.close()`，流式生成器被消费完即关闭
+> 引擎，是 Omni offline API 的模型无关行为（连续两次流式 generate 需重建引擎）。在线 serving
+> 不反复调 `generate(py_generator=True)`，不受影响。
 
 ---
 
@@ -188,17 +224,20 @@
 
 | 项 | 说明 | 建议 |
 |---|---|---|
-| 流式（py_generator）路径偶发崩溃 | 一次多轮连续流式测量中出现 `SyncQueueShutDown`（引擎死亡）；非流式连续稳定 | 单独排查流式输出路径（与本适配核心无关，优先级中） |
+| ~~流式（py_generator）路径偶发崩溃~~ | **非 bug**：`generate(py_generator=True)` 设计上消费完即关引擎（Omni offline API 行为） | 无需修复；在线 serving 不受影响 |
 | 负 KV buffer `torch.cat` O(n²) | 极长生成（数千 token）可能有拷贝开销；典型 TTS（数百 token）无影响 | 如需超长生成，改 chunked 预分配（capacity 倍增） |
 | 依赖版本 | `requirements` 需 `transformers>=5.10.1`、`diffusers` 0.38→0.40 | 评估对 support-tecoomni 其他模型影响后提升 |
-| CUDA 侧 graph | 测试配置关闭；生产可开启 diffusion/decode 侧 graph（~50% RTF 收益，上游数据） | 开启后回归验证 |
-| 在线 serving (`/v1/audio/speech`) | 本次验证离线 `Omni.generate`；在线路径未端到端验证 | 后续做在线 E2E |
+| 侧 CUDA graph | ✅ 已验证生效（懒捕获，~1.6× RTF）；shipped `vibevoice.yaml` 默认已开 | 无 |
+| 在线 serving | ✅ 已验证（需 `_TTS_MODEL_STAGES` 修复 + `NO_PROXY`） | 无 |
 
 ---
 
 ## 9. 提交历史（`support-tecoomni-vibevoice-port`）
 
 ```
+5a1b8109 [Test] VibeVoice online serving E2E on support-tecoomni
+fb567460 [Frontend] VibeVoice: register as TTS model stage for online serving
+293d0a9a [Doc] VibeVoice Plan-B support-tecoomni implementation report
 9e67942e [Test] VibeVoice offline E2E on support-tecoomni (real checkpoint)
 76c0f1dc [Bugfix] VibeVoice E2E on support-tecoomni: input_ids in preprocess + eager negative branch
 e73a6b9a [Frontend] VibeVoice adapter: downgrade to support-tecoomni TTS base API
