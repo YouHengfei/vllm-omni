@@ -189,6 +189,9 @@
 | 负分支 conformance 回归（eager init 改动后） | ✅ 仍通过 |
 | 在线 serving（`/v1/audio/speech`） | ✅ PASS：200，24kHz WAV 3.87s，finite，非静音 |
 | 侧 graph A/B（eager vs graph） | ✅ RTF 0.304 → 0.189（~1.6× 提速），懒捕获生效 |
+| 批量并发 serving（4 并发请求） | ✅ 4/4 成功，aggregate RTF ~0.14（批量加速明显） |
+| 多说话人（4 默认音色） | ✅ 4-speaker 脚本 + 4 参考 audio，8.80s 音频 |
+| WebSocket 流式（`/v1/audio/speech/stream`） | ✅ session.config→input.text→input.done→audio.start+binary→session.done |
 
 ---
 
@@ -212,6 +215,11 @@
    负分支饿死）。修复：加 `_VIBEVOICE_TTS_MODEL_STAGES` + `_detect_tts_model_type` 分支。
 7. **代理拦截 localhost**：环境设了 `http_proxy`，对 `127.0.0.1` 的请求被代理拦截返回空
    503。在线测试/客户端必须设 `NO_PROXY=127.0.0.1,localhost`（fix 分支在线测试也这么做）。
+8. **并发 serving 崩溃**（`7d64fd77`）：混合 prefill/decode 批次中，sparse 路由只把 decode
+   子集送给 pooler，导致部分请求的 postprocess（记录 positive Qwen condition）被跳过 →
+   下一个 audio token 报 "no positive Qwen condition" → 引擎崩溃。修复：重新声明
+   `postprocess_requires_all_scheduled_requests` 并在 `gpu_ar_model_runner` 消费——该 flag
+   置位时用全量 `req_ids_output_copy` 而非 sparse downstream 子集作为 postprocess 过滤集。
 
 > **更正此前的“流式崩溃”记录**：经查证那不是 bug——`generate(py_generator=True)` 的
 > `_run_generation_with_generator` 在 finally 中 `self.close()`，流式生成器被消费完即关闭
@@ -229,12 +237,16 @@
 | 依赖版本 | `requirements` 需 `transformers>=5.10.1`、`diffusers` 0.38→0.40 | 评估对 support-tecoomni 其他模型影响后提升 |
 | 侧 CUDA graph | ✅ 已验证生效（懒捕获，~1.6× RTF）；shipped `vibevoice.yaml` 默认已开 | 无 |
 | 在线 serving | ✅ 已验证（需 `_TTS_MODEL_STAGES` 修复 + `NO_PROXY`） | 无 |
+| 批量并发 / 多说话人 / WebSocket 流式 | ✅ 已验证（需 `postprocess_requires_all_scheduled_requests` 修复 + `av`/`librosa` 依赖） | 无 |
+| 确定性（同输入同输出） | ⚠️ 设计上非确定性 | VibeVoice 用全局 RNG（adapter 明确不支持 seed 确定性）；非 bug |
 
 ---
 
 ## 9. 提交历史（`support-tecoomni-vibevoice-port`）
 
 ```
+7d64fd77 [Bugfix] VibeVoice: postprocess all scheduled requests for concurrent serving
+69936ebd [Doc] Update Plan-B report: online serving E2E + side-graph perf + streaming finding
 5a1b8109 [Test] VibeVoice online serving E2E on support-tecoomni
 fb567460 [Frontend] VibeVoice: register as TTS model stage for online serving
 293d0a9a [Doc] VibeVoice Plan-B support-tecoomni implementation report
