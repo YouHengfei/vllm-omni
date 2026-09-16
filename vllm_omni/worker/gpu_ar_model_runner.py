@@ -1648,6 +1648,13 @@ class GPUARModelRunner(OmniGPUModelRunner, OmniConnectorModelRunnerMixin):
         _, downstream_req_ids = self._resolve_pooler_payload_req_ids(req_ids_output_copy)
         if not downstream_req_ids:
             return False
+        # Stateful models that need postprocess for every emitted hidden row
+        # (e.g. VibeVoice positive-condition recording) opt out of the sparse
+        # downstream-only filter and postprocess the whole output-copy set.
+        if self._runner_model_omni_flag("postprocess_requires_all_scheduled_requests"):
+            postprocess_req_id_set = set(req_ids_output_copy)
+        else:
+            postprocess_req_id_set = set(downstream_req_ids)
 
         with record_function_or_nullcontext("omni_output_builder:eager_postprocess"):
             self._process_additional_information_updates(
@@ -1657,7 +1664,7 @@ class GPUARModelRunner(OmniGPUModelRunner, OmniConnectorModelRunnerMixin):
                 scheduler_output,
                 None,
                 None,
-                req_ids_filter=set(downstream_req_ids),
+                req_ids_filter=postprocess_req_id_set,
                 req_ids=req_ids_output_copy,
                 query_start_loc_cpu=query_start_loc_cpu,
             )
@@ -1704,6 +1711,12 @@ class GPUARModelRunner(OmniGPUModelRunner, OmniConnectorModelRunnerMixin):
 
         needs_pooler_payload = len(downstream_req_ids) > 0
         downstream_req_id_set = set(downstream_req_ids)
+        # Stateful models that need postprocess for every emitted hidden row opt
+        # out of the sparse downstream-only filter (see the eager path above).
+        if self._runner_model_omni_flag("postprocess_requires_all_scheduled_requests"):
+            postprocess_req_id_set = set(req_ids_output_copy)
+        else:
+            postprocess_req_id_set = downstream_req_id_set
         hidden_states_cpu = None
         req_hidden_states_cpu: dict[str, torch.Tensor] | None = None
         include_hidden_payload = self._model_omni_pooler_payload_include_hidden()
@@ -1772,7 +1785,7 @@ class GPUARModelRunner(OmniGPUModelRunner, OmniConnectorModelRunnerMixin):
                         scheduler_output,
                         combined_hidden_states,
                         combined_multimodal_outputs,
-                        req_ids_filter=downstream_req_id_set,
+                        req_ids_filter=postprocess_req_id_set,
                         req_ids=req_ids_output_copy,
                         query_start_loc_cpu=query_start_loc_cpu,
                     )

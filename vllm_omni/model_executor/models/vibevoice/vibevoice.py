@@ -545,6 +545,11 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         # condition; never reconstruct a full prefix-cache hidden span.
         self.requires_full_prefix_cached_hidden_states = False
         self.postprocess_uses_multimodal_outputs = False
+        # Mixed prefill/decode batches sparse-route only the decode subset to
+        # the pooler; VibeVoice still needs postprocess (positive-condition
+        # recording) for every scheduled request that emitted a hidden row,
+        # so opt into the all-output-copy postprocess filter.
+        self.postprocess_requires_all_scheduled_requests = True
         self.vllm_config = vllm_config
         self.config = vllm_config.model_config.hf_config
         self.model = VibeVoiceModel(
