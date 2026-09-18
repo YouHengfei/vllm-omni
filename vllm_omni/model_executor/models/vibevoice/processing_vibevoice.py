@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import torch
@@ -28,6 +28,13 @@ from vllm.multimodal.processing import (
 )
 
 from .vllm_compat import get_audio_with_sr_from_parent
+
+if TYPE_CHECKING:
+    from vllm.multimodal.processing.processor import (
+        MultiModalKwargsOptionalItems,
+        MultiModalPromptUpdates,
+        PlaceholderFeaturesInfo,
+    )
 
 AUDIO_BOS_TOKEN = "<|vision_start|>"
 AUDIO_EOS_TOKEN = "<|vision_end|>"
@@ -158,6 +165,62 @@ class VibeVoiceMultiModalProcessor(BaseMultiModalProcessor[VibeVoiceProcessingIn
         # ``_call_hf_processor`` deliberately leaves one AUDIO_TOKEN per item;
         # vLLM applies PromptReplacement exactly once after audio processing.
         return False
+
+    def _maybe_apply_prompt_updates(
+        self,
+        mm_items: MultiModalDataItems,
+        prompt_ids: list[int],
+        mm_kwargs: MultiModalKwargsOptionalItems,
+        mm_prompt_updates: MultiModalPromptUpdates,
+    ) -> tuple[list[int], Mapping[str, list[PlaceholderFeaturesInfo]]]:
+        # vLLM 0.29 validates per-item placement, but not stray placeholder
+        # tokens left in the prompt when fewer audio items than placeholders
+        # are provided. Preserve the original guard so an unmatched AUDIO_TOKEN
+        # cannot remain as an ordinary text embedding.
+        _, audio_token_id, _ = self.info.audio_token_ids()
+        num_placeholders = sum(int(tid) == audio_token_id for tid in prompt_ids)
+        num_audios = mm_items.get_count("audio")
+        if num_placeholders != num_audios:
+            raise RuntimeError(
+                f"Expected there to be {num_audios} prompt placeholders "
+                f"corresponding to {num_audios} audio items, but instead found "
+                f"{num_placeholders} prompt placeholders!"
+            )
+        return super()._maybe_apply_prompt_updates(mm_items, prompt_ids, mm_kwargs, mm_prompt_updates)
+
+    def _get_hf_processor_text(self, mm_counts: Mapping[str, int]) -> str | None:
+        # vLLM 0.29 passes this dummy text to the HF processor path so
+        # placeholder counts stay aligned. VibeVoice has no real HF processor,
+        # but ``_call_hf_processor`` still tokenizes it to validate that the
+        # AUDIO_TOKEN count matches the audio item count.
+        num_audios = mm_counts.get("audio", 0)
+        if num_audios < 1:
+            return None
+        segment = f"{AUDIO_BOS_TOKEN}{AUDIO_TOKEN}{AUDIO_EOS_TOKEN}"
+        return " ".join(segment for _ in range(num_audios))
+
+    def _apply_hf_processor_main(
+        self,
+        mm_items: MultiModalDataItems,
+        hf_processor_mm_kwargs: Mapping[str, object],
+    ) -> BatchFeature:
+        # vLLM 0.29 routes through ``ctx.call_hf_processor(get_hf_processor())``;
+        # VibeVoice has no real HF processor, so bypass it and reuse the
+        # feature-extractor logic directly.
+        processor_data, passthrough_data = self._get_hf_mm_data(mm_items)
+        prompt = self._get_hf_processor_text(mm_items.get_all_counts())
+        mm_data: Mapping[str, object] = processor_data
+        if prompt is not None:
+            mm_data = {"text": prompt, **processor_data}
+        processed = self._call_hf_processor(
+            prompt if prompt is not None else "",
+            mm_data,
+            dict(hf_processor_mm_kwargs),
+            {},
+        )
+        result = BatchFeature(dict(processed))
+        result.update(passthrough_data)
+        return result
 
     def _call_hf_processor(
         self,

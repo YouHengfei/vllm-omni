@@ -76,8 +76,12 @@ def test_manager_describes_independent_layer_storage() -> None:
     spec = _make_spec(16)
     manager = _build_named_kv_manager(spec, ["a", "b"], 9, 64)
     tensors = manager.kv_cache_config.kv_cache_tensors
-    assert [t.shared_by for t in tensors] == [["a"], ["b"]]
-    assert sum(t.size for t in tensors) == 2 * spec.page_size_bytes * 9
+    # One layer-outermost tensor covers all layers in the group.
+    assert len(tensors) == 1
+    assert tensors[0].layers == ["a", "b"]
+    assert tensors[0].layer_stride == spec.page_size_bytes * 9
+    assert tensors[0].block_stride == spec.page_size_bytes
+    assert tensors[0].size == 2 * spec.page_size_bytes * 9
     assert manager.block_pool.get_num_free_blocks() == 8
 
 

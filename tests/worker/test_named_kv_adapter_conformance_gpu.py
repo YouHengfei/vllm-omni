@@ -349,16 +349,6 @@ def _adapter_conformance_worker(port: int, queue: Any, use_graph: bool = False) 
             # vLLM's BlockPool reserves one null block; add one extra physical
             # block so usable capacity still covers the fixed-concurrency set.
             num_blocks += 1
-            with set_current_vllm_config(config):
-                backend.get_kv_cache_stride_order()
-            backend.get_kv_cache_shape(
-                num_blocks,
-                spec.block_size,
-                spec.num_kv_heads,
-                spec.head_size,
-                cache_dtype_str=config.cache_config.cache_dtype,
-            )
-            {layer_name: layer.kv_cache for layer_name, layer in layers.items()}
 
             # Build the production NamedCausalKVBranch.
             fake_runner = SimpleNamespace(

@@ -19,7 +19,6 @@ from math import ceil
 from typing import Any
 
 import torch
-from vllm.config import set_current_vllm_config
 from vllm.forward_context import create_forward_context, override_forward_context
 from vllm.logger import init_logger
 from vllm.v1.attention.backend import CommonAttentionMetadata
@@ -109,7 +108,17 @@ def _build_named_kv_manager(
     manager owns block metadata only; GPU tensors remain branch-owned.
     """
     group = KVCacheGroupSpec(layer_names=list(layer_names), kv_cache_spec=spec)
-    tensors = [KVCacheTensor(size=spec.page_size_bytes * num_blocks, shared_by=[name]) for name in layer_names]
+    page = spec.page_size_bytes
+    # Layer-outermost layout: each layer occupies a contiguous page*num_blocks
+    # region; block b of layer l sits at l*(page*num_blocks) + b*page.
+    tensors = [
+        KVCacheTensor(
+            size=page * num_blocks * len(layer_names),
+            layers=list(layer_names),
+            layer_stride=page * num_blocks,
+            block_stride=page,
+        )
+    ]
     config = KVCacheConfig(
         num_blocks=num_blocks,
         kv_cache_tensors=tensors,
@@ -323,34 +332,31 @@ class NamedCausalKVBranch:
             )
 
     def _allocate_kv_caches(self) -> dict[str, torch.Tensor]:
-        cache_dtype_str = (
-            getattr(self.kv_cache_spec, "cache_dtype_str", None) or self.vllm_config.cache_config.cache_dtype
-        )
-        cache_shape = self.backend.get_kv_cache_shape(
-            self.num_blocks,
-            self.block_size,
-            self.kv_cache_spec.num_kv_heads,
-            self.kv_cache_spec.head_size,
-            cache_dtype_str=cache_dtype_str,
-        )
         if self.kv_cache_spec.page_size_padded is not None:
             raise ValueError("Named causal KV v1 does not support padded KV cache pages.")
-        with set_current_vllm_config(self.vllm_config):
-            stride_order = self.backend.get_kv_cache_stride_order()
-        permuted_shape = tuple(cache_shape[index] for index in stride_order)
-        inverse_order = [stride_order.index(index) for index in range(len(stride_order))]
-
+        # Allocate one independent contiguous tensor per layer in the HND
+        # logical layout [num_blocks, num_kv_heads, block_size, 2*head_size]
+        # that the FA3 adapter and custom op consume. vLLM 0.29 centralized
+        # allocation behind allocate_kv_cache, but that aliases all layers to
+        # one backing buffer, which torch.compile rejects; independent tensors
+        # preserve the capturable path.
+        logical_shape = (
+            self.num_blocks,
+            self.kv_cache_spec.num_kv_heads,
+            self.block_size,
+            2 * self.kv_cache_spec.head_size,
+        )
         kv_caches: dict[str, torch.Tensor] = {}
         for layer_name in self.layer_names:
             raw_cache = torch.empty(
-                permuted_shape,
+                logical_shape,
                 dtype=self.kv_cache_spec.dtype,
                 device=self.device,
             )
             if raw_cache.numel() * raw_cache.element_size() != self.num_blocks * self.kv_cache_spec.page_size_bytes:
                 raise AssertionError("Named causal KV allocation does not match page-size accounting.")
             self._raw_caches.append(raw_cache)
-            kv_caches[layer_name] = raw_cache.permute(*inverse_order)
+            kv_caches[layer_name] = raw_cache
         return kv_caches
 
     @property
