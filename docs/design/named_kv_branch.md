@@ -24,8 +24,9 @@ KV-cache binding in the runner.
   vLLM cache.
 - **Named KV branch**: a runner-owned PagedAttention store selected by a stable
   name such as `negative`.
-- **Branch request state**: block IDs, sequence length, and block table for one
-  parent request inside one named branch.
+- **Branch request state**: one progress counter and immutable block-ID/GPU
+  table mirrors for one parent request. A dedicated vLLM `KVCacheManager`
+  owns block allocation and release; mirrors are not allocation authorities.
 - **Model runtime state**: non-KV request data such as diffusion conditions,
   convolution caches, pending waveform copies, and feedback embeddings.
 - **Executing request**: a request with a positive scheduled-token count in the
@@ -65,13 +66,16 @@ The branch interface is deliberately small:
 branch.reset(request_id)
 branch.append_and_enter(request_id)
 branch.append_and_enter_batch(request_ids)
+branch.append_batch(request_ids)  # immutable snapshot, no attention binding
 branch.free(request_id)
 branch.close()
 ```
 
-The context managers append exactly one token per request and temporarily bind
-the named caches to the shared attention layers. They restore the positive
-cache bindings in `finally`, including when model execution fails.
+Each append context advances exactly one token per request. The eager
+`append_and_enter*` APIs temporarily bind named caches to shared attention
+layers using a common binding context and restore the exact positive cache
+objects in `finally`. `append_batch` instead yields an immutable
+`NamedKVAppendBatch` for independent execution without switching those layers.
 
 ## Ownership
 
@@ -95,8 +99,22 @@ The v1 implementation uses a fixed, non-overcommitted pool. Startup requires
 capacity for every configured concurrent request at full model length:
 
 ```text
-required branch tokens = max_num_seqs × max_model_len
+required blocks = max_num_seqs × ceil(max_model_len / block_size)
+usable blocks = physical blocks - 1  # vLLM BlockPool's reserved null block
 ```
+
+Both positive and named pools exclude the reserved null block and round each
+request's capacity independently. Physical tensor allocation stays within the
+configured byte budget; no extra block is silently allocated.
+
+Each named pool has its own `KVCacheManager`, one `FullAttentionSpec` group,
+and prefix caching disabled. Tensor descriptors describe separate per-layer
+storage. The manager owns CPU block metadata, not GPU tensors or execution.
+For this no-eviction/no-lookahead causal policy, allocation and immutable ID
+mirror refresh occur only at block boundaries; progress still advances once
+per token. Reset/free release manager-owned blocks and invalidate mirrors.
+This boundary optimization must not be extended to sliding-window, caching,
+or preemptible policies without a new contract.
 
 The positive KV pool is checked against the same fixed-concurrency contract.
 The branch additionally reserves the configured activation margin before
@@ -111,11 +129,61 @@ Current constraints are explicit:
 - pipeline/context parallel size 1;
 - no ubatching, speculative decode, sleep mode, prefix caching, or KV
   connector on the branch path;
-- positive forward may use CUDA Graphs, but named-branch work stays eager and
-  outside the captured model forward.
+- named execution remains outside the positive captured forward; an eligible
+  negative branch can use its own compiled callable and CUDA Graphs.
 
 Pool exhaustion after successful startup is an invariant violation, not an
 LRU-eviction signal.
+
+## Independent negative compile and CUDA Graph execution
+
+Implementation is split into `worker/named_kv/`:
+
+- `runtime.py`: pool ownership, admission, progress, append and cleanup;
+- `types.py`: immutable append snapshots and execution contracts;
+- `executor.py`: independent compiled callable, static buffers and graphs;
+- `ops.py` / `flash_attention.py`: registered KV-write/attention operations.
+
+`worker/named_kv_branch.py` remains the compatibility import surface.
+VibeVoice's `negative_qwen_adapter.py` reuses the original Qwen modules and
+weights, preserves decoder/RoPE/norm/residual ordering, and binds zero-copy
+4D K/V views. The independent executor does not replace the positive compiled
+forward or own the runner's physical pools.
+
+### Policy and startup
+
+`negative_cuda_graph` defaults to true. `enforce_eager=true` keeps both AR
+paths eager; otherwise the positive path follows vLLM configuration and the
+negative path enables its independent executor when eligible. Explicit
+`negative_cuda_graph=false` is an ablation override. Diffusion and audio-decode
+graph flags remain independent.
+
+The optional executor currently requires TP1, BF16 and FlashAttention 3.
+Known unsupported initialization configurations retain the eager branch;
+actual binding, compilation or capture errors propagate rather than silently
+retrying a partially advanced request.
+
+Warmup/capture happens at startup using allocator-owned scratch requests and
+zero embeddings, never arbitrary live slots or a first real append. Compilation
+uses fullgraph Inductor with `triton.cudagraphs=False`; CUDA Graph capture is
+managed separately. Scratch requests are released on success and failure.
+Repeated warmup preserves published buffer/workspace addresses.
+
+### Replay contract
+
+One protected `append_batch` supplies request ordering, prior positions,
+updated lengths, physical slots and immutable block tables. The executor stages
+these into fixed-address buffers and runs the captured batch graph, or its
+compiled callable for an uncaptured batch size. It does not append again.
+
+FA3 uses an explicit version and fixed split count of one. Per-layer scheduler
+workspaces have stable addresses and validated effective lengths; their contents
+are refreshed before replay and uncaptured compiled execution. Returned hidden
+states own their storage rather than aliasing reusable graph output buffers.
+
+Execution faults invalidate the entire touched batch, with no eager retry.
+Executor close releases only executor-owned resources; runner shutdown remains
+the owner of physical KV pool teardown.
 
 ## Request lifecycle
 
@@ -233,7 +301,7 @@ interchangeable interfaces.
 The checked-in contract tests cover:
 
 - capacity and unsupported-runner validation;
-- fixed allocator accounting;
+- real-manager allocation, null-block capacity, boundary mirrors and release;
 - single and batched append metadata;
 - positive-cache restoration;
 - whole-batch fault cleanup;
@@ -245,6 +313,15 @@ The checked-in contract tests cover:
 - continued shutdown after cleanup exceptions;
 - VibeVoice finish, abort, pending D2H, and request-isolation behavior.
 
-Real GPU acceptance must additionally show positive/negative KV conformance,
-request block counts returning to zero, and stable VRAM at the configured
-concurrency.
+The retained tiny GPU fixture checks eager/compiled parity, B1–4 histories,
+block crossing/recycling, reordered rows, and owned replay outputs without
+widening numerical tolerances. Startup, binding, FA3 ABI and executor lifecycle
+contracts remain checked-in tests; standalone feasibility probes stay local.
+
+Latest recorded boundary/mirror regression: 371 CPU passes, one skip and 16
+deselections; two tiny GPU passes. These are not production load or quality
+qualification. A local CPU bookkeeping comparison measured B4 about 2.224 us
+per step versus 1.430 us for the original allocator; it excludes GPU staging
+and is not a throughput/RTF claim. Earlier actual HTTP replay smoke predates
+the manager migration. Migration-specific production smoke, full-model quality,
+configured-concurrency load and long-run stability remain separate gates.

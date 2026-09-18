@@ -1,14 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
-"""Compatibility re-export for the named causal KV branch runtime.
+"""Named causal KV branch runtime, executor, and backend adapters.
 
-The implementation lives in :mod:`vllm_omni.worker.named_kv.runtime`.
-This module preserves the original import path
-``vllm_omni.worker.named_kv_branch`` so existing code and tests that import
-from or monkeypatch this path continue to work.
-
-Tests that need to monkeypatch internal symbols should target
-``vllm_omni.worker.named_kv.runtime`` directly.
+Public exports are safe to import without CUDA or FlashAttention installed.
+Backend-specific modules (``flash_attention``, ``ops``) are imported lazily
+by the executor or adapter that needs them.
 """
 
 from vllm_omni.worker.named_kv.runtime import (
