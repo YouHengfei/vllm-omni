@@ -4,13 +4,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
 from vllm.model_executor.models.qwen2 import Qwen2Model
 from vllm.sequence import IntermediateTensors
 
 from vllm_omni.worker.named_kv_branch import NamedCausalKVBranch
+
+if TYPE_CHECKING:
+    from vllm_omni.worker.named_kv.executor import NamedKVBranchExecutor
 
 
 class VibeVoiceNegativeBranch:
@@ -22,6 +25,7 @@ class VibeVoiceNegativeBranch:
         store: NamedCausalKVBranch,
         language_model: Qwen2Model,
         hidden_size: int,
+        executor: NamedKVBranchExecutor | None = None,
     ) -> None:
         if store.name != "negative":
             raise ValueError(f"VibeVoice requires a named KV branch called 'negative', got {store.name!r}.")
@@ -30,6 +34,7 @@ class VibeVoiceNegativeBranch:
         self.store = store
         self.language_model = language_model
         self.hidden_size = int(hidden_size)
+        self._executor = executor
 
     def reset_audio_segment(self, request_id: str) -> None:
         self.store.reset(request_id)
@@ -56,38 +61,53 @@ class VibeVoiceNegativeBranch:
                 raise TypeError("VibeVoice negative input embedding must be floating-point.")
 
         try:
-            # Advance the whole logical batch in ONE varlen decode
-            # forward. The store owns one independent block table per request;
-            # a single batched attention context never exposes two negative
-            # kv_cache bindings at once, identical to the sequential path.
-            with self.store.append_and_enter_batch(request_ids) as step:
-                stacked_inputs = torch.cat(input_embeddings, dim=0)
-                hidden_states: Any = self.language_model(
-                    input_ids=None,
-                    positions=step.position,
-                    inputs_embeds=stacked_inputs,
-                )
-                if isinstance(hidden_states, IntermediateTensors):
-                    raise RuntimeError(
-                        "VibeVoice negative Qwen returned pipeline intermediate tensors; PP=1 is required."
+            if self._executor is not None:
+                # New graph-capable path: append without switching attention,
+                # then run the independent executor.
+                with self.store.append_batch(request_ids) as step:
+                    hidden = self._executor.run(step, input_embeddings)
+                    # executor.run already clones output.
+                    expected_shape = (len(request_ids), self.hidden_size)
+                    if tuple(hidden.shape) != expected_shape:
+                        raise ValueError(
+                            "VibeVoice negative Qwen hidden state must have shape "
+                            f"{expected_shape}, got {tuple(hidden.shape)}."
+                        )
+                    conditions = [row.reshape(1, self.hidden_size) for row in hidden.unbind(0)]
+            else:
+                # Original eager path: advance the whole logical batch in ONE
+                # varlen decode forward. The store owns one independent
+                # block table per request; a single batched attention context
+                # never exposes two negative kv_cache bindings at once,
+                # identical to the sequential path.
+                with self.store.append_and_enter_batch(request_ids) as step:
+                    stacked_inputs = torch.cat(input_embeddings, dim=0)
+                    hidden_states: Any = self.language_model(
+                        input_ids=None,
+                        positions=step.position,
+                        inputs_embeds=stacked_inputs,
                     )
-                if isinstance(hidden_states, tuple):
-                    hidden_states = hidden_states[0]
-                if not isinstance(hidden_states, torch.Tensor):
-                    raise TypeError("VibeVoice negative Qwen must return hidden-state tensor output.")
-                expected_shape = (len(request_ids), self.hidden_size)
-                if tuple(hidden_states.shape) != expected_shape:
-                    raise ValueError(
-                        "VibeVoice negative Qwen hidden state must have shape "
-                        f"{expected_shape}, got {tuple(hidden_states.shape)}."
+                    if isinstance(hidden_states, IntermediateTensors):
+                        raise RuntimeError(
+                            "VibeVoice negative Qwen returned pipeline intermediate tensors; PP=1 is required."
+                        )
+                    if isinstance(hidden_states, tuple):
+                        hidden_states = hidden_states[0]
+                    if not isinstance(hidden_states, torch.Tensor):
+                        raise TypeError("VibeVoice negative Qwen must return hidden-state tensor output.")
+                    expected_shape = (len(request_ids), self.hidden_size)
+                    if tuple(hidden_states.shape) != expected_shape:
+                        raise ValueError(
+                            "VibeVoice negative Qwen hidden state must have shape "
+                            f"{expected_shape}, got {tuple(hidden_states.shape)}."
+                        )
+                    # The shared Qwen may reuse output storage on a later forward.
+                    # Own the batch until the caller binds every row to
+                    # request-local state (which clones again per request).
+                    owned = hidden_states.detach().clone(
+                        memory_format=torch.contiguous_format,
                     )
-                # The shared Qwen may reuse output storage on a later forward.
-                # Own the batch until the caller binds every row to
-                # request-local state (which clones again per request).
-                owned = hidden_states.detach().clone(
-                    memory_format=torch.contiguous_format,
-                )
-                conditions = [row.reshape(1, self.hidden_size) for row in owned.unbind(0)]
+                    conditions = [row.reshape(1, self.hidden_size) for row in owned.unbind(0)]
         except Exception:
             # A model-forward exception is fatal to the current engine. Drop
             # every request touched by this logical batch so no partially

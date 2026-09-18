@@ -219,14 +219,25 @@ diffusion graph keys for every active batch size from 1 through
 retaining lazy runtime capture, or provide a positive-integer list to capture
 only those sizes. Duplicate values are removed and the list is sorted. Values
 above `max_num_seqs`, booleans, numeric strings, and non-integers fail startup
-validation. `enforce_eager: true` always skips startup graph capture.
+validation. Diffusion warmup follows `diffusion_cuda_graph`, independently of
+`enforce_eager`.
+
+The default deployment enables the full-graph profile: `enforce_eager: false`
+permits positive AR graphs and the eligible independent negative executor;
+`diffusion_cuda_graph` and `decode_cuda_graph` are both enabled. Negative AR
+capture requires TP1/BF16/FA3 eligibility. Setting `enforce_eager: true`
+disables both AR graph paths, not the side graphs. For fully eager execution,
+also set `diffusion_cuda_graph: false` and `decode_cuda_graph: false` under
+`engine_extras.additional_config.vibevoice_runtime_config`.
 
 ## Memory tuning
 
 VibeVoice's KV pools are fixed budgets because KV-pressure preemption is
-unsafe for the stateful negative branch. Both the positive and negative pools
-must stay equal (CFG trajectories are the same length), and neither may be
-sized below the residency floor.
+unsafe for the stateful negative branch. The default positive and negative
+budgets are equal, but equality is not required: startup validates each pool
+independently. Neither may be sized below its residency floor. Negative KV
+resets at audio-segment boundaries and does not retain positive text prefill;
+the admission guard nevertheless reserves full-context capacity per request.
 
 ```text
 KV cost/token = 28 layers x 2 KV heads x 128 head_dim x 2 (K+V) x 2 B (bf16)
@@ -236,23 +247,35 @@ audio rate = 7.5 tokens/s (3,200 samples @ 24 kHz)
 ```
 
 ```text
-floor per pool = max_num_seqs x max_model_len x 28 KiB
+required usable blocks = max_num_seqs x ceil(max_model_len / block_size)
+required physical blocks = required usable blocks + 1 reserved null block
+floor per pool = required physical blocks x bytes_per_block
 ```
 
-| Profile | max_num_seqs | max_model_len | Pool floor | Suggested per pool | Both pools | Est. total VRAM | Max audio |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Default | 4 | 65,536 | 7.0 GiB | 8 GiB | 16 GiB | ~24 GiB | ~90 min |
-| 2 concurrent | 2 | 65,536 | 3.5 GiB | 4 GiB | 8 GiB | ~16 GiB | ~90 min |
-| 1 concurrent | 1 | 65,536 | 1.75 GiB | 2 GiB | 4 GiB | ~12 GiB | ~90 min |
-| 1 concurrent, capped | 1 | 32,768 | 896 MiB | 1 GiB | 2 GiB | ~10 GiB | ~72 min |
+The following TP1/BF16 figures assume 16-token blocks; startup uses the actual
+attention layout. Pool floors include the reserved 448 KiB null block.
 
-Total VRAM = weights (~5.4 GiB) + both pools + graph pools/context (~2.5 GiB).
-The default profile's ~24 GiB estimate matches the measured peak of 24,177 MiB.
+| Profile | max_num_seqs | max_model_len | Pool floor | Suggested per pool | Both pools | Est. total VRAM |
+| --- | --- | --- | --- | --- | --- | --- |
+| Default | 4 | 65,536 | 7 GiB + 448 KiB | 8 GiB | 16 GiB | ~24 GiB |
+| 2 concurrent | 2 | 65,536 | 3.5 GiB + 448 KiB | 4 GiB | 8 GiB | ~16 GiB |
+| 1 concurrent | 1 | 65,536 | 1.75 GiB + 448 KiB | 2 GiB | 4 GiB | ~12 GiB |
+| 1 concurrent, capped | 1 | 32,768 | 896 MiB + 448 KiB | 1 GiB | 2 GiB | ~10 GiB |
+
+Total VRAM includes weights, both KV pools, side modules, graph buffers and
+runtime allocations. These estimates are budgeting guidance, not guarantees.
+
+At 7.5 audio tokens/s, the default 40,500-new-token limit corresponds to at
+most 90 minutes if every generated token were an audio token. A 32,768-token
+context has a theoretical audio-only ceiling of about 72.8 minutes. Actual
+available audio duration is lower: text, reference audio, special tokens and
+the generation limit all consume the token budget. These arithmetic ceilings
+are not validated long-audio generation guarantees.
 
 Three disciplines for safe tuning:
 
-1. **Keep both pools equal.** Any asymmetric shrink lets the negative branch
-   exhaust first.
+1. **Size both pools independently.** Equal budgets are the default, not a
+   requirement; spare capacity in one pool cannot compensate for the other.
 2. **Never go below the residency floor.** The startup guard rejects it; do
    not bypass the guard.
 3. **Adjust linked settings together.** Lowering `max_num_seqs` also scales

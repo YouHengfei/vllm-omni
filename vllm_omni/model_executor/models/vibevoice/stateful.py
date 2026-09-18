@@ -17,6 +17,7 @@ from numbers import Integral, Real
 from typing import Any, Protocol
 
 import torch
+from vllm.logger import init_logger
 
 from .audio_decode import VibeVoiceAudioTokenDecodeOutput
 from .runtime_config import (
@@ -25,6 +26,8 @@ from .runtime_config import (
     VIBEVOICE_MIN_GUIDANCE_SCALE,
     VIBEVOICE_RUNTIME_CONTROL_KEYS,
 )
+
+logger = init_logger(__name__)
 
 
 def validate_guidance_scale(value: Any) -> float:
@@ -124,9 +127,18 @@ class VibeVoiceRequestState:
     _pinned_pool: list[torch.Tensor] = field(default_factory=list)
 
     def clear(self) -> None:
-        try:
-            for event, _ in tuple(self._waveform_events.values()):
+        first_error: Exception | None = None
+        for event, _ in tuple(self._waveform_events.values()):
+            try:
                 event.synchronize()
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+                else:
+                    logger.exception("Additional VibeVoice waveform event cleanup failure")
+        try:
+            if first_error is not None:
+                raise first_error
         finally:
             self.acoustic_cache = None
             self.semantic_cache = None
@@ -637,10 +649,19 @@ class VibeVoiceStatefulInference:
                 self._deferred_cleanup_ids.discard(request_id)
 
     def clear(self) -> None:
+        first_error: Exception | None = None
         for request_id in set(self._states) | self._deferred_cleanup_ids:
-            self.cleanup_request(request_id)
+            try:
+                self.cleanup_request(request_id)
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+                else:
+                    logger.exception("Additional VibeVoice request cleanup failure for %r", request_id)
         self._deferred_cleanup_ids.clear()
         self._decode_cache_pool.clear()
+        if first_error is not None:
+            raise first_error
 
 
 __all__ = [

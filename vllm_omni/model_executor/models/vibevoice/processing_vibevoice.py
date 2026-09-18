@@ -233,8 +233,12 @@ class VibeVoiceMultiModalProcessor(BaseMultiModalProcessor[VibeVoiceProcessingIn
     ) -> Mapping[str, MultiModalFieldConfig]:
         return {
             "input_values": MultiModalFieldConfig.batched("audio"),
-            "padding_mask": MultiModalFieldConfig.batched("audio"),
-            "audio_num_tokens": MultiModalFieldConfig.batched("audio"),
+            # padding_mask only feeds CPU-side token-count validation (it is
+            # never passed to the Acoustic Encoder), and audio_num_tokens only
+            # drives validation/slicing. Keep both off the accelerator so
+            # embed_multimodal validation never synchronizes.
+            "padding_mask": MultiModalFieldConfig.batched("audio", keep_on_cpu=True),
+            "audio_num_tokens": MultiModalFieldConfig.batched("audio", keep_on_cpu=True),
         }
 
     def _get_prompt_updates(

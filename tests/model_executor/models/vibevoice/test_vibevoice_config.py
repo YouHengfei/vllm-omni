@@ -336,7 +336,7 @@ def test_pipeline_is_registered_as_single_stage_ar_audio_generation():
     assert pipeline.model_type == "vibevoice"
     assert pipeline.model_arch == "VibeVoiceForConditionalGeneration"
     assert pipeline.default_deploy_config_name == "vibevoice.yaml"
-    assert pipeline.validate() == []
+    assert pipeline.get_validation_errors() == []
     assert len(pipeline.stages) == 1
 
     stage = pipeline.stages[0]
@@ -426,7 +426,7 @@ def test_single_stage_deploy_defaults_match_vibevoice_generation_contract():
     assert stage.stage_id == 0
     assert stage.devices == "0"
     assert stage.tensor_parallel_size == 1
-    assert stage.enforce_eager is True
+    assert stage.enforce_eager is False
     assert stage.async_scheduling is True
     assert stage.max_model_len == 65536
     assert stage.max_num_seqs == 4
@@ -469,7 +469,8 @@ def test_single_stage_deploy_defaults_match_vibevoice_generation_contract():
     )
     assert runtime_config.diffusion_cuda_graph is True
     assert runtime_config.decode_cuda_graph is True
-    assert stage.enforce_eager is True
+    assert runtime_config.negative_cuda_graph is True
+    assert stage.enforce_eager is False
 
 
 def _runtime_config(**values: object) -> VibeVoiceRuntimeConfig:

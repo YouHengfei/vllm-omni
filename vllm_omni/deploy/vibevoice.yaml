@@ -27,8 +27,8 @@ stages:
     devices: "0"
     # Fixed safe concurrency: four complete positive and negative sequences
     # must remain resident, so KV-pressure preemption is unreachable. At TP=1,
-    # each pool needs 4 x 65,536 tokens x 28 KiB/token = 7 GiB. The 8 GiB
-    # budgets below leave block-alignment headroom; startup guards re-verify
+    # each pool needs 7 GiB of usable blocks plus one reserved null block.
+    # The 8 GiB budgets leave headroom; startup guards re-verify
     # both pools from the actual attention layout.
     tensor_parallel_size: 1
     max_num_seqs: 4
@@ -46,17 +46,19 @@ stages:
     # The 1.5B Qwen2 backbone has only two KV heads. Eight GiB is sufficient
     # for four complete 64k positive sequences on one GPU while leaving ample
     # H100 VRAM for the negative CFG branch and the acoustic/semantic modules.
-    # KV pool sizing (both pools MUST stay equal — CFG positive/negative
-    # trajectories are the same length):
-    #   bytes/token = 28 KiB (28L x 2 KV heads x 128 dim x bf16); block = 16 tokens.
-    #   floor per pool = max_num_seqs x max_model_len x 28 KiB.
+    # KV pools use equal default budgets but are validated independently.
+    # At TP1/BF16: bytes/token = 28 KiB; a 16-token block costs 448 KiB.
+    #   usable blocks = max_num_seqs x ceil(max_model_len / block_size).
+    #   floor per pool = (usable blocks + 1 null block) x bytes_per_block.
     # The pools are fixed budgets because KV-pressure preemption is unsafe for
     # the stateful negative branch — never size below the residency floor.
-    # Profiles (floor -> suggested):
+    # Profiles (usable-block cost, excluding null block -> suggested):
     #   4 seqs x 64k (default): 7.0 GiB -> 8 GiB per pool  (~24 GiB total)
     #   2 seqs x 64k:           3.5 GiB -> 4 GiB per pool  (~16 GiB total)
     #   1 seq  x 64k:           1.75 GiB -> 2 GiB per pool (~12 GiB total)
-    #   1 seq  x 32k:           896 MiB -> 1 GiB per pool  (~10 GiB total, <=72 min audio)
+    #   1 seq  x 32k:           896 MiB -> 1 GiB per pool  (~10 GiB total)
+    # Total VRAM figures are estimates. Audio duration also depends on text,
+    # reference and generation token budgets, not just max_model_len.
     # Lower-concurrency profiles also require max_num_seqs (and optionally
     # max_model_len) below; diffusion graph warmup sizes follow max_num_seqs.
     kv_cache_memory_bytes: 8589934592  # 8 GiB
@@ -65,9 +67,8 @@ stages:
         vibevoice_runtime_config:
           negative_kv_cache_memory_bytes: 8589934592  # 8 GiB
           negative_kv_activation_margin_bytes: 536870912  # 512 MiB
-          # Side-graph policy: explicitly on. These are independent of
-          # enforce_eager (which only controls vLLM's AR graph). See the
-          # enforce_eager comment below for the A/B rationale.
+          # Side graphs are explicitly enabled and independent of
+          # enforce_eager, which gates positive and negative AR graphs.
           diffusion_cuda_graph: true
           decode_cuda_graph: true
 
@@ -77,14 +78,12 @@ stages:
     max_model_len: 65536
     max_num_batched_tokens: 8192
 
-    # enforce_eager disables vLLM's AR (Qwen2) CUDA-graph capture. A/B on H100
-    # (vLLM 0.28.0) showed AR graph capture is harmful for this 1.5B model at
-    # both B1 and B4 (+12~18% TTFP/RTF), so the shipped default keeps it off.
-    # VibeVoice's side graphs (diffusion + decode) are independent: they are
-    # explicitly enabled above because they cut B4 RTF by ~50% vs full-eager.
-    # Decoupling from enforce_eager is intentional — tying them together would
-    # discard the side-graph optimisation that makes this model practical.
-    enforce_eager: true
+    # Enable positive AR graphs and the eligible independent negative executor
+    # by default. With diffusion/decode graphs enabled above, this is the
+    # full-graph profile tested on H100 at TP1/BF16/FA3 for B1 and B4.
+    # Set enforce_eager=true to disable both AR graph paths. For fully eager
+    # execution, also set diffusion_cuda_graph=false and decode_cuda_graph=false.
+    enforce_eager: false
     async_scheduling: true
     # The pinned v1 profiler first runs the dummy placeholder text without MM
     # data, which intentionally trips VibeVoice's symmetric placeholder check.

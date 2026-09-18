@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 import torch
+from pytest_mock import MockerFixture
 from torch import nn
 
 from vllm_omni.model_executor.models.vibevoice.audio_decode import (
@@ -585,6 +586,70 @@ def test_model_clear_runtime_state_releases_request_state_and_pending_work() -> 
     assert wrapper._pending_num_input_rows == 0
 
 
+def test_clear_continues_after_request_cleanup_failure(mocker: MockerFixture) -> None:
+    stateful = _stateful()
+    branch = _FakeNegativeBranch()
+    stateful.bind_negative_branch(branch)
+    for request_id in ("first", "second", "survivor"):
+        stateful.get_or_create(request_id)
+    stateful._deferred_cleanup_ids.add("deferred")
+    errors = [ValueError("first cleanup failure"), RuntimeError("second cleanup failure")]
+    attempted = []
+    original_free = branch.free
+
+    def free(request_id: str) -> None:
+        attempted.append(request_id)
+        original_free(request_id)
+        if len(attempted) <= 2:
+            raise errors[len(attempted) - 1]
+
+    mocker.patch.object(branch, "free", side_effect=free)
+    with pytest.raises(ValueError, match="first cleanup failure") as caught:
+        stateful.clear()
+    assert caught.value is errors[0]
+    assert set(attempted) == {"first", "second", "survivor", "deferred"}
+    assert stateful.active_request_ids == ()
+    assert not stateful._deferred_cleanup_ids
+    assert not stateful._decode_cache_pool
+    stateful.clear()
+    assert len(attempted) == 4
+
+
+@pytest.mark.parametrize("state_failure,executor_failure", [(False, False), (True, False), (False, True), (True, True)])
+def test_model_clear_closes_executor_after_state_failure(
+    mocker: MockerFixture, state_failure: bool, executor_failure: bool
+) -> None:
+    wrapper = object.__new__(VibeVoiceForConditionalGeneration)
+    nn.Module.__init__(wrapper)
+    wrapper._stateful = _stateful()
+    state_error = ValueError("state cleanup failed")
+    executor_error = RuntimeError("executor cleanup failed")
+    mocker.patch.object(wrapper._stateful, "clear", side_effect=state_error if state_failure else None)
+    executor = mocker.Mock()
+    executor.close.side_effect = executor_error if executor_failure else None
+    wrapper._negative_executor = executor
+    wrapper._pending_request_ids = ["request"]
+    wrapper._pending_request_spans = [("request", 0, 1)]
+    wrapper._pending_audio_transitions = [("request", 0)]
+    wrapper._pending_num_input_rows = 1
+    expected = state_error if state_failure else executor_error if executor_failure else None
+    if expected is None:
+        wrapper.clear_runtime_state()
+    else:
+        with pytest.raises(type(expected)) as caught:
+            wrapper.clear_runtime_state()
+        assert caught.value is expected
+    executor.close.assert_called_once_with()
+    assert wrapper._negative_executor is None
+    assert wrapper._pending_request_ids == []
+    assert wrapper._pending_request_spans == []
+    assert wrapper._pending_audio_transitions == []
+    assert wrapper._pending_num_input_rows == 0
+    wrapper._stateful.clear.side_effect = None
+    wrapper.clear_runtime_state()
+    executor.close.assert_called_once_with()
+
+
 def test_model_terminal_drain_merges_existing_sparse_waveform() -> None:
     wrapper = object.__new__(VibeVoiceForConditionalGeneration)
     nn.Module.__init__(wrapper)
@@ -906,6 +971,37 @@ def test_request_cleanup_drops_state_when_waveform_event_fails() -> None:
     with pytest.raises(RuntimeError, match="copy failed"):
         stateful.cleanup_request("request-a")
 
+    assert stateful.get("request-a") is None
+    assert state.waveform_chunks_cpu == []
+    assert state._waveform_events == {}
+    assert state._pinned_pool == []
+
+
+def test_request_cleanup_synchronizes_all_waveform_events_after_failure() -> None:
+    stateful = _stateful()
+    state = stateful.get_or_create("request-a")
+    first = torch.ones(4, dtype=torch.float32)
+    second = torch.full((4,), 2.0, dtype=torch.float32)
+    synchronized = []
+
+    class _Event:
+        def __init__(self, name: str, *, fail: bool = False) -> None:
+            self.name = name
+            self.fail = fail
+
+        def synchronize(self) -> None:
+            synchronized.append(self.name)
+            if self.fail:
+                raise RuntimeError("first copy failed")
+
+    state.waveform_chunks_cpu.extend([first, second])
+    state._waveform_events[id(first)] = (_Event("first", fail=True), first)
+    state._waveform_events[id(second)] = (_Event("second"), second)
+
+    with pytest.raises(RuntimeError, match="first copy failed"):
+        stateful.cleanup_request("request-a")
+
+    assert synchronized == ["first", "second"]
     assert stateful.get("request-a") is None
     assert state.waveform_chunks_cpu == []
     assert state._waveform_events == {}

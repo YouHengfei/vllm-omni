@@ -152,7 +152,12 @@ class VibeVoiceDiffusionHeadFinalLayer(nn.Module):
         condition: torch.Tensor,
     ) -> torch.Tensor:
         shift, scale = self.linear_1(self.act_fn(condition)).chunk(2, dim=-1)
+        # Microsoft RMSNorm accumulates in FP32, then casts back before
+        # modulation. Reducing in BF16 changes the denoising trajectory.
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.float()
         hidden_states = hidden_states * torch.rsqrt(hidden_states.square().mean(-1, keepdim=True) + self.norm_eps)
+        hidden_states = hidden_states.to(input_dtype)
         return self.linear_2(hidden_states * (1 + scale) + shift)
 
 
@@ -216,7 +221,7 @@ class VibeVoiceDiffusionHead(nn.Module):
 # Module-level so every VibeVoiceDiffusionSampler instance (one per model
 # instance per rank) shares the resettable scheduler pool. Keyed by the full
 # schedule contract to stay correct if multiple configs coexist in tests.
-_SCHEDULER_STATE_CACHE: dict[tuple[int, int, str, str], tuple[Any, Any, Any]] = {}
+_SCHEDULER_STATE_CACHE: dict[tuple[int, int, str, str], tuple[Any, Any, Any, torch.Tensor | None]] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,11 +304,12 @@ class VibeVoiceDiffusionSampler:
                 scheduler,
                 scheduler.sigmas,
                 scheduler.timesteps,
+                None,
             )
             return scheduler
-        scheduler, sigmas, timesteps = entry
+        scheduler, sigmas, timesteps, device_timesteps = entry
         scheduler.sigmas = sigmas
-        scheduler.timesteps = timesteps
+        scheduler.timesteps = timesteps if device_timesteps is None else device_timesteps
         scheduler.num_inference_steps = len(timesteps)
         scheduler.model_outputs = [None] * scheduler.config.solver_order
         scheduler.lower_order_nums = 0
@@ -409,7 +415,21 @@ class VibeVoiceDiffusionSampler:
         # post-set_timesteps state); timestep batches are moved to the model
         # device only for the Diffusion Head invocation.
         scheduler = self.acquire_scheduler(steps)
-        for timestep in scheduler.timesteps:
+        device_timesteps = scheduler.timesteps
+        if device_timesteps.device != noisy_audio_latent.device:
+            device_timesteps = device_timesteps.to(noisy_audio_latent.device)
+            if noisy_audio_latent.is_cuda:
+                # Cache CUDA timestep metadata for eager fallback on this model's
+                # single target device. CPU tests keep the shared CPU schedule.
+                key = (
+                    int(steps),
+                    self.num_train_timesteps,
+                    self.beta_schedule,
+                    self.prediction_type,
+                )
+                scheduler_obj, sigmas, timesteps, _ = _SCHEDULER_STATE_CACHE[key]
+                _SCHEDULER_STATE_CACHE[key] = (scheduler_obj, sigmas, timesteps, device_timesteps)
+        for timestep in device_timesteps:
             shared_latent = noisy_audio_latent[:batch_size]
             combined_latent = torch.cat([shared_latent, shared_latent], dim=0)
             timestep_batch = timestep.repeat(combined_latent.shape[0]).to(combined_latent)

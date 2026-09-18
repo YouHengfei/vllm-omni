@@ -10,7 +10,7 @@ that class so the model remains the owner of its loading semantics.
 from __future__ import annotations
 
 from collections.abc import Collection, Iterable, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import regex as re
 import torch
@@ -72,6 +72,9 @@ from .stateful import (
     VibeVoiceStatefulInference,
 )
 from .vllm_compat import merge_multimodal_embeddings
+
+if TYPE_CHECKING:
+    from vllm_omni.worker.named_kv.executor import NamedKVBranchExecutor
 
 logger = init_logger(__name__)
 
@@ -575,6 +578,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
             default_num_diffusion_steps=VIBEVOICE_DEFAULT_NUM_DIFFUSION_STEPS,
         )
         self._negative_kv_branch: VibeVoiceNegativeKVBranch | None = None
+        self._negative_executor = None  # type: ignore[assignment]
         self._runtime_config = VibeVoiceRuntimeConfig.from_vllm_config(vllm_config)
         self._diffusion_graph_warmup_batch_sizes = self._runtime_config.resolve_diffusion_graph_warmup_batch_sizes(
             vllm_config.scheduler_config.max_num_seqs,
@@ -608,6 +612,10 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
             num_inference_steps=self._stateful.default_num_diffusion_steps,
             guidance_scale=self._stateful.default_guidance_scale,
         )
+        if self._negative_executor is not None:
+            self._negative_executor.warmup(
+                batch_sizes=list(range(1, int(self.vllm_config.scheduler_config.max_num_seqs) + 1))
+            )
 
     def _get_audio_embeddings(
         self,
@@ -653,7 +661,11 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
             device=tower_param.device,
             dtype=tower_param.dtype,
         )
-        padding_mask = padding_mask.to(device=tower_param.device)
+        # padding_mask only feeds token-count validation (it is never passed
+        # to the Acoustic Encoder) and is kept on CPU via keep_on_cpu. The
+        # ``.to(device=...)`` below is a no-op for the production path and a
+        # one-time fallback for direct callers that hand over a device mask.
+        padding_mask = padding_mask.to(device="cpu")
         counts_from_mask = torch.div(
             padding_mask.to(torch.long).sum(dim=-1) + AUDIO_HOP_LENGTH - 1,
             AUDIO_HOP_LENGTH,
@@ -662,11 +674,7 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         if audio_num_tokens is None:
             audio_num_tokens = counts_from_mask
         else:
-            audio_num_tokens = torch.as_tensor(
-                audio_num_tokens,
-                device=counts_from_mask.device,
-                dtype=torch.long,
-            ).reshape(-1)
+            audio_num_tokens = torch.as_tensor(audio_num_tokens, dtype=torch.long).reshape(-1).cpu()
             if audio_num_tokens.shape != counts_from_mask.shape or not torch.equal(
                 audio_num_tokens,
                 counts_from_mask,
@@ -744,13 +752,83 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
         """Wrap and bind the runner-owned negative-Qwen PagedAttention store."""
         if self._negative_kv_branch is not None:
             raise RuntimeError("VibeVoice negative KV branch was bound twice.")
-        branch = VibeVoiceNegativeBranch(
-            store=store,
-            language_model=self.model.language_model,
-            hidden_size=int(self.config.text_config.hidden_size),
-        )
-        self._stateful.bind_negative_branch(branch)
+
+        executor = None
+        if self._runtime_config.negative_cuda_graph and self._should_enable_negative_graph():
+            executor = self._create_optional_negative_executor(store)
+
+        try:
+            branch = VibeVoiceNegativeBranch(
+                store=store,
+                language_model=self.model.language_model,
+                hidden_size=int(self.config.text_config.hidden_size),
+                executor=executor,
+            )
+            self._stateful.bind_negative_branch(branch)
+        except BaseException:
+            if executor is not None:
+                try:
+                    executor.close()
+                except Exception:
+                    logger.exception("Failed to close unpublished negative executor")
+            raise
         self._negative_kv_branch = branch
+        self._negative_executor = executor
+
+    def _should_enable_negative_graph(self) -> bool:
+        """Check whether the independent negative graph path is eligible.
+
+        Respect enforce_eager; backend and dtype checks run during binding.
+        """
+        if self.vllm_config.model_config.enforce_eager:
+            return False
+        if self.vllm_config.parallel_config.tensor_parallel_size != 1:
+            return False
+        return True
+
+    def _create_optional_negative_executor(self, store: NamedCausalKVBranch) -> NamedKVBranchExecutor | None:
+        """Create a NamedKVBranchExecutor or return None on known-unsupported configs."""
+        from vllm_omni.model_executor.models.vibevoice.negative_qwen_adapter import (
+            Qwen2KVBranchAdapter,
+        )
+        from vllm_omni.worker.named_kv.executor import NamedKVBranchExecutor
+        from vllm_omni.worker.named_kv.flash_attention import (
+            FlashAttentionKVBranchAdapter,
+            UnsupportedNamedKVGraphError,
+        )
+
+        adapter = None
+        try:
+            backend = FlashAttentionKVBranchAdapter(store)
+            adapter = Qwen2KVBranchAdapter(
+                language_model=self.model.language_model,
+                hidden_size=int(self.config.text_config.hidden_size),
+            )
+            # Validate and bind before constructing/publishing the executor.
+            k_caches, v_caches = backend.get_kv_caches()
+            adapter.bind_kv_caches(
+                branch_layer_names=tuple(store.layer_names),
+                k_caches=k_caches,
+                v_caches=v_caches,
+            )
+            return NamedKVBranchExecutor(
+                branch=store,
+                model_adapter=adapter,
+                max_num_seqs=int(self.vllm_config.scheduler_config.max_num_seqs),
+                max_model_len=int(self.vllm_config.model_config.max_model_len),
+                device=store.device,
+                dtype=self.vllm_config.model_config.dtype,
+            )
+        except BaseException as error:
+            if adapter is not None:
+                try:
+                    adapter.close()
+                except Exception:
+                    logger.exception("Failed to close unpublished negative Qwen adapter")
+            if isinstance(error, UnsupportedNamedKVGraphError):
+                logger.info("Named KV negative graph disabled: %s; using eager fallback", error)
+                return None
+            raise
 
     def record_negative_condition(
         self,
@@ -857,11 +935,27 @@ class VibeVoiceForConditionalGeneration(nn.Module, SupportsMultiModal):
 
     def clear_runtime_state(self) -> None:
         """Release all request-owned state before runner resource teardown."""
-        self._stateful.clear()
+        first_error: Exception | None = None
+        try:
+            self._stateful.clear()
+        except Exception as exc:
+            first_error = exc
         self._pending_request_ids = []
         self._pending_request_spans = []
         self._pending_audio_transitions = []
         self._pending_num_input_rows = 0
+        if getattr(self, "_negative_executor", None) is not None:
+            try:
+                self._negative_executor.close()
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+                else:
+                    logger.exception("Additional VibeVoice negative executor cleanup failure")
+            finally:
+                self._negative_executor = None
+        if first_error is not None:
+            raise first_error
 
     def _warn_if_named_kv_capability_unavailable(self) -> None:
         if (

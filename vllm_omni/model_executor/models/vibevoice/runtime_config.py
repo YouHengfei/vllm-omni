@@ -43,6 +43,11 @@ class VibeVoiceRuntimeConfig:
     # back to eager. Set this only when a validation run must prove that the
     # requested graph paths were actually captured.
     cuda_graph_capture_failure_fatal: bool = False
+    # Follow enforce_eager for both positive and negative AR branches by
+    # default. The negative branch owns an independent compiled graph executor.
+    # Explicit False retains the old negative eager path for ablation only;
+    # True never overrides enforce_eager or backend eligibility checks.
+    negative_cuda_graph: bool = True
 
     @classmethod
     def from_vllm_config(cls, vllm_config: Any) -> VibeVoiceRuntimeConfig:

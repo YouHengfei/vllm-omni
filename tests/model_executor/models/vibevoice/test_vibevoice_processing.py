@@ -143,6 +143,16 @@ def test_vibevoice_model_registers_the_standard_multimodal_processor():
     )
 
 
+def test_validation_only_fields_stay_on_cpu():
+    """padding_mask/audio_num_tokens never feed the encoder; keep_on_cpu pins
+    the contract so upstream batching cannot move them to the accelerator."""
+    processor, _ = _make_processor()
+    fields = processor._get_mm_fields_config(None, {})
+    assert fields["input_values"].field.keep_on_cpu is False
+    assert fields["padding_mask"].field.keep_on_cpu is True
+    assert fields["audio_num_tokens"].field.keep_on_cpu is True
+
+
 def test_single_prompt_multiple_reference_audios_preserves_item_order():
     processor, info = _make_processor()
     tokenizer = info.get_tokenizer()

@@ -25,7 +25,6 @@ from tests.helpers.stage_config import get_deploy_config_path
 os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
 
 pytestmark = [
-    pytest.mark.core_model,
     pytest.mark.tts,
     pytest.mark.skipif(
         not torch.accelerator.is_available() or torch.accelerator.device_count() < 1,
@@ -110,6 +109,35 @@ def _post(omni_server, payload: dict, *, timeout: float = 300.0) -> httpx.Respon
     # Local E2E traffic must not inherit developer/CI SOCKS proxy settings.
     with httpx.Client(trust_env=False, timeout=timeout) as client:
         return client.post(_speech_url(omni_server), json=payload)
+
+
+@pytest.mark.advanced_model
+@hardware_test(res={"cuda": "H100"}, num_cards=1)
+@pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
+@pytest.mark.parametrize("response_format,media_type", [("mp3", "audio/mpeg"), ("flac", "audio/flac")])
+def test_vibevoice_http_encoded_formats_011(omni_server, response_format: str, media_type: str) -> None:
+    response = _post(
+        omni_server,
+        {
+            "model": omni_server.model,
+            "input": "Hello.",
+            "ref_audio": _REFERENCE_DATA_URL,
+            "stream": False,
+            "response_format": response_format,
+            "max_new_tokens": 128,
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith(media_type)
+    with sf.SoundFile(io.BytesIO(response.content)) as audio:
+        assert audio.format == ("MP3" if response_format == "mp3" else "FLAC")
+        assert audio.samplerate == 24_000
+        assert audio.channels == 1
+        waveform = audio.read(dtype="float32")
+    assert waveform.ndim == 1
+    assert waveform.size > 0
+    assert np.isfinite(waveform).all()
+    # MP3 encoding may pad samples; do not require audio-token alignment.
 
 
 def _assert_error(response: httpx.Response, message: str) -> None:

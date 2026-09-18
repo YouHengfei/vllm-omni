@@ -281,6 +281,11 @@ class VibeVoiceDecodeGraphExecutor:
                     acoustic_cache=acoustic_cache,
                     semantic_cache=semantic_cache,
                 )
+            except _DecodeCacheRestoreError:
+                self._disabled = True
+                # Cache state is unknown; later calls must not fall back either.
+                self._capture_failure_fatal = True
+                raise
             except Exception as exc:
                 self._disabled = True
                 if self._capture_failure_fatal:
@@ -337,19 +342,29 @@ class VibeVoiceDecodeGraphExecutor:
             snap = self._snapshot(acoustic_cache, semantic_cache)
             side = torch.cuda.Stream(device=device)
             side.wait_stream(torch.cuda.current_stream(device))
-            with torch.cuda.stream(side):
-                run()
-            torch.cuda.current_stream(device).wait_stream(side)
-            self._restore(snap, acoustic_cache, semantic_cache)
+            try:
+                with torch.cuda.stream(side):
+                    run()
+            finally:
+                try:
+                    torch.cuda.current_stream(device).wait_stream(side)
+                    self._restore(snap, acoustic_cache, semantic_cache)
+                except Exception as exc:
+                    raise _DecodeCacheRestoreError("Cannot safely restore decode warmup caches.") from exc
 
             # The default creates a private pool for this graph. Do not pass a
             # shared pool: request graphs are replayed and destroyed in dynamic
             # continuous-batching order, which violates shared-pool ordering.
             graph = torch.cuda.CUDAGraph()
             snap2 = self._snapshot(acoustic_cache, semantic_cache)
-            with torch.cuda.graph(graph):
-                out = run()
-            self._restore(snap2, acoustic_cache, semantic_cache)
+            try:
+                with torch.cuda.graph(graph):
+                    out = run()
+            finally:
+                try:
+                    self._restore(snap2, acoustic_cache, semantic_cache)
+                except Exception as exc:
+                    raise _DecodeCacheRestoreError("Cannot safely restore decode capture caches.") from exc
 
         entry.graph = graph
         entry.audio_out = out.audio
@@ -381,6 +396,10 @@ class VibeVoiceDecodeGraphExecutor:
             for layer, saved in zip(layers.values(), layers_snap, strict=True):
                 if getattr(layer, "is_initialized", False) and layer.cache is not None:
                     layer.cache.copy_(saved)
+
+
+class _DecodeCacheRestoreError(RuntimeError):
+    """Cache restoration failed; eager fallback is unsafe."""
 
 
 __all__ = [

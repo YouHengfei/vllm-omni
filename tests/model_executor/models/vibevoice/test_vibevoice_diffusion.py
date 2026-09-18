@@ -12,6 +12,7 @@ from torch import nn
 
 from vllm_omni.model_executor.models.vibevoice.diffusion import (
     VibeVoiceDiffusionGraphExecutor,
+    VibeVoiceDiffusionHeadFinalLayer,
     VibeVoiceDiffusionSampler,
 )
 
@@ -27,6 +28,28 @@ class _DeterministicDiffusionHead(nn.Module):
     ) -> torch.Tensor:
         latent_size = noisy_latents.shape[-1]
         return noisy_latents * 0.125 + condition[:, :latent_size] * 0.0625 + timesteps[:, None] * 1e-4
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16, torch.float16])
+def test_final_layer_normalizes_in_fp32_before_modulation(dtype: torch.dtype) -> None:
+    config = SimpleNamespace(hidden_size=8, rms_norm_eps=1e-6, hidden_act="silu")
+    layer = VibeVoiceDiffusionHeadFinalLayer(config, output_size=8).to(dtype)
+    # Identity projection and zero modulation isolate normalization, including
+    # values whose squared reduction overflows in FP16 and rounding in BF16.
+    with torch.no_grad():
+        layer.linear_1.weight.zero_()
+        layer.linear_2.weight.copy_(torch.eye(8, dtype=dtype))
+    hidden = torch.tensor(
+        [[0.13, -0.71, 1.3, -2.7, 3.1, -4.9, 7.2, -9.3], [300, -600, 900, -1200, 1500, -1800, 2100, -2400]], dtype=dtype
+    )
+    condition = torch.zeros_like(hidden)
+    reference = hidden.float()
+    reference = reference * torch.rsqrt(reference.square().mean(-1, keepdim=True) + config.rms_norm_eps)
+    expected = reference.to(dtype)
+    actual = layer(hidden, condition)
+    assert actual.dtype == dtype
+    assert torch.isfinite(actual).all()
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
 def _sampler() -> VibeVoiceDiffusionSampler:
@@ -148,6 +171,68 @@ def test_diffusion_kernel_matches_an_independent_reference_loop() -> None:
     assert torch.equal(actual, expected)
     assert torch.equal(noise, original_noise)
     assert torch.isfinite(actual).all()
+
+
+def test_cached_scheduler_can_reuse_device_timesteps() -> None:
+    """Eager fallback reuses scheduler instances without re-entering set_timesteps."""
+    sampler = _sampler()
+    head = _DeterministicDiffusionHead()
+    positive, negative, noise = _inputs()
+
+    scheduler = sampler.acquire_scheduler(10)
+    assert scheduler.timesteps.device.type == "cpu"
+    first = sampler.sample_audio_latent(
+        head,
+        positive,
+        negative,
+        noise,
+        guidance_scale=1.3,
+        num_inference_steps=10,
+    )
+    assert scheduler.timesteps.device.type == "cpu"
+    # Reuse keeps the schedule device unchanged on CPU inputs.
+    second = sampler.sample_audio_latent(
+        head,
+        positive,
+        negative,
+        noise,
+        guidance_scale=1.3,
+        num_inference_steps=10,
+    )
+    assert scheduler.timesteps.device.type == "cpu"
+    assert torch.equal(first, second)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+def test_cached_scheduler_keeps_cuda_timesteps_for_eager_fallback() -> None:
+    """CUDA eager fallback keeps scheduler timestep metadata off the host."""
+    sampler = _sampler()
+    head = _DeterministicDiffusionHead().cuda()
+    positive, negative, noise = (x.cuda() for x in _inputs())
+    scheduler = sampler.acquire_scheduler(10)
+
+    first = sampler.sample_audio_latent(
+        head,
+        positive,
+        negative,
+        noise,
+        guidance_scale=1.3,
+        num_inference_steps=10,
+    )
+    assert scheduler.timesteps.is_cuda
+    second = sampler.sample_audio_latent(
+        head,
+        positive,
+        negative,
+        noise,
+        guidance_scale=1.3,
+        num_inference_steps=10,
+    )
+    assert scheduler.timesteps.is_cuda
+    assert torch.equal(first, second)
+    # Later CPU use restores the canonical CPU schedule.
+    assert sampler.acquire_scheduler(10).timesteps.device.type == "cpu"
+    assert torch.equal(first, second)
 
 
 def test_cached_scheduler_handles_alternating_step_counts() -> None:

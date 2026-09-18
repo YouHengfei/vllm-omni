@@ -123,7 +123,6 @@ def _assert_valid_audio(output) -> None:
     assert 0.1 < audio.numel() / sample_rate < 60.0
 
 
-@pytest.mark.core_model
 @pytest.mark.advanced_model
 @pytest.mark.tts
 @hardware_test(res={"cuda": "H100"}, num_cards=1)
@@ -137,7 +136,6 @@ def test_vibevoice_reference_speech_001(omni_runner: OmniRunner) -> None:
     _assert_valid_audio(outputs[0])
 
 
-@pytest.mark.core_model
 @pytest.mark.advanced_model
 @pytest.mark.tts
 @hardware_test(res={"cuda": "H100"}, num_cards=1)
