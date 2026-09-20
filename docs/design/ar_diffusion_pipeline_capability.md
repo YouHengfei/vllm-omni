@@ -158,7 +158,7 @@ provider are loaded normally and skip AR rollout warmup.
 
 ## Relationship to runner-owned named KV branches
 
-[Runner-owned named causal KV branches](named_kv_branch.md) mirror one parent
+Runner-owned named causal KV branches mirror one parent
 AR request inside the normal model runner and use fixed scheduler-bounded
 capacity. AR-Diffusion state instead owns longer-lived sessions, logical
 self-attention branches, cross-attention KV, and eviction policy in its
