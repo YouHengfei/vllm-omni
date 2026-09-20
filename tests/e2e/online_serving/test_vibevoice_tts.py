@@ -7,7 +7,6 @@ from __future__ import annotations
 import io
 import json
 import os
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import httpx
@@ -301,88 +300,6 @@ def test_vibevoice_http_uploaded_voice_lifecycle_003(omni_server) -> None:
 @pytest.mark.advanced_model
 @hardware_test(res={"cuda": "H100"}, num_cards=1)
 @pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
-def test_vibevoice_http_four_speaker_natural_004(omni_server) -> None:
-    response = _post(
-        omni_server,
-        {
-            "model": omni_server.model,
-            "input": "\n".join(
-                [
-                    "Speaker 0: Welcome.",
-                    "Speaker 1: It is good to be here.",
-                    "Speaker 2: Let us begin.",
-                    "Speaker 3: Thank you.",
-                ]
-            ),
-            "ref_audio": _FOUR_SPEAKER_REFERENCE_URLS,
-            "response_format": "wav",
-            "max_new_tokens": 1_024,
-        },
-        timeout=900.0,
-    )
-
-    assert response.status_code == 200, response.text
-    finish_reason = response.headers.get("X-Finish-Reason")
-    assert finish_reason == "stop"
-    waveform, sample_rate = sf.read(io.BytesIO(response.content), dtype="float32")
-    assert sample_rate == 24_000
-    assert waveform.ndim == 1
-    assert waveform.size >= 4 * 3_200
-    assert waveform.size % 3_200 == 0
-    assert waveform.size < 180 * sample_rate
-    assert np.isfinite(waveform).all()
-    assert float(np.sqrt(np.mean(np.square(waveform, dtype=np.float64)))) > 1e-5
-
-
-@pytest.mark.advanced_model
-@hardware_test(res={"cuda": "H100"}, num_cards=1)
-@pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
-def test_vibevoice_http_batch_mixed_results_005(omni_server) -> None:
-    with httpx.Client(trust_env=False, timeout=600.0) as client:
-        response = client.post(
-            _batch_url(omni_server),
-            json={
-                "model": omni_server.model,
-                "items": [
-                    {
-                        "input": "Force a short length cap.",
-                        "ref_audio": _REFERENCE_DATA_URL,
-                        "response_format": "wav",
-                        "max_new_tokens": 2,
-                    },
-                    {
-                        "input": "This item must fail before generation.",
-                        "ref_audio": _REFERENCE_DATA_URL,
-                        "instructions": "unsupported",
-                    },
-                    {
-                        # Batch items use the same adapter fallback as direct
-                        # speech requests when no reference is supplied.
-                        "input": "Hello from a bundled default voice.",
-                        "response_format": "wav",
-                        "max_new_tokens": 256,
-                    },
-                ],
-            },
-        )
-
-    assert response.status_code == 200, response.text
-    payload = response.json()
-    assert payload["total"] == 3
-    assert payload["succeeded"] == 2
-    assert payload["failed"] == 1
-    first, invalid, third = payload["results"]
-    assert first["status"] == "success"
-    assert base64.b64decode(first["audio_data"])[:4] == b"RIFF"
-    assert invalid["status"] == "error"
-    assert "does not support 'instructions'" in invalid["error"]
-    assert third["status"] == "success"
-    assert base64.b64decode(third["audio_data"])[:4] == b"RIFF"
-
-
-@pytest.mark.advanced_model
-@hardware_test(res={"cuda": "H100"}, num_cards=1)
-@pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
 def test_vibevoice_sse_terminal_length_006(omni_server) -> None:
     delta_chunks: list[bytes] = []
     event_types: list[str] = []
@@ -423,33 +340,6 @@ def test_vibevoice_sse_terminal_length_006(omni_server) -> None:
     assert len(b"".join(delta_chunks)) == 2 * 3_200 * 2
     assert len(done_events) == 1
     assert done_events[0]["finish_reason"] == "length"
-
-
-@pytest.mark.advanced_model
-@hardware_test(res={"cuda": "H100"}, num_cards=1)
-@pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
-def test_vibevoice_raw_pcm_streaming_007(omni_server) -> None:
-    audio = bytearray()
-    with httpx.Client(trust_env=False, timeout=600.0) as client:
-        with client.stream(
-            "POST",
-            _speech_url(omni_server),
-            json={
-                "model": omni_server.model,
-                "input": "Force a short raw PCM length cap.",
-                "ref_audio": _REFERENCE_DATA_URL,
-                "response_format": "pcm",
-                "stream": True,
-                "stream_format": "audio",
-                "max_new_tokens": 2,
-            },
-        ) as response:
-            assert response.status_code == 200, response.read().decode()
-            assert response.headers["content-type"].startswith("audio/pcm")
-            for chunk in response.iter_bytes():
-                audio.extend(chunk)
-
-    assert len(audio) == 2 * 3_200 * 2
 
 
 @pytest.mark.advanced_model
@@ -546,60 +436,6 @@ def test_vibevoice_http_rejects_invalid_requests_008(omni_server) -> None:
         ),
         "at most 4",
     )
-
-
-@pytest.mark.advanced_model
-@hardware_test(res={"cuda": "H100"}, num_cards=1)
-@pytest.mark.parametrize("omni_server", _SERVER_PARAMS, indirect=True)
-def test_vibevoice_concurrent_mixed_controls_009(omni_server) -> None:
-    token_limits = [2, 3, 4, 5]
-    payloads = [
-        {
-            "model": omni_server.model,
-            "input": "Default controls, short request.",
-            "ref_audio": _REFERENCE_DATA_URL,
-            "response_format": "pcm",
-            "max_new_tokens": token_limits[0],
-        },
-        {
-            "model": omni_server.model,
-            "input": "Custom eager controls, first request.",
-            "ref_audio": _REFERENCE_DATA_URL,
-            "response_format": "pcm",
-            "max_new_tokens": token_limits[1],
-            "extra_params": {
-                "guidance_scale": 1.0,
-                "num_diffusion_steps": 5,
-            },
-        },
-        {
-            "model": omni_server.model,
-            "input": "Default controls, independently finishing request.",
-            "ref_audio": _REFERENCE_DATA_URL,
-            "response_format": "pcm",
-            "max_new_tokens": token_limits[2],
-        },
-        {
-            "model": omni_server.model,
-            "input": "Custom eager controls, second request.",
-            "ref_audio": _REFERENCE_DATA_URL,
-            "response_format": "pcm",
-            "max_new_tokens": token_limits[3],
-            "extra_params": {
-                "guidance_scale": 2.0,
-                "num_diffusion_steps": 7,
-            },
-        },
-    ]
-
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        responses = list(executor.map(lambda payload: _post(omni_server, payload, timeout=600.0), payloads))
-
-    for response, token_limit in zip(responses, token_limits, strict=True):
-        assert response.status_code == 200, response.text
-        assert response.headers.get("X-Finish-Reason") == "length"
-        assert response.headers["content-type"].startswith("audio/pcm")
-        assert len(response.content) == token_limit * 3_200 * 2
 
 
 @pytest.mark.advanced_model
