@@ -1,0 +1,346 @@
+{
+  "manifest_version": "1.1",
+  "purpose": "Retrospectively reconstructed provenance for the historical 2026-10-14 VibeVoice A/B; NOT a manifest captured at execution time.",
+  "provenance_audit": {
+    "audited_on": "2026-10-14",
+    "classification": "post_run_reconstruction",
+    "observed_artifacts": "Report/log contents and current file hashes independently checked after the run.",
+    "operator_attestations": "Runtime clean working tree, unchanged Python drivers, original shell commands and uninterrupted GPU exclusivity are confirmed by the test operator, not preserved run-time manifests.",
+    "limitations": "Current hashes/inventories do not independently prove historical identity. No run-time source diff, driver hash manifest or continuous occupancy trace is included.",
+    "followup": "A separately archived pinned eight-configuration rerun is reported in progress; no new results are included here."
+  },
+  "run_id": "ab_idle_20261014_075511",
+  "results_root": "local_tests/vibevoice_pr1/results/ab_idle_20261014_075511",
+  "overall_window": {
+    "start": "2026-10-14 07:55:11 +0800",
+    "end": "2026-10-14 10:34:28 +0800"
+  },
+  "status": "all 8 runs succeeded (ALL DONE markers present in each run.log)",
+  "source_code": {
+    "run_time_head_reported_by_operator": "0d3a6ffa53ea71dbecb8610c1c76126cf550eeea",
+    "run_time_branch_reported_by_operator": "feat/vibevoice-eager",
+    "run_time_tracked_tree_dirty_reported_by_operator": false,
+    "identity_evidence": "Operator confirmation and local reflog/log chronology; no contemporaneous git status/diff snapshot retained. The final HF evaluation overlaps the 10:34:16 amend to 375fb7cfa, which changes only E2E assertions, not runtime/evaluation code.",
+    "run_time_commit_subject": "[Model] Add eager offline VibeVoice-1.5B support (aggregate)",
+    "run_time_commit_date": "2026-10-13 18:26:56 +0800",
+    "merge_base_upstream_main": "596c81640cbec7d3c11bf10d4725442857545adb",
+    "post_run_split_head": "2e558341bcf8cc19392319ebbb39e0f6cd29987d",
+    "post_run_split_date": "2026-10-14 13:58:00-13:59:20 +0800",
+    "production_code_unchanged_run_to_split": "Verified empty diff for vllm_omni/; both commits have tree object 2b064986b3aac60dcd0c7ec7737c5d7ce8eed97f.",
+    "note": "0d3a6ffa5 -> 375fb7cfa adds four E2E assertions; -> 1aace0d07 updates recipe; -> 2e558341 splits commits with an identical full tree. Committed-tree equivalence does not prove absence of transient working-tree edits during execution."
+  },
+  "test_scripts": {
+    "executed_python": {
+      "eval_snapshot_seedtts.py": {
+        "current_path": "local_tests/vibevoice_pr1/eval_snapshot_seedtts.py",
+        "sha256": "b5f9798f9c1bf9f8da28a0ebb3ba24a6f27e54df279277baf5de2874d1fc7269",
+        "identity_note": "Operator attests executed content is unchanged except directory relocation and includes timing/evaluation fixes and FLOAT WAV storage. SHA verified post-run; no contemporaneous hash/backup supplied."
+      },
+      "gen_hf_seedtts.py": {
+        "current_path": "local_tests/vibevoice_pr1/gen_hf_seedtts.py",
+        "sha256": "4cf832f6a174edab3a2c35e1e8102c8a9270112b488c4ab700b302fdd3faa74a",
+        "identity_note": "Operator attests executed content includes FLOAT WAV storage and is unchanged. SHA verified post-run. Current mtime is 2026-10-14 09:58:06 +0800 (within run window); no contemporaneous hash/backup independently resolves historical identity."
+      }
+    },
+    "executed_runner": {
+      "path_at_run_time": "/SharedData/youhf/tmp/vv_run_one.sh (deleted during cleanup)",
+      "equivalent_current": "local_tests/vibevoice_pr1/run_one.sh",
+      "current_sha256": "caa654309b94b5870f1a48e9bbcd011fef26e7131a9958577ff9bd982cd6a6ee",
+      "diff_executed_vs_current": "Operator reports equivalent behavior: absolute repository cd became script-relative cd; vibevoice_m3 Python paths became vibevoice_pr1 paths. Deleted original cannot be independently diffed.",
+      "launch_commands_evidence": "Launch commands/environment below are operator reconstruction; run.log corroborates GPU, backend, locale, counts and windows."
+    },
+    "launch_commands": [
+      "nohup /SharedData/youhf/tmp/vv_run_one.sh 0 omni en 1088 /SharedData/youhf/dataset/Seed-TTS-Eval/en > /SharedData/youhf/tmp/vv-idle-launch-omni-en.log 2>&1 &",
+      "nohup /SharedData/youhf/tmp/vv_run_one.sh 2 omni zh 2020 /SharedData/youhf/dataset/Seed-TTS-Eval/zh > /SharedData/youhf/tmp/vv-idle-launch-omni-zh.log 2>&1 &",
+      "nohup /SharedData/youhf/tmp/vv_run_one.sh 3 hf en 1088 /SharedData/youhf/dataset/Seed-TTS-Eval/en > /SharedData/youhf/tmp/vv-idle-launch-hf-en.log 2>&1 &",
+      "nohup /SharedData/youhf/tmp/vv_run_one.sh 4 hf zh 2020 /SharedData/youhf/dataset/Seed-TTS-Eval/zh > /SharedData/youhf/tmp/vv-idle-launch-hf-zh.log 2>&1 &"
+    ],
+    "key_env_vars": {
+      "HF_HOME": "/SharedData/youhf/cache/huggingface",
+      "SEED_TTS_SIM_EVAL": "1",
+      "OMP_NUM_THREADS": "2",
+      "CUDA_VISIBLE_DEVICES": "<gpu> (0/2/3/4, one job per GPU)"
+    },
+    "generation_params": {
+      "max_tokens": 2048,
+      "warmup": 1,
+      "rounds": 1,
+      "seed": 0,
+      "guidance_scale": 1.3,
+      "num_diffusion_steps": 10,
+      "dtype": "bfloat16",
+      "sampling": "greedy (temperature=0)"
+    },
+    "timing_boundary": "Omni times generate() plus output sorting; prompt string rendering/reference reads precede timer, PCM conversion follows it. generate() includes ingress/tokenization and returns CPU audio. HF times apply_chat_template, device transfer, generate, torch.accelerator.synchronize, CPU float32 extraction and stop/duration bookkeeping; reference reads precede timer. Both exclude startup, warmup, WAV writes and quality evaluation. Boundaries are not strictly identical; historical RTF ratios are not exact matched-boundary speedups."
+  },
+  "checkpoint": {
+    "model_id": "vibevoice/VibeVoice-1.5B-hf",
+    "local_path": "/SharedData/youhf/models/vibevoice_VibeVoice-1.5B-hf",
+    "hf_revision_confirmed_by_user": "d4cd82eb4371bf3e3d088e1ea7fa4eefb60449bf",
+    "config_json_sha256": "31bb81380f725d3f80e1b948183339093fd6600563e2f21d907ffd273fd01adb",
+    "files": "chat_template.jinja config.json figures generation_config.json model-00001-of-00003.safetensors model-00002-of-00003.safetensors model-00003-of-00003.safetensors model.safetensors.index.json processor_config.json README.md tokenizer_config.json tokenizer.json",
+    "shards": 3,
+    "note": "Post-run audit verified current files against cached revision d4cd82eb ETags (SHA256 for shards, Git blob hashes for small files). Operator confirms use of this checkpoint. Current-content verification, not run-time hash capture.",
+    "current_file_hashes": "checkpoint_files.sha256.json"
+  },
+  "dataset": {
+    "name": "Seed-TTS-Eval (BytedanceSpeech/seed-tts-eval)",
+    "root": "/SharedData/youhf/dataset/Seed-TTS-Eval",
+    "locales": {
+      "en": {
+        "meta_lst": "en/meta.lst",
+        "item_count": 1088,
+        "meta_lst_sha256": "7cd29f701743e6c7033edbca764ddc0b979de8c4f4907eff5e5454682114661f"
+      },
+      "zh": {
+        "meta_lst": "zh/meta.lst",
+        "item_count": 2020,
+        "meta_lst_sha256": "86b14ae63229615dee73583887a7452a3e68ab3959b1eb5adae132bcddb89d28"
+      }
+    },
+    "selection": "Framework SeedTTSDataset: full meta.lst, shuffle seed=0, take N. All eight reports' IDs/order and available target texts match current metadata. HF mirrors parse+shuffle. Supplied drivers do not convert the dataset; earlier local preparation history is not established.",
+    "immutable_upstream_revision": null,
+    "revision_status": "Unknown: an immutable upstream dataset revision has not been recovered.",
+    "current_input_hashes": "dataset_inputs.sha256.json",
+    "hash_scope": "Post-run hashes of meta.lst and all distinct referenced audio files identify current inputs, not independently proven execution-time contents."
+  },
+  "python_environments": {
+    "omni": {
+      "interpreter": ".venv-test/bin/python (repo root, /SharedData/youhf/omni_tts/vllm-omni/.venv-test)",
+      "python": "3.12.13",
+      "vllm": "0.31.0",
+      "torch": "2.13.0+cu130 (CUDA 13.0)",
+      "transformers": "5.14.1 (framework-supported; vllm-omni pins >=5.13,<5.15)",
+      "diffusers": "0.40.0",
+      "freeze_file": "freeze_omni_venv-test.txt",
+      "inventory_format": "pip freeze: 371 pinned entries plus one editable entry",
+      "capture_status": "Post-run inventory; editable entry points to later 2e558341. Capture time not embedded; filesystem mtime 2026-10-14 16:08 +0800.",
+      "role": "Omni generation + unified quality eval (Whisper/WavLM/paraformer)"
+    },
+    "hf": {
+      "interpreter": ".venv-test-hf/bin/python (repo root, /SharedData/youhf/omni_tts/vllm-omni/.venv-test-hf)",
+      "python": "3.12.13",
+      "torch": "2.13.0+cu130 (CUDA 13.0)",
+      "transformers": "5.19.0 (VibeVoice HF model code; > vllm 0.31 <5.18 constraint, so no vllm in this env)",
+      "diffusers": "0.40.0",
+      "accelerate": "1.12.0",
+      "freeze_file": "freeze_hf_venv-test-hf.txt",
+      "inventory_format": "pip list table, 72 package rows; NOT installable requirements",
+      "capture_status": "Post-run inventory; capture time not embedded; filesystem mtime 2026-10-14 16:09 +0800.",
+      "role": "HF reference generation only (eval runs in omni env)",
+      "parity_note": "Shared differences (Omni/HF): transformers 5.14.1/5.19.0, tokenizers 0.22.2/0.23.3, filelock 3.32.7/4.1.1, fsspec 2025.3.0/2026.9.0, setuptools 80.10.2/84.0.0, truststore 0.10.4/0.10.5. Other shared inventory versions match; historical environment identity is not proven."
+    }
+  },
+  "eval_models": {
+    "asr_en": {
+      "hf_id": "openai/whisper-large-v3",
+      "cache": "/SharedData/youhf/cache/huggingface/hub/models--openai--whisper-large-v3",
+      "revision": "06f233fe06e710322aca913c1bc4249a0d71fce1",
+      "config_json_sha256": "ad0e8d1e46f4d01f7861a21509e5d0f977d6cc1f367a370603c92541d819807b",
+      "dtype": "float32"
+    },
+    "sim": {
+      "hf_id": "microsoft/wavlm-base-plus",
+      "cache": "/SharedData/youhf/cache/huggingface/hub/models--microsoft--wavlm-base-plus",
+      "revision": "4c66d4806a428f2e922ccfa1a962776e232d487b",
+      "config_json_sha256": "fea6df1c2700a3954fc07e70588aecc9055eeb28db2ff57151a2db0d19180ed4"
+    },
+    "asr_zh": {
+      "modelscope_id": "iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
+      "cache": "/SharedData/youhf/.cache/modelscope/models/iic--speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch/snapshots/master",
+      "configuration_json_sha256": "1acac324430b5a4680ef5ee2947575443ab2039a92c8a0551665f6bc9a606b41",
+      "files": 10
+    },
+    "eval_code": "vllm_omni.benchmarks.data_modules.seed_tts_eval.compute_seed_tts_wer_metrics (tracked, run under .venv-test for BOTH backends; HF WAVs evalled via eval_snapshot_seedtts.py --eval-wavs)",
+    "quantization_alignment": "Drivers apply the same clip/scale/int16 conversion before evaluation. All 6216 retained HF WAVs verified nonempty mono 24 kHz FLOAT, avoiding extra PCM16 quantization. Conversion-protocol alignment, not HF/Omni waveform equality.",
+    "revision_evidence": "Revisions/config hashes checked against current caches post-run. No run-time evaluation-weight manifest retained. Paraformer master is mutable; config hash alone does not pin weights."
+  },
+  "hardware": {
+    "gpu_model": "NVIDIA H100 80GB HBM3",
+    "driver": "580.65.06",
+    "cuda_runtime": "13.0",
+    "gpus": [
+      {
+        "index": 0,
+        "uuid": "GPU-327742d8-ea69-2abc-32f3-762a1f99ef23",
+        "job": "Omni EN",
+        "exclusive_at_run": true
+      },
+      {
+        "index": 2,
+        "uuid": "GPU-d0ff3a32-2144-34e3-0edb-60994decdec3",
+        "job": "Omni ZH",
+        "exclusive_at_run": true
+      },
+      {
+        "index": 3,
+        "uuid": "GPU-44134c36-f5cf-5c7c-7a6a-07621ab505dc",
+        "job": "HF EN",
+        "exclusive_at_run": true
+      },
+      {
+        "index": 4,
+        "uuid": "GPU-6346d7dc-047c-7c7a-0601-d33264f1b56a",
+        "job": "HF ZH",
+        "exclusive_at_run": true
+      }
+    ],
+    "exclusivity_note": "Operator reports 0 MiB / 0% utilization at launch and exclusive allocation throughout. UUIDs/exclusive_at_run flags are operator-supplied. No continuous occupancy trace included; launch idleness alone does not prove uninterrupted exclusivity."
+  },
+  "runs": [
+    {
+      "id": "en_omni_b1",
+      "backend": "omni",
+      "locale": "en",
+      "batch": 1,
+      "items": 1088,
+      "gpu": 0,
+      "window": "07:55:11-08:29:56",
+      "report": "en_omni/omni-b1/report.json",
+      "report_sha256": "11f8ae79ab78db3bc306367ec018faf85f3f689e41b5739438df176f6717d16e",
+      "wer": 0.0501,
+      "sim": 0.8623,
+      "rtf": 0.3179,
+      "natural_stop": "1088/1088"
+    },
+    {
+      "id": "en_omni_b4",
+      "backend": "omni",
+      "locale": "en",
+      "batch": 4,
+      "items": 1088,
+      "gpu": 0,
+      "window": "08:29:56-08:48:21",
+      "report": "en_omni/omni-b4/report.json",
+      "report_sha256": "efa297cd5a43ebd117bce0292c6b9bc685093be842f55595e49edabc08e7ebb4",
+      "wer": 0.0658,
+      "sim": 0.8625,
+      "rtf": 0.1195,
+      "natural_stop": "1088/1088"
+    },
+    {
+      "id": "en_hf_b1",
+      "backend": "hf",
+      "locale": "en",
+      "batch": 1,
+      "items": 1088,
+      "gpu": 3,
+      "window": "07:55:11-08:40:07",
+      "report": "en_hf/hf-b1/report.json",
+      "report_sha256": "76aa0b1a61a3465d0a541717c9c94a71a4f5e9ea967e0b7b880113816a70f82c",
+      "wer": 0.0599,
+      "sim": 0.8649,
+      "rtf": 0.4581,
+      "natural_stop": "1088/1088",
+      "gen_rtf_source": "en_hf/hf-b1-gen.log"
+    },
+    {
+      "id": "en_hf_b4",
+      "backend": "hf",
+      "locale": "en",
+      "batch": 4,
+      "items": 1088,
+      "gpu": 3,
+      "window": "08:40:07-09:01:18",
+      "report": "en_hf/hf-b4/report.json",
+      "report_sha256": "60c78e988fbbf60a75a59d8e94f122427c6b08e893d0ba8e52f76592e72c43a0",
+      "wer": 0.0563,
+      "sim": 0.8631,
+      "rtf": 0.1629,
+      "natural_stop": "1088/1088",
+      "gen_rtf_source": "en_hf/hf-b4-gen.log"
+    },
+    {
+      "id": "zh_omni_b1",
+      "backend": "omni",
+      "locale": "zh",
+      "batch": 1,
+      "items": 2020,
+      "gpu": 2,
+      "window": "07:55:11-09:13:03",
+      "report": "zh_omni/omni-b1/report.json",
+      "report_sha256": "97a710dcadbc17d1fdb747a4169b1f9c90f9508019a829f9edbfbcf07517b6d7",
+      "wer": 0.0249,
+      "sim": 0.8742,
+      "rtf": 0.3193,
+      "natural_stop": "2020/2020",
+      "asr_failed": 1,
+      "wer_sim_evaluated": 2019,
+      "asr_failure": {"utterance_id": "00014150-00000644", "error": "empty_asr"}
+    },
+    {
+      "id": "zh_omni_b4",
+      "backend": "omni",
+      "locale": "zh",
+      "batch": 4,
+      "items": 2020,
+      "gpu": 2,
+      "window": "09:13:03-09:46:59",
+      "report": "zh_omni/omni-b4/report.json",
+      "report_sha256": "b64546aa0b21cb024c6cd564ebb7e441a5a2c8ab8638feefb05a71806c4082e6",
+      "wer": 0.0277,
+      "sim": 0.8724,
+      "rtf": 0.112,
+      "natural_stop": "2020/2020",
+      "asr_failed": 1,
+      "wer_sim_evaluated": 2019,
+      "asr_failure": {"utterance_id": "00004978-00000074", "error": "empty_asr"}
+    },
+    {
+      "id": "zh_hf_b1",
+      "backend": "hf",
+      "locale": "zh",
+      "batch": 1,
+      "items": 2020,
+      "gpu": 4,
+      "window": "07:55:11-09:46:02",
+      "report": "zh_hf/hf-b1/report.json",
+      "report_sha256": "f643d54c0f7a7ff210192a0de55a302f908eaed90520d48ef276bd7cc7eb37f1",
+      "wer": 0.0269,
+      "sim": 0.8709,
+      "rtf": 0.4559,
+      "natural_stop": "2019/2020",
+      "asr_failed": 0,
+      "wer_sim_evaluated": 2020,
+      "gen_rtf_source": "zh_hf/hf-b1-gen.log"
+    },
+    {
+      "id": "zh_hf_b4",
+      "backend": "hf",
+      "locale": "zh",
+      "batch": 4,
+      "items": 2020,
+      "gpu": 4,
+      "window": "09:46:02-10:34:28",
+      "report": "zh_hf/hf-b4/report.json",
+      "report_sha256": "133c142dd1aa7ee05dcdeabcb4a43461aee2a3cf30e49ea3668f5afec4024233",
+      "wer": 0.03,
+      "sim": 0.8726,
+      "rtf": 0.1801,
+      "natural_stop": "2020/2020",
+      "asr_failed": 0,
+      "wer_sim_evaluated": 2020,
+      "gen_rtf_source": "zh_hf/hf-b4-gen.log"
+    }
+  ],
+  "artifacts_in_results_root": [
+    "manifest.json (this file)",
+    "freeze_omni_venv-test.txt",
+    "freeze_hf_venv-test-hf.txt",
+    "dataset_inputs.sha256.json (post-run current inputs)",
+    "checkpoint_files.sha256.json (post-run current checkpoint)",
+    "{en,zh}_omni/run.log",
+    "{en,zh}_omni/omni-b{1,4}.log",
+    "{en,zh}_omni/omni-b{1,4}/report.json",
+    "{en,zh}_hf/run.log",
+    "{en,zh}_hf/hf-b{1,4}-{gen,eval}.log",
+    "{en,zh}_hf/hf-b{1,4}/report.json",
+    "{en,zh}_hf/hf-b{1,4}-wavs/*.wav (local only; excluded from evidence bundle)"
+  ],
+  "caveats": [
+    "Historical reconstruction, not run-time instrumentation. Python identity and deleted-shell equivalence are operator attestations; hashes identify current copies.",
+    "Omni ZH B1/B4 each have one empty_asr on DIFFERENT items; both stop naturally on all 2020 items. HF ZH has no ASR failures; B1 has 2019 natural stops. Empty ASR alone does not identify a generation or recognition defect.",
+    "Operator reports earlier contended runs deleted as superseded. They are not included or used as corroborating evidence here.",
+    "Immutable dataset revision, contemporaneous source/driver/environment fingerprints and continuous GPU isolation evidence remain unavailable. Timer boundaries differ as documented above."
+  ]
+}

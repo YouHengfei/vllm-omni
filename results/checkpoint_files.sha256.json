@@ -1,0 +1,112 @@
+{
+  "captured_at": "2026-10-14T16:32:25.233087+08:00",
+  "evidence_type": "post_run_current_content",
+  "root": "/SharedData/youhf/models/vibevoice_VibeVoice-1.5B-hf",
+  "note": "Current file hashes verified against local cached download ETags; not captured during execution. No weights included.",
+  "files": [
+    {
+      "path": ".gitattributes",
+      "bytes": 1623,
+      "sha256": "44147c2bf2a43be829a02a4f1e074b71c36543d188fb87caadb81e25aefe59c6",
+      "cached_revision": "d4cd82eb4371bf3e3d088e1ea7fa4eefb60449bf",
+      "cached_etag": "76a458ba722d3630ef7aeca9e2997d66054bb0d0",
+      "etag_verified": true
+    },
+    {
+      "path": "README.md",
+      "bytes": 21897,
+      "sha256": "758787b0905a29506620042d71cde0cf6ca8bc368e9b6b3a053158216b4d2063",
+      "cached_revision": "d4cd82eb4371bf3e3d088e1ea7fa4eefb60449bf",
+      "cached_etag": "0d441c4412e949d4ec1978d43d6af73e11584271",
+      "etag_verified": true
+    },
+    {
+      "path": "chat_template.jinja",
+      "bytes": 2420,
+      "sha256": "2a7f2fb7a53a8b0f8df52660104ef23dd31686aab8db612e8056a50b504ee848",
+      "cached_revision": "d4cd82eb4371bf3e3d088e1ea7fa4eefb60449bf",
+      "cached_etag": "51495c4e18ce788b562c8710209c2b379825036f",
+      "etag_verified": true
+    },
+    {
+      "path": "config.json",
+      "bytes": 3201,
+      "sha256": "31bb81380f725d3f80e1b948183339093fd6600563e2f21d907ffd273fd01adb",
+      "cached_revision": "d4cd82eb4371bf3e3d088e1ea7fa4eefb60449bf",
+      "cached_etag": "e24107ef50f7ad185a548261ccf0a0fb79eaaec8",
+      "etag_verified": true
+    },
+    {
+      "path": "figures/Fig1.png",
+      "bytes": 153971,
+      "sha256": "64464f28380f81e76c88d76431a08b48c7f82a283e17f2e32c241c4b03407d19",
+      "cached_revision": "d4cd82eb4371bf3e3d088e1ea7fa4eefb60449bf",
+      "cached_etag": "64464f28380f81e76c88d76431a08b48c7f82a283e17f2e32c241c4b03407d19",
+      "etag_verified": true
+    },
+    {
+      "path": "generation_config.json",
+      "bytes": 487,
+      "sha256": "9e8563ac7bcb305cdf5cc8c2a055acbb09dfae525990907d5ab86ea16413966d",
+      "cached_revision": "d4cd82eb4371bf3e3d088e1ea7fa4eefb60449bf",
+      "cached_etag": "ff05333e967d55d5d7492aaf6b8ada35469d242f",
+      "etag_verified": true
+    },
+    {
+      "path": "model-00001-of-00003.safetensors",
+      "bytes": 1973742446,
+      "sha256": "a3b37bfffd8433e74b7255da7cd87751830496964e68650c0591a1c0d47b2bfc",
+      "cached_revision": "d4cd82eb4371bf3e3d088e1ea7fa4eefb60449bf",
+      "cached_etag": "a3b37bfffd8433e74b7255da7cd87751830496964e68650c0591a1c0d47b2bfc",
+      "etag_verified": true
+    },
+    {
+      "path": "model-00002-of-00003.safetensors",
+      "bytes": 1993066216,
+      "sha256": "6c560af42a0cb2223d3db6c8d9ea8139d853b6f5c5ffa6664f1afe83ecbb7328",
+      "cached_revision": "d4cd82eb4371bf3e3d088e1ea7fa4eefb60449bf",
+      "cached_etag": "6c560af42a0cb2223d3db6c8d9ea8139d853b6f5c5ffa6664f1afe83ecbb7328",
+      "etag_verified": true
+    },
+    {
+      "path": "model-00003-of-00003.safetensors",
+      "bytes": 1441395288,
+      "sha256": "eeb349833fd1e3558a6b11c7ba67b992acd2f22f5b85de377239367713d16a41",
+      "cached_revision": "d4cd82eb4371bf3e3d088e1ea7fa4eefb60449bf",
+      "cached_etag": "eeb349833fd1e3558a6b11c7ba67b992acd2f22f5b85de377239367713d16a41",
+      "etag_verified": true
+    },
+    {
+      "path": "model.safetensors.index.json",
+      "bytes": 124129,
+      "sha256": "756bdb2219e36988dc387cfdeb7f617b9a4c010e1a7f3176ec424fcfe0ff4d5f",
+      "cached_revision": "d4cd82eb4371bf3e3d088e1ea7fa4eefb60449bf",
+      "cached_etag": "2c3a1a1be4870d67e968a871954bfb9769cc078c",
+      "etag_verified": true
+    },
+    {
+      "path": "processor_config.json",
+      "bytes": 511,
+      "sha256": "f66f30e98dc202990ae4e71979b2dace2f2d41637de98e030423d0dbb3702990",
+      "cached_revision": "d4cd82eb4371bf3e3d088e1ea7fa4eefb60449bf",
+      "cached_etag": "e05a0365bf7e2a01f66f24b10f794b04736e2733",
+      "etag_verified": true
+    },
+    {
+      "path": "tokenizer.json",
+      "bytes": 11421892,
+      "sha256": "3fd169731d2cbde95e10bf356d66d5997fd885dd8dbb6fb4684da3f23b2585d8",
+      "cached_revision": "d4cd82eb4371bf3e3d088e1ea7fa4eefb60449bf",
+      "cached_etag": "3fd169731d2cbde95e10bf356d66d5997fd885dd8dbb6fb4684da3f23b2585d8",
+      "etag_verified": true
+    },
+    {
+      "path": "tokenizer_config.json",
+      "bytes": 811,
+      "sha256": "bf04d5e7a4ffdc938666cdd73ec417b105bb4a4e7f909d03c2a8e06907744d59",
+      "cached_revision": "d4cd82eb4371bf3e3d088e1ea7fa4eefb60449bf",
+      "cached_etag": "0b30405ba70da3c6b0c82f6916372e735cfb1dfe",
+      "etag_verified": true
+    }
+  ]
+}

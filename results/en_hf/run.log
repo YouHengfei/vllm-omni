@@ -1,0 +1,8 @@
+=== hf en full on GPU3, 1088 items, log /SharedData/youhf/tmp/vv-idle-en-hf-gpu3-20261014-075511 ===
+[07:55:11] HF B1 gen start
+[08:33:24] HF B1 eval start
+[08:40:07] HF B1 done
+[08:40:07] HF B4 gen start
+[08:54:18] HF B4 eval start
+[09:01:18] HF B4 done
+[09:01:18] ALL DONE hf en gpu3

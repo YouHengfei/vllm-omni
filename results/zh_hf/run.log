@@ -1,0 +1,8 @@
+=== hf zh full on GPU4, 2020 items, log /SharedData/youhf/tmp/vv-idle-zh-hf-gpu4-20261014-075511 ===
+[07:55:11] HF B1 gen start
+[09:37:49] HF B1 eval start
+[09:46:02] HF B1 done
+[09:46:02] HF B4 gen start
+[10:26:19] HF B4 eval start
+[10:34:28] HF B4 done
+[10:34:28] ALL DONE hf zh gpu4

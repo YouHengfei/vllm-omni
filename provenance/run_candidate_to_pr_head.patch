@@ -1,0 +1,113 @@
+diff --git a/recipes/Microsoft/VibeVoice-1.5B-H100.md b/recipes/Microsoft/VibeVoice-1.5B-H100.md
+index bc276b191..818c805a4 100644
+--- a/recipes/Microsoft/VibeVoice-1.5B-H100.md
++++ b/recipes/Microsoft/VibeVoice-1.5B-H100.md
+@@ -51,8 +51,10 @@ offline Python process.
+ - OS: Linux
+ - Python: 3.12
+ - Driver / runtime: NVIDIA driver 580.65.06, CUDA 13.0 (torch 2.13.0+cu130)
+-- vLLM version: 0.31.0 (Transformers 5.14.1)
+-- vLLM-Omni version or commit: `main` plus the VibeVoice PR
++- vLLM version: 0.31.0 (Transformers 5.14.1, diffusers 0.40.0, flashinfer-python 0.7.0.post1)
++- HF reference: Transformers 5.19.0, torch 2.13.0, diffusers 0.40.0 in a separate environment
++- Reviewed vLLM-Omni implementation: `375fb7cfa0f68711c3b8f38bb0d81fb38122f35a`
++  (production code unchanged from `0d3a6ffa`; the later amend strengthens an E2E assertion)
+ 
+ ## Command
+ 
+@@ -103,30 +105,56 @@ non-empty audio. All cases verify the public `audio` field and 24 kHz sample rat
+ 
+ CI: routed to a single-H100 step in `.buildkite/cuda/test-merge.yml` (L3).
+ 
+-### Historical observations
+-
+-Local results that predate the final source snapshot (dirty HEAD, no
+-source/checkpoint/dataset content fingerprints) — **not current-snapshot
+-qualification or reproducible speedup claims**. Setup: 1x H100, BF16, deploy
+-defaults, `max_tokens=2048`; seed-tts-eval WER (EN: whisper-large-v3; ZH:
+-paraformer-zh), WavLM-base-plus cosine SIM.
+-
+-| Workload | Concurrency | WER | SIM | Aggregate RTF |
+-| --- | --- | --- | --- | --- |
+-| Seed-TTS-Eval EN, 100 items × 3 rounds | 1 | 0.041 (Transformers 5.19: 0.048) | 0.869 (0.868) | 0.321 (0.469) |
+-| Seed-TTS-Eval EN, 100 items × 3 rounds | 4 | 0.056 (Transformers 5.19: 0.049) | 0.868 (0.868) | 0.118 (0.162) |
+-| Seed-TTS-Eval EN, all 1,088 items | 4 | 0.061 | 0.866 | 0.113 |
+-| Seed-TTS-Eval ZH, all 2,020 items | 4 | 0.026 | 0.874 | 0.108 |
+-
+-Aggregate RTF is whole-round wall time / output audio duration (including WAV
+-writes). The 100-item runs warmed up with one batch at the same batch size
+-(1 request at B1, 4 at B4); the full EN/ZH runs had no explicit warmup, and
+-their wall time also included reference reads and shutdown. HF per-batch timers
+-excluded prompt processing and device transfer, whereas Omni timers included
+-ingress. Every request stopped naturally. The no-reference comparison
+-(2 texts × 10 runs) had mean WER 0.028 vs HF 0.029.
+-Reproducible benchmarking lands with the serving follow-up via
+-`benchmarks/tts/bench_tts.py`.
++### Full-dataset qualification (2026-10-14)
++
++Eight local runs: Seed-TTS-Eval EN (1,088 items) and ZH (2,020 items),
++Omni/HF, B1/B4. Each run used one exclusively allocated, otherwise-idle H100
++80GB; backend/locale groups ran on separate GPUs. Both backends used the same
++native checkpoint and ordered datasets, BF16, seed 0, `max_tokens=2048`,
++CFG 1.3 and 10 diffusion steps. Omni used the deploy defaults (TP1/PP1).
++Each configuration warmed up with one same-size batch, then measured one
++full-dataset pass. Warmup consumes RNG state; matching seeds do not imply
++identical waveforms across backends or batch sizes.
++
++Generation wall time is the sum of batch timers, including prompt processing,
++generation, GPU completion and audio D2H. It excludes model startup, warmup,
++reference-file reads, WAV writes, shutdown and quality evaluation.
++Aggregate RTF = generation wall / generated audio duration, including all
++outputs regardless of ASR success or natural termination.
++
++Both outputs were evaluated after generation and engine release using
++`vllm_omni/benchmarks/data_modules/seed_tts_eval.py` in the same Omni evaluation
++environment: Whisper-large-v3 for EN, Paraformer-zh for ZH, and WavLM-base-plus
++embedding cosine for SIM. Intermediate WAVs used float32 storage before the
++shared 24 kHz mono PCM16 evaluation conversion. WER/SIM are per-item means;
++SIM is a proxy, not a perceptual-quality or speaker-verification guarantee.
++
++| Corpus | Backend | Batch | WER | SIM | Natural stop | Gen. wall (s) | Audio (s) | RTF |
++| --- | --- | --- | --- | --- | --- | --- | --- | --- |
++| EN | Omni | 1 | 0.0501 | 0.8623 | 1088/1088 | 1589.7 | 5000.3 | 0.3179 |
++| EN | HF | 1 | 0.0599 | 0.8649 | 1088/1088 | 2248.5 | 4908.0 | 0.4581 |
++| EN | Omni | 4 | 0.0658 | 0.8625 | 1088/1088 | 614.1 | 5137.6 | 0.1195 |
++| EN | HF | 4 | 0.0563 | 0.8631 | 1088/1088 | 813.8 | 4996.5 | 0.1629 |
++| ZH | Omni | 1 | 0.0249 | 0.8742 | 2020/2020 | 4092.2 | 12814.4 | 0.3193 |
++| ZH | HF | 1 | 0.0269 | 0.8709 | 2019/2020 | 6100.5 | 13380.7 | 0.4559 |
++| ZH | Omni | 4 | 0.0277 | 0.8724 | 2020/2020 | 1479.9 | 13214.3 | 0.1120 |
++| ZH | HF | 4 | 0.0300 | 0.8726 | 2020/2020 | 2373.3 | 13177.9 | 0.1801 |
++
++- EN WER/SIM cover all 1,088 items in each run. Omni ZH B1 and B4 each have
++  one `empty_asr` result, so their means cover 2,019 items; HF ZH covers all
++  2,020. Empty ASR is an evaluation outcome, not evidence of a particular
++  generation or recognizer failure. Natural termination is counted separately.
++- Omni's RTF advantage over HF is 1.44x/1.43x at B1 (EN/ZH), and 1.36x/1.61x
++  at B4. These are HF/Omni RTF ratios, not identical-output latency speedups:
++  the generated durations differ. Omni B1/B4 RTF ratios are 2.66x/2.85x.
++- Omni WER is lower in three configurations, but EN B4 is higher by 0.0095
++  (0.95 percentage points). SIM is close across backends. This single pass
++  does not establish statistical equivalence or explain the EN B4 difference.
++- These are single-pass qualification results, not a repeated benchmark or
++  a new peak-memory measurement. Reports do not embed source/checkpoint/data
++  hashes or continuous GPU-utilization traces. The local generation drivers
++  are not shipped in this PR; reproducible serving benchmarks remain a
++  follow-up via `benchmarks/tts/bench_tts.py`.
+ 
+ ## Notes
+ 
+diff --git a/tests/e2e/offline_inference/test_vibevoice_tts.py b/tests/e2e/offline_inference/test_vibevoice_tts.py
+index 154459dcd..4d9cba41f 100644
+--- a/tests/e2e/offline_inference/test_vibevoice_tts.py
++++ b/tests/e2e/offline_inference/test_vibevoice_tts.py
+@@ -82,6 +82,10 @@ def test_vibevoice_length_cap_keeps_last_chunk(omni_runner: OmniRunner) -> None:
+     (output,) = omni_runner.omni.generate(_requests(["Hello, this is a short test."]), [SamplingParams(max_tokens=5)])
+     completion = output.outputs[0]
+     assert completion.finish_reason == "length"
++    assert len(completion.token_ids) == 5
++    assert completion.token_ids[-1] == AUDIO_TOKEN_ID, (
++        "The capped request must end on an AUDIO token to exercise terminal audio emission."
++    )
+     assert _audio(completion).numel() == completion.token_ids.count(AUDIO_TOKEN_ID) * SAMPLES_PER_TOKEN > 0
+ 
+ 
