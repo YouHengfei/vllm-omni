@@ -1,0 +1,9 @@
+[08:10:09] en_omni_b1 start
+[08:44:54] en_omni_b1 done rc=0
+[08:44:54] en_omni_b4 start
+[09:03:01] en_omni_b4 done rc=0
+[09:03:01] en_hf_b1 start
+[09:46:51] en_hf_b1 done rc=0
+[09:46:51] en_hf_b4 start
+[10:10:36] en_hf_b4 done rc=0
+[10:10:36] ALL DONE gpu1 -> /SharedData/youhf/tmp/vv-pinned-gpu1-20261015-081007

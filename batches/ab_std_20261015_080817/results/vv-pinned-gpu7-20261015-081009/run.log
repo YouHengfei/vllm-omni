@@ -1,0 +1,5 @@
+[08:10:11] zh_hf_b1 start
+[09:54:02] zh_hf_b1 done rc=0
+[09:54:02] zh_hf_b4 start
+[10:38:56] zh_hf_b4 done rc=0
+[10:38:56] ALL DONE gpu7 -> /SharedData/youhf/tmp/vv-pinned-gpu7-20261015-081009

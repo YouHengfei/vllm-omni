@@ -1,0 +1,112 @@
+Loading Seed-TTS eval Whisper HF model 'openai/whisper-large-v3' on cuda:0 (one-time, seed-tts-eval protocol)...
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/processor_config.json
+Retrying in 1s [Retry 1/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/processor_config.json
+Retrying in 2s [Retry 2/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/processor_config.json
+Retrying in 4s [Retry 3/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/processor_config.json
+Retrying in 8s [Retry 4/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/processor_config.json
+Retrying in 8s [Retry 5/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/processor_config.json
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/chat_template.json
+Retrying in 1s [Retry 1/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/chat_template.json
+Retrying in 2s [Retry 2/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/chat_template.json
+Retrying in 4s [Retry 3/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/chat_template.json
+Retrying in 8s [Retry 4/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/chat_template.json
+Retrying in 8s [Retry 5/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/chat_template.json
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/chat_template.jinja
+Retrying in 1s [Retry 1/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/chat_template.jinja
+Retrying in 2s [Retry 2/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/chat_template.jinja
+Retrying in 4s [Retry 3/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/chat_template.jinja
+Retrying in 8s [Retry 4/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/chat_template.jinja
+Retrying in 8s [Retry 5/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/chat_template.jinja
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/audio_tokenizer_config.json
+Retrying in 1s [Retry 1/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/audio_tokenizer_config.json
+Retrying in 2s [Retry 2/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/audio_tokenizer_config.json
+Retrying in 4s [Retry 3/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/audio_tokenizer_config.json
+Retrying in 8s [Retry 4/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/audio_tokenizer_config.json
+Retrying in 8s [Retry 5/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/audio_tokenizer_config.json
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/processor_config.json
+Retrying in 1s [Retry 1/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/processor_config.json
+Retrying in 2s [Retry 2/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/processor_config.json
+Retrying in 4s [Retry 3/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/processor_config.json
+Retrying in 8s [Retry 4/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/processor_config.json
+Retrying in 8s [Retry 5/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/processor_config.json
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/processor_config.json
+Retrying in 1s [Retry 1/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/processor_config.json
+Retrying in 2s [Retry 2/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/processor_config.json
+Retrying in 4s [Retry 3/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/processor_config.json
+Retrying in 8s [Retry 4/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/processor_config.json
+Retrying in 8s [Retry 5/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/openai/whisper-large-v3/resolve/main/processor_config.json
+Loading weights:   0%|          | 0/1259 [00:00<?, ?it/s]Loading weights:   3%|▎         | 39/1259 [00:00<00:03, 333.63it/s]Loading weights:   6%|▌         | 77/1259 [00:00<00:03, 335.33it/s]Loading weights:   9%|▉         | 111/1259 [00:00<00:03, 322.70it/s]Loading weights:  12%|█▏        | 151/1259 [00:00<00:03, 332.59it/s]Loading weights:  15%|█▍        | 185/1259 [00:00<00:03, 309.55it/s]Loading weights:  18%|█▊        | 231/1259 [00:00<00:03, 332.95it/s]Loading weights:  21%|██        | 266/1259 [00:00<00:02, 337.37it/s]Loading weights:  24%|██▍       | 300/1259 [00:00<00:02, 326.92it/s]Loading weights:  26%|██▋       | 333/1259 [00:01<00:02, 327.67it/s]Loading weights:  29%|██▉       | 371/1259 [00:01<00:02, 333.49it/s]Loading weights:  33%|███▎      | 410/1259 [00:01<00:02, 344.25it/s]Loading weights:  35%|███▌      | 445/1259 [00:01<00:02, 340.46it/s]Loading weights:  38%|███▊      | 480/1259 [00:01<00:02, 330.94it/s]Loading weights:  41%|████      | 519/1259 [00:01<00:02, 298.73it/s]Loading weights:  45%|████▌     | 567/1259 [00:01<00:02, 326.89it/s]Loading weights:  48%|████▊     | 609/1259 [00:01<00:01, 350.42it/s]Loading weights:  51%|█████     | 645/1259 [00:01<00:01, 347.66it/s]Loading weights:  54%|█████▍    | 683/1259 [00:02<00:01, 349.71it/s]Loading weights:  57%|█████▋    | 720/1259 [00:02<00:01, 351.89it/s]Loading weights:  60%|██████    | 759/1259 [00:02<00:01, 344.38it/s]Loading weights:  63%|██████▎   | 796/1259 [00:02<00:01, 334.75it/s]Loading weights:  66%|██████▌   | 830/1259 [00:02<00:01, 325.67it/s]Loading weights:  69%|██████▉   | 867/1259 [00:02<00:01, 336.86it/s]Loading weights:  72%|███████▏  | 901/1259 [00:02<00:01, 312.77it/s]Loading weights:  75%|███████▍  | 938/1259 [00:02<00:00, 324.78it/s]Loading weights:  77%|███████▋  | 972/1259 [00:02<00:00, 308.27it/s]Loading weights:  80%|███████▉  | 1004/1259 [00:03<00:00, 311.34it/s]Loading weights:  82%|████████▏ | 1036/1259 [00:03<00:00, 297.21it/s]Loading weights:  85%|████████▍ | 1066/1259 [00:03<00:00, 295.72it/s]Loading weights:  88%|████████▊ | 1107/1259 [00:03<00:00, 309.22it/s]Loading weights:  91%|█████████ | 1141/1259 [00:03<00:00, 302.86it/s]Loading weights:  93%|█████████▎| 1172/1259 [00:03<00:00, 301.61it/s]Loading weights:  96%|█████████▌| 1203/1259 [00:03<00:00, 293.07it/s]Loading weights:  98%|█████████▊| 1233/1259 [00:03<00:00, 294.11it/s]Loading weights: 100%|██████████| 1259/1259 [00:03<00:00, 323.33it/s]
+[transformers] Using custom `forced_decoder_ids` from the (generation) config. This is deprecated in favor of the `task` and `language` flags/config options.
+[transformers] A custom logits processor of type <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> has been passed to `.generate()`, but it was also created in `.generate()`, given its parameterization. The custom <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> will take precedence. Please check the docstring of <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> to see related `.generate()` flags.
+[transformers] A custom logits processor of type <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> has been passed to `.generate()`, but it was also created in `.generate()`, given its parameterization. The custom <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> will take precedence. Please check the docstring of <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> to see related `.generate()` flags.
+[transformers] Ignoring clean_up_tokenization_spaces=True for BPE tokenizer WhisperTokenizer. The clean_up_tokenization post-processing step is designed for WordPiece tokenizers and is destructive for BPE (it strips spaces before punctuation). Set clean_up_tokenization_spaces=False to suppress this warning, or set clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output=True to force cleanup anyway.
+Loading WavLM 'microsoft/wavlm-base-plus' on cuda:0 for Seed-TTS SIM (embedding cosine; not identical to seed-tts-eval UniSpeech SV checkpoint).
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/microsoft/wavlm-base-plus/resolve/main/processor_config.json
+Retrying in 1s [Retry 1/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/microsoft/wavlm-base-plus/resolve/main/processor_config.json
+Retrying in 2s [Retry 2/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/microsoft/wavlm-base-plus/resolve/main/processor_config.json
+Retrying in 4s [Retry 3/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/microsoft/wavlm-base-plus/resolve/main/processor_config.json
+Retrying in 8s [Retry 4/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/microsoft/wavlm-base-plus/resolve/main/processor_config.json
+Retrying in 8s [Retry 5/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/microsoft/wavlm-base-plus/resolve/main/processor_config.json
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/microsoft/wavlm-base-plus/resolve/main/processor_config.json
+Retrying in 1s [Retry 1/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/microsoft/wavlm-base-plus/resolve/main/processor_config.json
+Retrying in 2s [Retry 2/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/microsoft/wavlm-base-plus/resolve/main/processor_config.json
+Retrying in 4s [Retry 3/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/microsoft/wavlm-base-plus/resolve/main/processor_config.json
+Retrying in 8s [Retry 4/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/microsoft/wavlm-base-plus/resolve/main/processor_config.json
+Retrying in 8s [Retry 5/5].
+'[Errno 111] Connection refused' thrown while requesting HEAD https://hf-mirror.com/microsoft/wavlm-base-plus/resolve/main/processor_config.json
+Loading weights:   0%|          | 0/248 [00:00<?, ?it/s]Loading weights: 100%|██████████| 248/248 [00:00<00:00, 45199.99it/s]
+/SharedData/youhf/omni_tts/vllm-omni/.venv-test/lib/python3.12/site-packages/torch/nn/functional.py:6802: UserWarning: Support for mismatched key_padding_mask and attn_mask is deprecated. Use same type for both instead.
+  key_padding_mask = _canonical_mask(
+===== Seed-TTS eval (seed-tts-eval protocol) =====
+Evaluated (WER, lower is better):        1088      
+Mean WER:                                0.0563    
+Median WER:                              0.0000    
+Request failed:                          0         
+No PCM captured:                         0         
+ASR / WER failed:                        0         
+SIM evaluated (higher ~ closer):         1088      
+Mean SIM:                                0.8631    
+Median SIM:                              0.8717    
+SIM skipped (no ref path):               0         
+SIM embedding errors:                    0         
+==================================================
+-> /SharedData/youhf/tmp/vv-pinned-gpu1-20261015-081007/en_hf_b4/report.json

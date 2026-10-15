@@ -1,0 +1,16 @@
+{
+  "audited_at": "2026-10-15T11:35:58.625324+08:00",
+  "source_head": "2e558341bcf8cc19392319ebbb39e0f6cd29987d",
+  "production_tree": "2b064986b3aac60dcd0c7ec7737c5d7ce8eed97f",
+  "tracked_worktree_clean_at_audit": true,
+  "evaluator_sha256_at_audit": "6e6969b542efd2ddc14062ca74502bfacfaa86541032abac4c61d11c0243dae8",
+  "report_hashes_verified": 9,
+  "input_wav_hashes_verified": 2020,
+  "original_generation_metrics_preserved": true,
+  "raw_sub_manifests_preserved": true,
+  "limitations": [
+    "Only recorded hashes are verified; no retrospective claim that unrecorded weights/reference inputs were pinned at execution.",
+    "Continuous GPU exclusivity is not established.",
+    "Archived launch script has known metadata/status bugs and is not a certified replay harness."
+  ]
+}

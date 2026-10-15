@@ -1,0 +1,7 @@
+command: .venv-test/bin/python -B local_tests/vibevoice_pr1/eval_snapshot_seedtts.py --dataset /SharedData/youhf/dataset/Seed-TTS-Eval/zh --items 2020 --seed 0 --eval-wavs <WAV_DIR> --output <OUT>
+env: HF_HOME=/SharedData/youhf/cache/huggingface SEED_TTS_SIM_EVAL=1 CUDA_VISIBLE_DEVICES='' (eval-only, no gen)
+eval_code: vllm_omni.benchmarks.data_modules.seed_tts_eval.compute_seed_tts_wer_metrics (sha at manifest inputs)
+asr_zh: modelscope iic/speech_seaco_paraformer... rev master (cfg sha 1acac324...)
+sim: microsoft/wavlm-base-plus rev 4c66d480...
+input_wav_dir: local_tests/vibevoice_pr1/results/ab_std_20261015_080817/vv-pinned-gpu2-20261015-081008/wavs_zh_omni_b4
+input_wav_count: 2020 (FLOAT 24kHz mono, sha listed in wav_sha256.txt)

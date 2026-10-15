@@ -1,0 +1,319 @@
+{
+  "run_id": "vv-std-20261015-080817",
+  "status": "complete",
+  "standard_process": "pin inputs -> run -> append outputs -> flip status; no hand-edit after",
+  "planned_schedule_note": "two fastest (EN omni ~53m + EN hf ~66m) serial on GPU1; ZH omni GPU2; ZH hf GPU7",
+  "inputs": {
+    "source": {
+      "head": "2e558341bcf8cc19392319ebbb39e0f6cd29987d",
+      "branch": "feat/vibevoice-eager",
+      "tracked_dirty_files": 0,
+      "merge_base_upstream": "596c81640cbec7d3c11bf10d4725442857545adb"
+    },
+    "scripts": {
+      "eval_snapshot_seedtts.py": {
+        "path": "local_tests/vibevoice_pr1/eval_snapshot_seedtts.py",
+        "sha256": "b5f9798f9c1bf9f8da28a0ebb3ba24a6f27e54df279277baf5de2874d1fc7269"
+      },
+      "gen_hf_seedtts.py": {
+        "path": "local_tests/vibevoice_pr1/gen_hf_seedtts.py",
+        "sha256": "4cf832f6a174edab3a2c35e1e8102c8a9270112b488c4ab700b302fdd3faa74a"
+      },
+      "run_pinned.sh": {
+        "path": "local_tests/vibevoice_pr1/run_pinned.sh",
+        "sha256": "e71c741f1338fd61c7ddbea69ccabab1600f3ff0b4f36485c998d51f4db66a47"
+      }
+    },
+    "checkpoint": {
+      "model_id": "vibevoice/VibeVoice-1.5B-hf",
+      "local_path": "/SharedData/youhf/models/vibevoice_VibeVoice-1.5B-hf",
+      "hf_revision_confirmed": "d4cd82eb4371bf3e3d088e1ea7fa4eefb60449bf",
+      "config_json_sha256": "31bb81380f725d3f80e1b948183339093fd6600563e2f21d907ffd273fd01adb",
+      "shards": 3
+    },
+    "dataset": {
+      "root": "/SharedData/youhf/dataset/Seed-TTS-Eval",
+      "en": {
+        "meta_lst_sha256": "7cd29f701743e6c7033edbca764ddc0b979de8c4f4907eff5e5454682114661f",
+        "count": 1088
+      },
+      "zh": {
+        "meta_lst_sha256": "86b14ae63229615dee73583887a7452a3e68ab3959b1eb5adae132bcddb89d28",
+        "count": 2020
+      },
+      "selection": "SeedTTSDataset shuffle seed=0, take N"
+    },
+    "environments": {
+      "omni": {
+        "interpreter": ".venv-test/bin/python",
+        "python": "3.12.13",
+        "vllm": "0.31.0",
+        "torch": "2.13.0+cu130",
+        "transformers": "5.14.1",
+        "diffusers": "0.40.0",
+        "freeze": "freeze_omni.txt"
+      },
+      "hf": {
+        "interpreter": ".venv-test-hf/bin/python",
+        "python": "3.12.13",
+        "torch": "2.13.0+cu130",
+        "transformers": "5.19.0",
+        "diffusers": "0.40.0",
+        "freeze": "freeze_hf.txt"
+      }
+    },
+    "eval_models": {
+      "asr_en": {
+        "hf_id": "openai/whisper-large-v3",
+        "revision": "06f233fe06e710322aca913c1bc4249a0d71fce1"
+      },
+      "sim": {
+        "hf_id": "microsoft/wavlm-base-plus",
+        "revision": "4c66d4806a428f2e922ccfa1a962776e232d487b"
+      },
+      "asr_zh": {
+        "modelscope_id": "iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
+      },
+      "eval_code": "vllm_omni.benchmarks.data_modules.seed_tts_eval.compute_seed_tts_wer_metrics (run under .venv-test for both backends)"
+    },
+    "hardware": {
+      "gpu_model": "NVIDIA H100 80GB HBM3",
+      "driver": "580.65.06",
+      "cuda": "13.0",
+      "startup_snapshot": "gpu_startup_snapshot.csv",
+      "exclusivity_declared": true,
+      "exclusivity_verified": "nvidia-smi compute-apps shows 0 processes on GPU 1/2/7 at pin time"
+    },
+    "parameters": {
+      "max_tokens": 2048,
+      "warmup": 1,
+      "rounds": 1,
+      "seed": 0,
+      "guidance_scale": 1.3,
+      "num_diffusion_steps": 10,
+      "dtype": "bfloat16",
+      "sampling": "greedy(temperature=0)",
+      "env_vars": {
+        "HF_HOME": "/SharedData/youhf/cache/huggingface",
+        "SEED_TTS_SIM_EVAL": "1",
+        "OMP_NUM_THREADS": "2",
+        "PATH_includes": ".venv-test/bin (ninja for engine-core)"
+      },
+      "timing_boundary": "both backends: prompt-proc + generate + sync + D2H; eval after engine close",
+      "launch_commands": [
+        "nohup local_tests/vibevoice_pr1/run_pinned.sh 1 omni:en hf:en ...",
+        "nohup local_tests/vibevoice_pr1/run_pinned.sh 2 omni:zh ...",
+        "nohup local_tests/vibevoice_pr1/run_pinned.sh 7 hf:zh ..."
+      ]
+    },
+    "planned_jobs": [
+      {
+        "gpu": 1,
+        "backend": "omni",
+        "locale": "en",
+        "batch": 1
+      },
+      {
+        "gpu": 1,
+        "backend": "omni",
+        "locale": "en",
+        "batch": 4
+      },
+      {
+        "gpu": 1,
+        "backend": "hf",
+        "locale": "en",
+        "batch": 1
+      },
+      {
+        "gpu": 1,
+        "backend": "hf",
+        "locale": "en",
+        "batch": 4
+      },
+      {
+        "gpu": 2,
+        "backend": "omni",
+        "locale": "zh",
+        "batch": 1
+      },
+      {
+        "gpu": 2,
+        "backend": "omni",
+        "locale": "zh",
+        "batch": 4
+      },
+      {
+        "gpu": 7,
+        "backend": "hf",
+        "locale": "zh",
+        "batch": 1
+      },
+      {
+        "gpu": 7,
+        "backend": "hf",
+        "locale": "zh",
+        "batch": 4
+      }
+    ]
+  },
+  "outputs": [
+    {
+      "tag": "en_hf_b1",
+      "report_sha256": "3597733289eaf4d46f98bcfcc031a73177039a2cfd2490ab0cb704dcadf472fb",
+      "report_path": "/SharedData/youhf/tmp/vv-pinned-gpu1-20261015-081007/en_hf_b1/report.json",
+      "wer": 0.05989086725462158,
+      "sim": 0.8648742308621021,
+      "n_eval": 1088,
+      "asr_failed": 0,
+      "natural_stop": "1088/1088",
+      "rtf": 0.4464,
+      "window": [
+        "09:03:01",
+        "09:46:51"
+      ],
+      "gen_rtf": 0.4464,
+      "contaminated": false
+    },
+    {
+      "tag": "en_hf_b4",
+      "report_sha256": "783d038940944d0d9dbc115e833e4984a5f604515e63407dddaf142c790ae4df",
+      "report_path": "/SharedData/youhf/tmp/vv-pinned-gpu1-20261015-081007/en_hf_b4/report.json",
+      "wer": 0.05633880845114284,
+      "sim": 0.863058035097578,
+      "n_eval": 1088,
+      "asr_failed": 0,
+      "natural_stop": "1088/1088",
+      "rtf": 0.163,
+      "window": [
+        "09:46:51",
+        "10:10:36"
+      ],
+      "gen_rtf": 0.163,
+      "contaminated": false
+    },
+    {
+      "tag": "en_omni_b1",
+      "report_sha256": "cdcc8ef26f4fd671c6a14e9af7e112a34bbef5c290010c6d383cbb49e074f838",
+      "report_path": "/SharedData/youhf/tmp/vv-pinned-gpu1-20261015-081007/en_omni_b1/report.json",
+      "wer": 0.05014629632790316,
+      "sim": 0.8622510963229134,
+      "n_eval": 1088,
+      "asr_failed": 0,
+      "natural_stop": 1.0,
+      "rtf": 0.3171150719493238,
+      "window": [
+        "08:10:09",
+        "08:44:54"
+      ],
+      "contaminated": false
+    },
+    {
+      "tag": "en_omni_b4",
+      "report_sha256": "976520c1d5b4a4e877bb535ecf72bdfdaab95aa6dace254de92124daca49d602",
+      "report_path": "/SharedData/youhf/tmp/vv-pinned-gpu1-20261015-081007/en_omni_b4/report.json",
+      "wer": 0.07448289572667817,
+      "sim": 0.8618083725245121,
+      "n_eval": 1088,
+      "asr_failed": 0,
+      "natural_stop": 1.0,
+      "rtf": 0.11612058943973437,
+      "window": [
+        "08:44:54",
+        "09:03:01"
+      ],
+      "contaminated": false
+    },
+    {
+      "tag": "zh_omni_b1",
+      "report_sha256": "4577618d2e5abc555a32d0268fcd24512834d591c328f17173f5a4f4c5aa02b5",
+      "report_path": "/SharedData/youhf/tmp/vv-pinned-gpu2-20261015-081008/zh_omni_b1/report.json",
+      "wer": 0.024910695804869386,
+      "sim": 0.8742447651631174,
+      "n_eval": 2019,
+      "asr_failed": 1,
+      "natural_stop": 1.0,
+      "rtf": 0.31527347475493056,
+      "window": [
+        "08:10:10",
+        "09:26:27"
+      ],
+      "contaminated": false
+    },
+    {
+      "tag": "zh_omni_b4",
+      "report_sha256": "56b3496923c56c1cb0dc1092f94088f514782d10c9ced67f6353ec45162b5050",
+      "report_path": "/SharedData/youhf/tmp/vv-pinned-gpu2-20261015-081008/zh_omni_b4/report.json",
+      "wer": 0.026394216024474233,
+      "sim": 0.8731177079127294,
+      "n_eval": 1993,
+      "asr_failed": 27,
+      "natural_stop": 1.0,
+      "rtf": 0.1141355566251767,
+      "window": [
+        "09:26:27",
+        "10:14:49"
+      ],
+      "contaminated": false,
+      "asr_anomaly": "27 paraformer init failures at run time; WER/SIM under-counted (n_eval=1993); superseded for quality by re_eval_zh_omni_b4"
+    },
+    {
+      "tag": "zh_hf_b1",
+      "report_sha256": "529199a8f7e9f9f6e9d896d95d532ea7ebbe996bf191047a38d70953dd42de67",
+      "report_path": "/SharedData/youhf/tmp/vv-pinned-gpu7-20261015-081009/zh_hf_b1/report.json",
+      "wer": 0.026322455922876267,
+      "sim": 0.8718365838917175,
+      "n_eval": 2020,
+      "asr_failed": 0,
+      "natural_stop": "2020/2020",
+      "rtf": 0.4419,
+      "window": [
+        "08:10:11",
+        "09:54:02"
+      ],
+      "gen_rtf": 0.4419,
+      "contaminated": false
+    },
+    {
+      "tag": "zh_hf_b4",
+      "report_sha256": "e174468440ec41caecef067ec08685d4fa314f794087462efaf6122a94811fcf",
+      "report_path": "/SharedData/youhf/tmp/vv-pinned-gpu7-20261015-081009/zh_hf_b4/report.json",
+      "wer": 0.028644160998201634,
+      "sim": 0.8720442698881178,
+      "n_eval": 2020,
+      "asr_failed": 0,
+      "natural_stop": "2020/2020",
+      "rtf": 0.1651,
+      "window": [
+        "09:54:02",
+        "10:38:56"
+      ],
+      "gen_rtf": 0.1651,
+      "contaminated": false
+    }
+  ],
+  "gpu_end_snapshot": "gpu_end_snapshot.csv",
+  "exclusivity_verified_post": "end snapshot: GPU 1/2/7 all 4 MiB / 0% (no co-tenant appeared during run)",
+  "re_evals": [
+    {
+      "tag": "re_eval_zh_omni_b4",
+      "type": "quality_re-eval on saved WAVs (no regeneration)",
+      "eval_command_file": "zh_omni_b4_reeval/eval_command.txt",
+      "input_wav_dir": "vv-pinned-gpu2-20261015-081008/wavs_zh_omni_b4",
+      "input_wav_count": 2020,
+      "input_wav_sha256_manifest": "zh_omni_b4_reeval/wav_sha256.txt",
+      "report_path": "zh_omni_b4_reeval/report.json",
+      "report_sha256": "72c8e2e9f643acfc41617d37d07693eb52ac14d714d44f46ab5d9cfef9d02b31",
+      "wer": 0.02627653916821879,
+      "sim": 0.8731304187585812,
+      "n_eval": 2020,
+      "asr_failed": 0,
+      "wer_median": 0.0,
+      "sim_median": 0.8837594985961914,
+      "gen_rtf_inherited_from_original": "zh_omni_b4 (0.1141, run-time gen, not re-measured)",
+      "natural_stop_inherited": "1993/2020 (run-time; 27 were ASR-failed items, all generated audio present)",
+      "contaminated": false,
+      "eval_env": "same .venv-test, same eval models (pinned at manifest inputs)"
+    }
+  ]
+}
