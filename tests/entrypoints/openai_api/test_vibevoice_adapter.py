@@ -1,0 +1,175 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
+"""VibeVoice API conditioning, validation and sampling ownership (CPU)."""
+
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+from vllm import SamplingParams
+from vllm.exceptions import VLLMUnprocessableEntityError, VLLMValidationError
+
+from vllm_omni.entrypoints.openai.protocol.audio import OpenAICreateSpeechRequest
+from vllm_omni.entrypoints.openai.serving_speech import OmniOpenAIServingSpeech
+from vllm_omni.entrypoints.openai.tts_adapters import detect_tts_model_type
+from vllm_omni.entrypoints.openai.tts_adapters.base import SpeechServingContext
+from vllm_omni.entrypoints.openai.tts_adapters.vibevoice import VibeVoiceTTSAdapter
+from vllm_omni.model_executor.models.vibevoice.prompt import AUDIO_TOKEN, render_vibevoice_prompt
+
+pytestmark = [pytest.mark.core_model, pytest.mark.cpu]
+REF = "data:audio/wav;base64,AAAA"
+
+
+@pytest.fixture
+def adapter(mocker):
+    server = SimpleNamespace(
+        uploaded_speakers={"alice": {"ref_text": "Stored transcript."}, "embedding": {"embedding_source": "direct"}},
+        _tts_model_type="vibevoice",
+        model_config=SimpleNamespace(allowed_local_media_path=""),
+        _validate_ref_audio_format=OmniOpenAIServingSpeech._validate_ref_audio_format,
+        _resolve_ref_audio_array=mocker.AsyncMock(return_value=(np.zeros(3200, dtype=np.float32), 24000, "key")),
+        _get_uploaded_audio_data=mocker.Mock(return_value=REF),
+        _generate_audio_bytes=mocker.AsyncMock(return_value=(b"wav", "audio/wav")),
+    )
+    server._validate_ref_audio_format = lambda ref: OmniOpenAIServingSpeech._validate_ref_audio_format(server, ref)
+    server._apply_uploaded_speaker = lambda request: OmniOpenAIServingSpeech._apply_uploaded_speaker(server, request)
+    return VibeVoiceTTSAdapter(SpeechServingContext(server=server))
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"input": ""},
+        {"input": "Speaker 0:"},
+        {"input": AUDIO_TOKEN},
+        {"voice": "unknown"},
+        {"voice": "embedding"},
+        {"voice": "alice", "ref_audio": REF},
+        {"voice": "alice", "input": "Speaker 0: A\nSpeaker 1: B"},
+        {"ref_audio": [REF, REF]},
+        {"ref_audio": "ftp://example/a.wav"},
+        {"seed": 0},
+        {"extra_params": {"guidance_scale": 1.3}},
+        {"extra_params": {"temperature": 1}},
+        {"max_new_tokens": 16385},
+        {"sample_rate": 16000},
+        {"speed": 1.1},
+        {"instructions": ""},
+        {"language": "Auto"},
+        {"ref_text": ""},
+        {"task_type": "Base"},
+        {"ref_audio_2": REF},
+        {"word_timestamps": True},
+        {"x_vector_only_mode": False},
+        {"non_streaming_mode": False},
+        {"initial_codec_chunk_frames": 0},
+        {"speaker_embedding": [0.0]},
+        {"duration_seconds": 1},
+        {"ambient_sound": "rain"},
+        {"ref_audio_codes": [[1]], "ref_text": "Transcript."},
+    ],
+)
+def test_reject_unsupported_conditioning(adapter, fields):
+    request = OpenAICreateSpeechRequest(**{"input": "Hello.", **fields})
+    assert adapter.validate(request) is not None
+    adapter.ctx.server._resolve_ref_audio_array.assert_not_called()
+
+
+@pytest.mark.parametrize("scheme", ["file", "FILE"])
+def test_local_reference_requires_explicit_permission(adapter, tmp_path, scheme):
+    ref = tmp_path / "reference.wav"
+    ref.write_bytes(b"fake")  # adapter doesn't read it; a real path is portable and robust.
+    source = ref.as_uri()
+    if scheme == "FILE":
+        source = "FILE" + source[len("file") :]  # uppercase scheme tests case-insensitivity
+    request = OpenAICreateSpeechRequest(input="Hello.", ref_audio=source)
+    assert "--allowed-local-media-path" in adapter.validate(request)
+    adapter.ctx.server._resolve_ref_audio_array.assert_not_called()
+    adapter.ctx.server.model_config.allowed_local_media_path = str(tmp_path)
+    assert adapter.validate(request) is None  # MediaConnector still owns path containment checks.
+
+
+@pytest.mark.parametrize("error", [VLLMValidationError("Invalid audio"), VLLMUnprocessableEntityError("HTTP 404")])
+async def test_media_client_errors_are_bad_requests(adapter, error):
+    adapter.ctx.server._resolve_ref_audio_array.side_effect = error
+    with pytest.raises(ValueError, match="reference audio") as caught:
+        await adapter.build(OpenAICreateSpeechRequest(input="Hello.", ref_audio=REF), [], True)
+    assert caught.value.__cause__ is error
+
+
+async def test_internal_resolver_errors_are_not_hidden(adapter):
+    error = RuntimeError("Internal failure")
+    adapter.ctx.server._resolve_ref_audio_array.side_effect = error
+    with pytest.raises(RuntimeError) as caught:
+        await adapter.build(OpenAICreateSpeechRequest(input="Hello.", ref_audio=REF), [], True)
+    assert caught.value is error
+
+
+def test_empty_reference_rejected_by_protocol():
+    with pytest.raises(ValueError, match="list cannot be empty"):
+        OpenAICreateSpeechRequest(input="Hello.", ref_audio=[])
+
+
+@pytest.mark.parametrize("ref", [None, REF])
+async def test_single_speaker_matches_offline(adapter, ref):
+    request = OpenAICreateSpeechRequest(input="Hello.", ref_audio=ref)
+    assert adapter.validate(request) is None
+    prepared = await adapter.build(request, [], ref is not None)
+    assert prepared.prompt["prompt"] == render_vibevoice_prompt("Hello.", reference=ref is not None)
+    assert ("multi_modal_data" in prepared.prompt) == (ref is not None)
+
+
+@pytest.mark.parametrize("count", [0, 1, 2, 4])
+async def test_ordered_multispeaker_references(adapter, count):
+    refs = [f"{REF}{n}" for n in range(count)]
+    request = OpenAICreateSpeechRequest(
+        input="Speaker 3: A\nSpeaker 1: B\nSpeaker 0: C\nSpeaker 2: D\nSpeaker 3: E",
+        ref_audio=refs if count else None,
+    )
+    assert adapter.validate(request) is None
+    prepared = await adapter.build(request, [], bool(count))
+    prompt = prepared.prompt["prompt"]
+    assert prompt.count(AUDIO_TOKEN) == count
+    for index, speaker in enumerate([3, 1, 0, 2]):
+        assert (f"Speaker {speaker}:<|vision_start|>" in prompt) == (index < count)
+    assert [call.args[0] for call in adapter.ctx.server._resolve_ref_audio_array.await_args_list] == refs
+
+
+async def test_uploaded_voice_keeps_caller_unchanged(adapter):
+    request = OpenAICreateSpeechRequest(input="Hello.", voice="Alice")
+    assert adapter.validate(request) is None
+    prepared = await adapter.build(request, [], False)
+    assert prepared.prompt["prompt"] == render_vibevoice_prompt("Hello.")
+    assert request.voice == "Alice" and request.ref_audio is None and request.ref_text is None
+    adapter.ctx.server._resolve_ref_audio_array.assert_awaited_once_with(REF)
+    adapter.ctx.server._get_uploaded_audio_data.return_value = None
+    with pytest.raises(ValueError, match="missing"):
+        await adapter.build(request, [], False)
+
+
+@pytest.mark.parametrize(
+    "wav,sr", [(np.empty(0), 24000), (np.array([np.nan]), 24000), (np.zeros(61), 1), (np.zeros(2), 0)]
+)
+async def test_bad_resolved_reference_fails_before_engine(adapter, wav, sr):
+    adapter.ctx.server._resolve_ref_audio_array.return_value = (wav, sr, "key")
+    with pytest.raises(ValueError, match="reference audio"):
+        await adapter.build(OpenAICreateSpeechRequest(input="Hello.", ref_audio=REF), [], True)
+
+
+def test_detection_capabilities_and_sampling(adapter):
+    assert detect_tts_model_type("vibevoice", None) == "vibevoice"
+    assert detect_tts_model_type(None, "VibeVoiceForConditionalGeneration") == "vibevoice"
+    assert not adapter.load_capabilities().supported_speakers
+    assert adapter.capabilities.codec_frame_rate == 7.5
+    params = [SamplingParams(max_tokens=100)]
+    result = adapter.apply_sampling_overrides(params, OpenAICreateSpeechRequest(input="Hello.", max_new_tokens=5))
+    assert result[0].max_tokens == 5 and params[0].max_tokens == 100
+    assert result[0].temperature == params[0].temperature  # pipeline owns constraints
+
+
+async def test_bounded_warmup(adapter):
+    await adapter.warmup()
+    call = adapter.ctx.server._generate_audio_bytes.await_args
+    assert call.args[0].max_new_tokens == 8 and call.args[0].ref_audio is None
+    adapter.ctx.server._generate_audio_bytes.side_effect = RuntimeError("test failure")
+    await adapter.warmup()  # startup is not failed by a best-effort warmup
