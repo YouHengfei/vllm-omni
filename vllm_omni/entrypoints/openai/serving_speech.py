@@ -138,16 +138,15 @@ _NO_BUILTIN_SPEAKER_LABELS = {
 }
 
 
-def _check_ref_audio_duration(duration: float) -> None:
+def _check_ref_audio_duration(duration: float, *, max_duration: float = _REF_AUDIO_MAX_DURATION) -> None:
     if duration < _REF_AUDIO_MIN_DURATION:
         raise ValueError(
             f"Reference audio too short ({duration:.1f}s). "
             f"At least {_REF_AUDIO_MIN_DURATION:.0f}s of clear speech is required."
         )
-    if duration > _REF_AUDIO_MAX_DURATION:
+    if duration > max_duration:
         raise ValueError(
-            f"Reference audio too long ({duration:.1f}s). "
-            f"Maximum {_REF_AUDIO_MAX_DURATION:.0f}s supported — use a shorter clip."
+            f"Reference audio too long ({duration:.1f}s). Maximum {max_duration:.0f}s supported — use a shorter clip."
         )
 
 
@@ -1541,7 +1540,9 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
             wav_np = np.mean(wav_np, axis=-1)
         sr = int(sr)
         duration = len(wav_np) / sr if sr > 0 else 0.0
-        _check_ref_audio_duration(duration)
+        adapter = getattr(self, "_adapter", None)
+        max_ref = getattr(adapter, "max_reference_duration", None)
+        _check_ref_audio_duration(duration, max_duration=max_ref or _REF_AUDIO_MAX_DURATION)
         # Own the buffer: a view could retain a much larger decoded allocation.
         waveform = np.array(wav_np, dtype=np.float32, order="C", copy=True)
         artifact_key = self._make_ref_audio_artifact_cache_key(waveform, sr)
@@ -2585,7 +2586,7 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
 
             # Assume that this will follow the same adapter pattern
             # once all RFC is implemented
-            validation_error = validate_tts_request(self._adapter, request)
+            validation_error = validate_tts_request(self._adapter, request)  # type: ignore[arg-type]
             if validation_error is not None:
                 raise ValueError(validation_error)
 
@@ -2595,7 +2596,7 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
                     return self._diffusion_error_response(fmt_err, status_code=400)
 
             request_id = f"speech-{random_uuid()}"
-            prepared_request = await self._adapter.build(
+            prepared_request = await self._adapter.build(  # type: ignore[union-attr]
                 request, sampling_params_list=[], has_inline_ref_audio=has_inline_ref_audio
             )
             prompt = prepared_request.prompt

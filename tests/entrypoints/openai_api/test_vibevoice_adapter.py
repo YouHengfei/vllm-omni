@@ -173,3 +173,25 @@ async def test_bounded_warmup(adapter):
     assert call.args[0].max_new_tokens == 8 and call.args[0].ref_audio is None
     adapter.ctx.server._generate_audio_bytes.side_effect = RuntimeError("test failure")
     await adapter.warmup()  # startup is not failed by a best-effort warmup
+
+
+@pytest.mark.parametrize("seconds,ok", [(31, True), (60, True), (61, False), (0.5, False)])
+def test_reference_duration_uses_adapter_cap(seconds, ok, adapter):
+    # The shared resolver calls _finalize_fetched_ref_audio before the adapter;
+    # the adapter's max_reference_duration=60 must override the shared 30s cap.
+    server = SimpleNamespace(_adapter=adapter, _make_ref_audio_artifact_cache_key=lambda *_: "key")
+    sr = 24000
+    wav = np.zeros(int(seconds * sr), dtype=np.float32)
+    if ok:
+        OmniOpenAIServingSpeech._finalize_fetched_ref_audio(server, wav, sr)
+    else:
+        with pytest.raises(ValueError, match="too short" if seconds < 1 else "too long"):
+            OmniOpenAIServingSpeech._finalize_fetched_ref_audio(server, wav, sr)
+
+
+def test_default_adapter_keeps_shared_30s_cap():
+    # No adapter (or None max_reference_duration) keeps the shared 30s default.
+    server = SimpleNamespace(_adapter=None, _make_ref_audio_artifact_cache_key=lambda *_: "key")
+    sr = 24000
+    with pytest.raises(ValueError, match="too long"):
+        OmniOpenAIServingSpeech._finalize_fetched_ref_audio(server, np.zeros(31 * sr, dtype=np.float32), sr)

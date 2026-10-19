@@ -43,6 +43,9 @@ class VibeVoiceTTSAdapter(ARTTSAdapter):
     model_archs = frozenset({"VibeVoiceForConditionalGeneration"})
     supported_output_sample_rates = frozenset({24000})
     max_new_tokens_max = 16384
+    #: The offline processor allows 60 s references; keep the shared online
+    #: resolver from rejecting 30–60 s clips before the adapter runs.
+    max_reference_duration = 60.0
 
     def validate(self, request: OpenAICreateSpeechRequest) -> str | None:
         for field in _UNSUPPORTED_FIELDS:
