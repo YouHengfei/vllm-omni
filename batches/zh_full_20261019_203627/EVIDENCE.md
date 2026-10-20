@@ -6,6 +6,8 @@ manifest, captured on a clean tracked tree).
 
 ## Start here
 
+- [Documentation correction](../../CORRECTIONS.md): measured token limit is 2048,
+  not the 512 in earlier prose; single-pass quality equivalence is unestablished.
 - [Manifest](results/manifest.json): `status=complete`, both jobs `contaminated=False`,
   script/checkpoint/dataset SHA256 digests, planned job list, environment and hardware
 - [Online report](results/online/report.json) and [online log](results/online/zh_2020_online.log):
@@ -26,7 +28,7 @@ manifest, captured on a clean tracked tree).
 
 Seed-TTS-Eval ZH `meta.lst`, `random_seed=0`, all 2,020 rows, single-speaker reference
 cloning, one request at a time. vLLM-Omni online server on GPU4 (H100 80GB), BF16, eager,
-FA3, seed 0, CFG 1.3, 10 diffusion steps, `max_new_tokens=512`. HF reference: Transformers
+FA3, seed 0, CFG 1.3, 10 diffusion steps, `max_new_tokens=2048`. HF reference: Transformers
 5.19, torch 2.13.0, serial `generate`, same checkpoint and dataset selection. WER uses
 Paraformer (seed-tts-eval ZH protocol); SIM uses WavLM-base-plus embedding cosine
 (proxy, not speaker verification).
@@ -44,5 +46,9 @@ failures are evaluation-side (ASR noise), not generation failures; WER/SIM means
 those items. RTF = per-request wall time / generated audio duration; online timers include
 HTTP overhead while the HF timer wraps serial `generate`, so the ~1.37x ratio is not a
 matched-boundary speedup claim.
+
+WER/SIM are single-pass observations, not evidence of statistical equivalence
+or absence of regression. Differences cannot be attributed to noise without
+controlled paired/repeated measurements and an explicit acceptance tolerance.
 
 `SHA256SUMS` in this batch directory covers every file in the batch.

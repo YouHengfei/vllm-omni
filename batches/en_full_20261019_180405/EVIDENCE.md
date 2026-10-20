@@ -6,6 +6,8 @@ manifest, captured on a clean tracked tree).
 
 ## Start here
 
+- [Documentation correction](../../CORRECTIONS.md): measured token limit is 2048,
+  not the 512 in earlier prose; single-pass quality equivalence is unestablished.
 - [Manifest](results/manifest.json): `status=complete`, both jobs `contaminated=False`,
   script/checkpoint/dataset SHA256 digests, planned job list, environment and hardware
 - [Online report](results/online/report.json) and [online log](results/online/en_1088_online.log):
@@ -29,7 +31,7 @@ batch `zh_full_20261019_203627`. The log is preserved unchanged for transparency
 
 Seed-TTS-Eval EN `meta.lst`, `random_seed=0`, first 1,088 rows, single-speaker reference
 cloning, one request at a time. vLLM-Omni online server on GPU4 (H100 80GB), BF16, eager,
-FA3, seed 0, CFG 1.3, 10 diffusion steps, `max_new_tokens=512`. HF reference: Transformers
+FA3, seed 0, CFG 1.3, 10 diffusion steps, `max_new_tokens=2048`. HF reference: Transformers
 5.19, torch 2.13.0, serial `generate`, same checkpoint and dataset selection. WER uses
 Whisper-large-v3; SIM uses WavLM-base-plus embedding cosine (proxy, not speaker verification).
 
@@ -43,8 +45,13 @@ Whisper-large-v3; SIM uses WavLM-base-plus embedding cosine (proxy, not speaker 
 
 0 request failures; all items stopped naturally. RTF = per-request wall time / generated
 audio duration; online timers include HTTP overhead while the HF timer wraps serial
-`generate`, so the ~1.4x ratio is not a matched-boundary speedup claim. Streaming WER mean
-is higher than non-streaming while the median stays 0; single-pass noise, not a regression
-claim in either direction.
+`generate`, so the ~1.4x ratio is not a matched-boundary speedup claim.
+
+EN streaming mean WER is 0.0869 versus 0.0571 non-streaming (+2.98 percentage
+points), despite both medians being zero. These are single-pass observations,
+not evidence of statistical equivalence or absence of regression. The cause is
+unestablished; the difference alone does not establish a runtime regression.
+Attributing it to noise would require controlled paired/repeated measurements
+with an explicit acceptance tolerance.
 
 `SHA256SUMS` in this batch directory covers every file in the batch.

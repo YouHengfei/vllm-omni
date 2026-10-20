@@ -7,6 +7,10 @@ serial reference on the same checkpoint, dataset selection and seed.
 
 ## Evidence status
 
+See [the documentation correction](CORRECTIONS.md) for the measured 2048-token
+limit and the scope of the single-pass quality observations. Original run
+artifacts and numerical results are unchanged; no generation or evaluation was rerun.
+
 Both batch manifests record `status=complete` and per-job `contaminated=False`, with
 GPU start/end snapshots and environment freezes captured at run time. The manifests are
 execution-time records, not retrospective reconstructions.
@@ -15,8 +19,9 @@ Remaining provenance limitations, stated honestly:
 
 - Continuous GPU exclusivity during the runs is an operator attestation supported by
   start/end snapshots, not an uninterrupted machine record.
-- WER/SIM are single-pass measurements. They are quality observations, not statistical
-  equivalence claims; cross-backend deltas within a few tenths of a WER point are noise.
+- WER/SIM are single-pass observations. Statistical equivalence and absence of
+  regression have not been established. Differences cannot be attributed to noise
+  without controlled paired/repeated evidence and an explicit acceptance tolerance.
 - SIM uses WavLM-base-plus embedding cosine (a proxy), not the seed-tts-eval UniSpeech
   speaker-verification checkpoint.
 - Generated audio is identified by SHA256 lists, not stored in this branch (~9.9 GB).
@@ -37,7 +42,7 @@ All original reports, logs, inventories and manifests are copied without content
 ## Result summary
 
 Head `93166c21b`, H100 80GB, BF16, eager, FA3, seed 0, CFG 1.3, 10 diffusion steps,
-`max_new_tokens=512`, single-speaker reference cloning, B1 serial. HF reference runs
+`max_new_tokens=2048`, single-speaker reference cloning, B1 serial. HF reference runs
 Transformers 5.19 in a separate environment. 0 request failures across ~6,200 generations.
 
 | Locale | Backend | Transport | Items | WER (mean) | SIM (mean) | RTF | TTFP p50 / p99 (ms) |
@@ -48,6 +53,10 @@ Transformers 5.19 in a separate environment. 0 request failures across ~6,200 ge
 | ZH | Omni online | non-streaming | 2018 | 0.0275 | 0.8723 | 0.320 | — |
 | ZH | Omni online | streaming (PCM) | 2020 | 0.0310 | 0.8708 | 0.315 | 57 / 63 |
 | ZH | HF reference | serial generate | 2019 | 0.0281 | 0.8722 | 0.437 | n/a |
+
+EN streaming mean WER is 0.0869 versus 0.0571 non-streaming (+2.98 percentage
+points), despite both medians being zero. The cause is unestablished; this
+difference alone does not establish a runtime regression.
 
 Items column is the WER-evaluated count; ZH online non-streaming has 2 ASR failures and
 ZH HF has 1 (ASR noise, not generation failure). RTF timer boundaries differ between
