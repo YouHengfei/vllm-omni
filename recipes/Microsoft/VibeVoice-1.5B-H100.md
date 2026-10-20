@@ -20,20 +20,20 @@ there are no bundled default voices.
 
 ## Supported model contract
 
-| Property | Value |
-| --- | --- |
-| Checkpoint | `vibevoice/VibeVoice-1.5B-hf` only; the original `microsoft/VibeVoice-1.5B` schema and its forks are rejected at load |
-| Text | non-empty plain text for speaker 0, or `Speaker N: text` lines with up to four distinct IDs; special-token literals and mixed plain/script lines are rejected |
-| Reference audio | optional, up to one clip per speaker (four total); any channel layout and sample rate (mixed to mono, resampled to 24 kHz), up to 60 s per clip |
-| No reference | `render_vibevoice_prompt(text, reference=False)` renders the native no-voice prompt. As in Transformers, there is no default voice: the voice is sampled per request from the diffusion noise. A reference prompt without audio is rejected before scheduling |
-| Output | mono float32 at 24 kHz, 3,200 samples per audio token; offline FINAL_ONLY returns the concatenated waveform in `multimodal_output["audio"]` |
-| Generation | CFG 1.3, 10 DPM-Solver diffusion steps (checkpoint defaults); length capped by `max_tokens` |
-| Deploy profile | `vllm_omni/deploy/vibevoice.yaml`: BF16, eager, `max_num_seqs: 4`, `max_model_len: 16384`, FlashAttention 3, `kv_cache_memory_bytes: 2 GiB` |
+| Property        | Value                                                                                                                                                                                                                                                           |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Checkpoint      | `vibevoice/VibeVoice-1.5B-hf` only; the original `microsoft/VibeVoice-1.5B` schema and its forks are rejected at load                                                                                                                                           |
+| Text            | non-empty plain text for speaker 0, or `Speaker N: text` lines with up to four distinct IDs; special-token literals and mixed plain/script lines are rejected                                                                                                   |
+| Reference audio | optional, up to one clip per speaker (four total); any channel layout and sample rate (mixed to mono, resampled to 24 kHz), up to 60 s per clip                                                                                                                 |
+| No reference    | `render_vibevoice_prompt(text, reference=False)` renders the native no-voice prompt. As in Transformers, there is no default voice: the voice is sampled per request from the diffusion noise. A reference prompt without audio is rejected before scheduling   |
+| Output          | mono float32 at 24 kHz, 3,200 samples per audio token; offline FINAL_ONLY returns the concatenated waveform in `multimodal_output["audio"]`                                                                                                                     |
+| Generation      | CFG 1.3, 10 DPM-Solver diffusion steps (checkpoint defaults); length capped by `max_tokens`                                                                                                                                                                     |
+| Deploy profile  | `vllm_omni/deploy/vibevoice.yaml`: BF16, eager, `max_num_seqs: 4`, `max_model_len: 16384`, FlashAttention 3, `kv_cache_memory_bytes: 2 GiB`                                                                                                                     |
 
 ## References
 
-- Model card: <https://huggingface.co/vibevoice/VibeVoice-1.5B-hf>
-- Technical report: <https://arxiv.org/abs/2508.19205>
+- Model card: [https://huggingface.co/vibevoice/VibeVoice-1.5B-hf](https://huggingface.co/vibevoice/VibeVoice-1.5B-hf)
+- Technical report: [https://arxiv.org/abs/2508.19205](https://arxiv.org/abs/2508.19205)
 - Shared TTS examples: [offline](../../examples/offline_inference/text_to_speech/README.md#vibevoice), [online](../../examples/online_serving/text_to_speech/README.md#vibevoice)
 - Supported models: [`docs/models/supported_models.md`](../../docs/models/supported_models.md)
 - Pipeline: `vllm_omni/model_executor/models/vibevoice/pipeline.py`; test: `tests/e2e/offline_inference/test_vibevoice_tts.py`
@@ -110,8 +110,7 @@ curl -N http://localhost:8091/v1/audio/speech -H 'Content-Type: application/json
   -d '{"model":"vibevoice/VibeVoice-1.5B-hf","input":"Hello from VibeVoice.","stream":true,"response_format":"pcm","max_new_tokens":512}'
 ```
 
-For raw PCM/WAV chunks, set `stream_format: "audio"` and `response_format:
-"pcm"` or `"wav"`. PCM is signed 16-bit little-endian, 24 kHz mono. Streaming
+For raw PCM/WAV chunks, set `stream_format: "audio"` and `response_format: "pcm"` or `"wav"`. PCM is signed 16-bit little-endian, 24 kHz mono. Streaming
 WAV has a header with unknown final length. Network chunks need not align with
 audio-token boundaries. This single-stage pipeline retains `async_chunk: false`.
 
@@ -184,16 +183,16 @@ Paraformer-zh for ZH, and WavLM-base-plus embedding cosine for SIM. Saved WAVs
 are FLOAT before the common PCM16 evaluation conversion. WER/SIM are per-item
 means; SIM is a proxy, not a perceptual-quality or speaker-verification guarantee.
 
-| Corpus | Backend | Batch | WER | SIM | Evaluated | Natural stop | RTF |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| EN | Omni | 1 | 0.0501 | 0.8623 | 1088 | 1088/1088 | 0.3171 |
-| EN | HF | 1 | 0.0599 | 0.8649 | 1088 | 1088/1088 | 0.4464 |
-| EN | Omni | 4 | 0.0745 | 0.8618 | 1088 | 1088/1088 | 0.1161 |
-| EN | HF | 4 | 0.0563 | 0.8631 | 1088 | 1088/1088 | 0.1630 |
-| ZH | Omni | 1 | 0.0249 | 0.8742 | 2019 | 2020/2020 | 0.3153 |
-| ZH | HF | 1 | 0.0263 | 0.8718 | 2020 | 2020/2020 | 0.4419 |
-| ZH | Omni | 4 | 0.0263 | 0.8731 | 2020 | 2020/2020 | 0.1141 |
-| ZH | HF | 4 | 0.0286 | 0.8720 | 2020 | 2020/2020 | 0.1651 |
+| Corpus | Backend | Batch | WER    | SIM    | Evaluated | Natural stop | RTF    |
+| ------ | ------- | ----- | ------ | ------ | --------- | ------------ | ------ |
+| EN     | Omni    | 1     | 0.0501 | 0.8623 | 1088      | 1088/1088    | 0.3171 |
+| EN     | HF      | 1     | 0.0599 | 0.8649 | 1088      | 1088/1088    | 0.4464 |
+| EN     | Omni    | 4     | 0.0745 | 0.8618 | 1088      | 1088/1088    | 0.1161 |
+| EN     | HF      | 4     | 0.0563 | 0.8631 | 1088      | 1088/1088    | 0.1630 |
+| ZH     | Omni    | 1     | 0.0249 | 0.8742 | 2019      | 2020/2020    | 0.3153 |
+| ZH     | HF      | 1     | 0.0263 | 0.8718 | 2020      | 2020/2020    | 0.4419 |
+| ZH     | Omni    | 4     | 0.0263 | 0.8731 | 2020      | 2020/2020    | 0.1141 |
+| ZH     | HF      | 4     | 0.0286 | 0.8720 | 2020      | 2020/2020    | 0.1651 |
 
 - ZH Omni B1 excludes one `empty_asr` from its means. ZH Omni B4 quality uses
   a full **CPU re-evaluation of the same 2,020 saved WAVs**, replacing an
@@ -221,14 +220,14 @@ not speaker verification). RTF = per-request wall time / generated audio
 duration. Both runs are `status=complete`, `contaminated=False`, with GPU
 snapshot before/after and env freeze.
 
-| Locale | Backend | Transport | Items | WER (mean) | SIM (mean) | RTF | TTFP p50 / p99 (ms) |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| EN | Omni online | non-streaming | 1088 | 0.0571 | 0.8617 | 0.310 | — |
-| EN | Omni online | streaming (PCM) | 1088 | 0.0869 | 0.8623 | 0.306 | 55 / 62 |
-| EN | HF reference | serial generate | 1088 | 0.0599 | 0.8649 | 0.433 | n/a |
-| ZH | Omni online | non-streaming | 2020 | 0.0275 | 0.8723 | 0.320 | — |
-| ZH | Omni online | streaming (PCM) | 2020 | 0.0310 | 0.8708 | 0.315 | 57 / 63 |
-| ZH | HF reference | serial generate | 2019 | 0.0281 | 0.8722 | 0.437 | n/a |
+| Locale | Backend      | Transport       | Items | WER (mean) | SIM (mean) | RTF   | TTFP p50 / p99 (ms) |
+| ------ | ------------ | --------------- | ----- | ---------- | ---------- | ----- | ------------------- |
+| EN     | Omni online  | non-streaming   | 1088  | 0.0571     | 0.8617     | 0.310 | —                   |
+| EN     | Omni online  | streaming (PCM) | 1088  | 0.0869     | 0.8623     | 0.306 | 55 / 62             |
+| EN     | HF reference | serial generate | 1088  | 0.0599     | 0.8649     | 0.433 | n/a                 |
+| ZH     | Omni online  | non-streaming   | 2020  | 0.0275     | 0.8723     | 0.320 | —                   |
+| ZH     | Omni online  | streaming (PCM) | 2020  | 0.0310     | 0.8708     | 0.315 | 57 / 63             |
+| ZH     | HF reference | serial generate | 2019  | 0.0281     | 0.8722     | 0.437 | n/a                 |
 
 - All backends produced natural stops for all items. 0 request failures;
   2 ASR failures in ZH non-streaming (ASR noise, not generation failure).
@@ -247,6 +246,11 @@ snapshot before/after and env freeze.
   (weights 5.16 GiB, positive KV 2.0 GiB, model-owned CFG negative KV 1.75 GiB),
   reserved at startup and flat during inference. With `max_model_len=4096` and
   `kv_cache_memory_bytes=512 MiB` the peak drops to 8.94 GiB.
+- Memory (online serving, 2026-10-20, H100): the `vllm serve` process tree
+  reserves 12.24 GiB at startup and stays flat within +0.02 GiB across serial,
+  4-concurrent, and 4×~2-minute workloads (process-tree NVML sampled every
+  50 ms, foreign processes excluded). GPU memory returned to 0 MiB after
+  shutdown.
 - Key flags: `enforce_eager: true` and `async_scheduling: false` are required.
   Startup fails if the KV budget cannot hold `max_num_seqs × max_model_len`,
   because preemption is not supported.
@@ -257,13 +261,13 @@ snapshot before/after and env freeze.
 
 ## Supported features
 
-| Feature | Status | Guide |
-| --- | --- | --- |
-| Offline `Omni.generate` | supported, up to 4 concurrent requests | [`examples/offline_inference/text_to_speech/README.md`](../../examples/offline_inference/text_to_speech/README.md#vibevoice) |
-| Voice clone | optional; one reference per conditioned speaker, at most four | — |
-| Multi-speaker | up to four distinct speakers, partial references allowed | — |
-| Default voices | none; omitted references use native no-reference generation | — |
-| `/v1/audio/speech` / streaming | non-streaming, SSE, PCM/WAV streams; uploaded audio voices for single-speaker requests | [`docs/serving/speech_api.md`](../../docs/serving/speech_api.md) |
-| CUDA graphs / async scheduling | not supported (eager, sync scheduling) | — |
-| Chunked prefill | supported | — |
-| Prefix caching, speculative decoding, TP/PP, quantized KV | not supported (rejected at startup where applicable) | — |
+| Feature                                                   | Status                                                                                 | Guide                                                                                                                         |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Offline `Omni.generate`                                   | supported, up to 4 concurrent requests                                                 | [`examples/offline_inference/text_to_speech/README.md`](../../examples/offline_inference/text_to_speech/README.md#vibevoice)  |
+| Voice clone                                               | optional; one reference per conditioned speaker, at most four                          | —                                                                                                                             |
+| Multi-speaker                                             | up to four distinct speakers, partial references allowed                               | —                                                                                                                             |
+| Default voices                                            | none; omitted references use native no-reference generation                            | —                                                                                                                             |
+| `/v1/audio/speech` / streaming                            | non-streaming, SSE, PCM/WAV streams; uploaded audio voices for single-speaker requests | [`docs/serving/speech_api.md`](../../docs/serving/speech_api.md)                                                              |
+| CUDA graphs / async scheduling                            | not supported (eager, sync scheduling)                                                 | —                                                                                                                             |
+| Chunked prefill                                           | supported                                                                              | —                                                                                                                             |
+| Prefix caching, speculative decoding, TP/PP, quantized KV | not supported (rejected at startup where applicable)                                   | —                                                                                                                             |
