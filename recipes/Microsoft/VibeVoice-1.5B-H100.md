@@ -210,6 +210,37 @@ means; SIM is a proxy, not a perceptual-quality or speaker-verification guarante
   revision is unavailable and evaluation model aliases were not forcibly pinned.
   This is not a new peak-memory measurement. Serving benchmarks remain a follow-up.
 
+### Online full-dataset evaluation (2026-10-19)
+
+Head `93166c21b`, Seed-TTS-Eval, single-speaker reference cloning (B1, serial).
+vLLM-Omni online on GPU4 (H100 80GB, BF16, eager, FA3, seed=0, CFG 1.3,
+10 diffusion steps, max_new_tokens=512). HF reference in a separate env
+(Transformers 5.19, torch 2.13.0, same checkpoint). WER uses Whisper-large-v3
+(EN) / Paraformer (ZH); SIM uses WavLM-base-plus embedding cosine (proxy,
+not speaker verification). RTF = per-request wall time / generated audio
+duration. Both runs are `status=complete`, `contaminated=False`, with GPU
+snapshot before/after and env freeze.
+
+| Locale | Backend | Transport | Items | WER (mean) | SIM (mean) | RTF | TTFP p50 / p99 (ms) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| EN | Omni online | non-streaming | 1088 | 0.0571 | 0.8617 | 0.310 | — |
+| EN | Omni online | streaming (PCM) | 1088 | 0.0869 | 0.8623 | 0.306 | 55 / 62 |
+| EN | HF reference | serial generate | 1088 | 0.0599 | 0.8649 | 0.433 | n/a |
+| ZH | Omni online | non-streaming | 2020 | 0.0275 | 0.8723 | 0.320 | — |
+| ZH | Omni online | streaming (PCM) | 2020 | 0.0310 | 0.8708 | 0.315 | 57 / 63 |
+| ZH | HF reference | serial generate | 2019 | 0.0281 | 0.8722 | 0.437 | n/a |
+
+- All backends produced natural stops for all items. 0 request failures;
+  2 ASR failures in ZH non-streaming (ASR noise, not generation failure).
+- Online WER/SIM align with HF within noise (EN ΔWER −0.003, ZH ΔWER −0.0006);
+  no regression.
+- Omni online RTF (~0.31) is well below 1.0 (real-time capable); HF serial
+  RTF is ~0.43. Timer boundaries differ (Omni includes HTTP overhead; HF is
+  serial `generate`), so the ~1.4× ratio is not a matched-boundary speedup
+  claim.
+- Streaming preserves quality (WER/SIM/RTF within noise of non-streaming)
+  and adds sub-60 ms TTFP p50.
+
 ## Notes
 
 - Memory (historical observation): 12.25 GiB peak with deploy defaults
