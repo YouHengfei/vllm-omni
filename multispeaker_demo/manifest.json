@@ -1,0 +1,217 @@
+{
+  "revision": "4f14fec87c65f9634b7fc5682eab0d5204976ab4",
+  "model": "vibevoice/VibeVoice-1.5B-hf",
+  "gpu_index": 7,
+  "max_new_tokens": 256,
+  "seed": 0,
+  "checkpoint": "/SharedData/youhf/models/vibevoice_VibeVoice-1.5B-hf",
+  "references": {
+    "refA": "tests/assets/qwen3_tts/clone_2.wav",
+    "refB": "tests/assets/indextts2/ref_audio.wav"
+  },
+  "voice_refs": {
+    "voiceA": "singleA_refA.wav (turn1 text, refA-cloned)",
+    "voiceB": "singleB_refB.wav (turn2 text, refB-cloned)"
+  },
+  "sim_model": "microsoft/wavlm-base-plus (CPU, 16kHz, mean-pooled cosine; proxy, not speaker verification)",
+  "sim_caveat": "WavLM clusters the two TTS-cloned voices at SIM 0.78; per-turn attribution is weak. Audio files are the primary evidence; SIM is a supplementary diagnostic.",
+  "SIM_voiceA_voiceB": 0.7773,
+  "boundary_method": "caseA=50%% midpoint (2.93s); caseB=singleA_refA duration (3.33s, the refA-cloned turn1)",
+  "script": "Speaker 1: The first speaker welcomes the audience to the show.\\nSpeaker 2: The second speaker thanks everyone for coming today.",
+  "cases": {
+    "caseA_distinct_refs": {
+      "expected": "turn1~refA(voiceA), turn2~refB(voiceB)",
+      "boundary_s": 2.93,
+      "turn1_s": 2.93,
+      "turn2_s": 2.93,
+      "second_half_mean_SIM": {
+        "to_voiceA": 0.576,
+        "to_voiceB": 0.723,
+        "voiceB_dominant": true
+      },
+      "full_audio": "caseA_distinct_refs.wav",
+      "turn1": "caseA_distinct_refs_turn1.wav",
+      "turn2": "caseA_distinct_refs_turn2.wav",
+      "request": "caseA_distinct_refs_request.json",
+      "profile_every_0.4s": [
+        [
+          0.0,
+          0.142,
+          0.277
+        ],
+        [
+          0.4,
+          0.307,
+          0.377
+        ],
+        [
+          0.8,
+          0.641,
+          0.657
+        ],
+        [
+          1.2,
+          0.636,
+          0.662
+        ],
+        [
+          1.6,
+          0.68,
+          0.698
+        ],
+        [
+          2.0,
+          0.69,
+          0.679
+        ],
+        [
+          2.4,
+          0.7,
+          0.72
+        ],
+        [
+          2.8,
+          0.691,
+          0.622
+        ],
+        [
+          3.2,
+          0.711,
+          0.753
+        ],
+        [
+          3.6,
+          0.533,
+          0.725
+        ],
+        [
+          4.0,
+          0.589,
+          0.775
+        ],
+        [
+          4.4,
+          0.555,
+          0.726
+        ],
+        [
+          4.8,
+          0.555,
+          0.676
+        ],
+        [
+          5.2,
+          0.552,
+          0.675
+        ]
+      ]
+    },
+    "caseB_partial_ref": {
+      "expected": "turn1~refA(voiceA), turn2~no-reference",
+      "boundary_s": 3.33,
+      "turn1_s": 3.33,
+      "turn2_s": 4.27,
+      "second_half_mean_SIM": {
+        "to_voiceA": 0.559,
+        "to_voiceB": 0.621,
+        "voiceB_dominant": true
+      },
+      "full_audio": "caseB_partial_ref.wav",
+      "turn1": "caseB_partial_ref_turn1.wav",
+      "turn2": "caseB_partial_ref_turn2.wav",
+      "request": "caseB_partial_ref_request.json",
+      "profile_every_0.4s": [
+        [
+          0.0,
+          0.395,
+          0.296
+        ],
+        [
+          0.4,
+          0.602,
+          0.434
+        ],
+        [
+          0.8,
+          0.602,
+          0.62
+        ],
+        [
+          1.2,
+          0.649,
+          0.649
+        ],
+        [
+          1.6,
+          0.67,
+          0.648
+        ],
+        [
+          2.0,
+          0.658,
+          0.678
+        ],
+        [
+          2.4,
+          0.693,
+          0.661
+        ],
+        [
+          2.8,
+          0.649,
+          0.65
+        ],
+        [
+          3.2,
+          0.656,
+          0.671
+        ],
+        [
+          3.6,
+          0.6,
+          0.567
+        ],
+        [
+          4.0,
+          0.416,
+          0.441
+        ],
+        [
+          4.4,
+          0.296,
+          0.397
+        ],
+        [
+          4.8,
+          0.655,
+          0.64
+        ],
+        [
+          5.2,
+          0.677,
+          0.744
+        ],
+        [
+          5.6,
+          0.61,
+          0.693
+        ],
+        [
+          6.0,
+          0.626,
+          0.76
+        ],
+        [
+          6.4,
+          0.5,
+          0.628
+        ],
+        [
+          6.8,
+          0.564,
+          0.669
+        ]
+      ]
+    }
+  }
+}
