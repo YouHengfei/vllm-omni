@@ -1,0 +1,192 @@
+{
+  "run_id": "vv-online-gpu4-20261019-203627",
+  "status": "complete",
+  "standard_process": "pin->run->append->seal; no hand-edit after seal",
+  "inputs": {
+    "source": {
+      "head": "93166c21b084d7af6bb1b8d9a8ee80d8be3c51f1",
+      "branch": "feat/vibevoice-pr2-survey",
+      "tracked_dirty_files": 0,
+      "merge_base_upstream": "8da036a81e5a5680e6ff0b77cb759e45da9b4194"
+    },
+    "scripts": {
+      "eval_online_seedtts.py": {
+        "sha256": "6c89ecbf85159d0b36b4b051ca3a32b3428dbb18377642b24f3ec087afc862a0"
+      },
+      "gen_hf_seedtts.py": {
+        "sha256": "4cf832f6a174edab3a2c35e1e8102c8a9270112b488c4ab700b302fdd3faa74a"
+      },
+      "eval_snapshot_seedtts.py": {
+        "sha256": "b5f9798f9c1bf9f8da28a0ebb3ba24a6f27e54df279277baf5de2874d1fc7269"
+      },
+      "run_pinned_online.sh": {
+        "sha256": "3733f38b0873d8a3e8458d9dd6c16f28799f4e8530cdd4058a38a11dfc716f89"
+      }
+    },
+    "checkpoint": {
+      "model_id": "vibevoice/VibeVoice-1.5B-hf",
+      "hf_path": "/SharedData/youhf/models/vibevoice_VibeVoice-1.5B-hf",
+      "config_json_sha256": "31bb81380f725d3f80e1b948183339093fd6600563e2f21d907ffd273fd01adb"
+    },
+    "dataset": {
+      "root": "/SharedData/youhf/dataset/Seed-TTS-Eval",
+      "en": {
+        "meta_lst_sha256": "7cd29f701743e6c7033edbca764ddc0b979de8c4f4907eff5e5454682114661f"
+      },
+      "zh": {
+        "meta_lst_sha256": "86b14ae63229615dee73583887a7452a3e68ab3959b1eb5adae132bcddb89d28"
+      },
+      "selection": "SeedTTSDataset random_seed=0 first N rows (same for online+hf)"
+    },
+    "environments": {
+      "omni": {
+        "freeze_file": "freeze_omni.txt",
+        "sample": [
+          "accelerate==1.12.0",
+          "addict==2.4.0",
+          "aenum==3.1.16",
+          "agent-detector==2.0.0",
+          "aiohappyeyeballs==2.7.1",
+          "aiohttp==3.14.5",
+          "aiohttp-cors==0.8.1",
+          "aiosignal==1.4.0"
+        ]
+      },
+      "hf": {
+        "freeze_file": "freeze_hf.txt",
+        "sample": []
+      }
+    },
+    "hardware": {
+      "startup_snapshot": "gpu_start_snapshot.csv",
+      "exclusivity_declared": true
+    },
+    "parameters": {
+      "max_tokens": 2048,
+      "warmup": 3,
+      "seed": 0,
+      "items_per_locale": 2020,
+      "guidance_scale": 1.3,
+      "num_diffusion_steps": 10,
+      "dtype": "bfloat16",
+      "sampling": "greedy",
+      "sim_device": "cpu",
+      "timing_boundary": "online: POST->full body / first chunk; hf: prompt-proc+generate+sync+D2H; eval after engine close",
+      "env_vars": {
+        "VLLM_USE_FLASHINFER_SAMPLER": "0",
+        "SEED_TTS_SIM_EVAL": "1",
+        "SEED_TTS_SIM_DEVICE": "cpu",
+        "OMP_NUM_THREADS": "2",
+        "CUDA_VISIBLE_DEVICES": "4"
+      },
+      "hf_note": "HF generate() does not stream audio (returns at end); TTFP not measurable for hf backend"
+    },
+    "planned_jobs": [
+      {
+        "gpu": 4,
+        "locale": "zh",
+        "items": 2020,
+        "backend": "online",
+        "modes": [
+          "nonstreaming",
+          "streaming"
+        ]
+      },
+      {
+        "gpu": 4,
+        "locale": "zh",
+        "items": 2020,
+        "backend": "hf",
+        "modes": [
+          "generate+eval"
+        ]
+      }
+    ]
+  },
+  "outputs": [
+    {
+      "tag": "zh_2020_online",
+      "backend": "online",
+      "locale": "zh",
+      "items": 2020,
+      "window": [
+        "2026-10-19 20:36:29",
+        "2026-10-19 23:40:31"
+      ],
+      "exit": 0,
+      "contaminated": false,
+      "report_path": "local_tests/vibevoice_pr2/results/vv-online-gpu4-20261019-203627/zh_2020_online/report.json",
+      "report_sha256": "b5002a59d78b00b20064aa515f7b1c11bbdf6e91d60c48e31d15648c124b92b6",
+      "wer_mean": null,
+      "wer_median": null,
+      "sim_mean": null,
+      "n_eval": null,
+      "modes": {
+        "nonstreaming": {
+          "wer_mean": 0.0275351239890998,
+          "wer_median": 0.0,
+          "sim_mean": 0.872273046010136,
+          "rtf": 0.3199095423984846,
+          "ttfp_p50_ms": null,
+          "ttfp_p99_ms": null,
+          "n_eval": 2018
+        },
+        "streaming": {
+          "wer_mean": 0.031024550463316463,
+          "wer_median": 0.0,
+          "sim_mean": 0.8708322483271655,
+          "rtf": 0.31466385303689576,
+          "ttfp_p50_ms": 57.118503376841545,
+          "ttfp_p99_ms": 62.66731955111027,
+          "n_eval": 2020
+        }
+      }
+    },
+    {
+      "tag": "zh_2020_hf",
+      "backend": "hf",
+      "locale": "zh",
+      "items": 2020,
+      "window": [
+        "2026-10-19 23:40:32",
+        "2026-10-20 01:19:26"
+      ],
+      "exit": 0,
+      "contaminated": false,
+      "rtf": 0.4374,
+      "natural_stop_rate": 1.0,
+      "report_path": "local_tests/vibevoice_pr2/results/vv-online-gpu4-20261019-203627/zh_2020_hf/report.json",
+      "report_sha256": "ed770ac4c0e2abe5e2c20a92a931e7b309ca4e2feb0407ce0efb486ee6605d33",
+      "wer_mean": 0.028108115924098585,
+      "wer_median": 0.0,
+      "sim_mean": 0.8722077833950785,
+      "n_eval": 2019
+    }
+  ],
+  "gpu_end_snapshot": "gpu_end_snapshot.csv",
+  "comparison": {
+    "zh": {
+      "online_nonstreaming": {
+        "wer_mean": 0.0275351239890998,
+        "sim_mean": 0.872273046010136,
+        "rtf": 0.3199095423984846
+      },
+      "online_streaming": {
+        "wer_mean": 0.031024550463316463,
+        "wer_median": 0.0,
+        "sim_mean": 0.8708322483271655,
+        "rtf": 0.31466385303689576,
+        "ttfp_p50_ms": 57.118503376841545,
+        "ttfp_p99_ms": 62.66731955111027,
+        "n_eval": 2020
+      },
+      "hf": {
+        "wer_mean": 0.028108115924098585,
+        "sim_mean": 0.8722077833950785,
+        "rtf": 0.4374
+      },
+      "wer_delta_online_minus_hf": -0.0005729919349987851,
+      "rtf_ratio_hf_over_online": 1.3672614974865842
+    }
+  }
+}

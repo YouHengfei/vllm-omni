@@ -1,0 +1,2519 @@
+/SharedData/youhf/omni_tts/vllm-omni/.venv-test/lib/python3.12/site-packages/huggingface_hub/utils/_validators.py:206: UserWarning: The `local_dir_use_symlinks` argument is deprecated and ignored in `hf_hub_download`. Downloading to a local directory does not use symlinks anymore.
+  warnings.warn(
+[0;36m(MainProcess pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:43[0m [90m[logo.py:52][0m        [97m█     █     █▄   ▄█[0m    [34m   ▄▀▀[38;5;208m▀▀▄ [0m[97m█▄   ▄█ █▄    █ ▀█▀ [0m
+[0;36m(MainProcess pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:43[0m [90m[logo.py:52][0m  [38;5;208m▄▄[0m [34m▄█[0m [97m█     █     █ ▀▄▀ █[0m[97m  ▄▄▄ [0m[34m █    [38;5;208m█ [0m[97m█ ▀▄▀ █ █ ▀▄  █  █  [0m
+[0;36m(MainProcess pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:43[0m [90m[logo.py:52][0m   [38;5;208m█[0m[34m▄█▀[0m [97m█     █     █     █[0m[97m      [0m[34m █    [38;5;208m█ [0m[97m█     █ █   ▀▄█  █  [0m
+[0;36m(MainProcess pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:43[0m [90m[logo.py:52][0m    [34m▀▀[0m  [97m▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀[0m      [35m  ▀▀▀▀  [0m[97m▀     ▀ ▀     ▀ ▀▀▀ [0m
+[0;36m(MainProcess pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:43[0m [90m[logo.py:52][0m 
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:43[0m [90m[api_utils.py:347][0m vLLM server version 0.31.0, serving model vibevoice/VibeVoice-1.5B-hf
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:43[0m [90m[api_utils.py:286][0m non-default args: {'model_tag': 'vibevoice/VibeVoice-1.5B-hf', 'host': '127.0.0.1', 'port': 34819, 'model': 'vibevoice/VibeVoice-1.5B-hf', 'disable_log_stats': True}
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:44[0m [90m[weight_utils.py:58][0m Using model weights format ['*']
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:44[0m [90m[omni_base.py:210][0m [AsyncOmni] Initializing with model vibevoice/VibeVoice-1.5B-hf
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:44[0m [90m[omni_engine_base.py:174][0m [OmniEngine] Initializing with model vibevoice/VibeVoice-1.5B-hf
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:44[0m [90m[omni_engine_base.py:324][0m [OmniEngine] Launching Orchestrator thread with 1 stages
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:44[0m [90m[initialization.py:443][0m Loaded OmniTransferConfig with 0 connector configurations
+[0;36m(APIServer pid=1922365)[0;0m [33mWARNING[0m [90m10-19 18:05:44[0m [90m[utils.py:250][0m Dropping unknown OmniEngineArgs field 'enable_broadcast_weight_load' (not declared on the dataclass)
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:45[0m [90m[model.py:699][0m Resolved architecture: VibeVoiceForConditionalGeneration
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:45[0m [90m[model.py:2109][0m Using max model len 16384
+[0;36m(APIServer pid=1922365)[0;0m [33mWARNING[0m [90m10-19 18:05:46[0m [90m[model.py:1069][0m Model does not support mm_device_do_normalize, forcing mm_device_do_normalize = False.
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:47[0m [90m[scheduler.py:308][0m Chunked prefill is enabled with max_num_batched_tokens=1024.
+Parse safetensors files:   0%|          | 0/3 [00:00<?, ?it/s]Parse safetensors files:   0%|          | 0/3 [00:00<?, ?it/s]
+[0;36m(APIServer pid=1922365)[0;0m [31mERROR[0m [90m10-19 18:05:48[0m [90m[repo_utils.py:126][0m Error retrieving safetensors: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1010), retrying 1 of 2
+Parse safetensors files:   0%|          | 0/3 [00:00<?, ?it/s]Parse safetensors files:   0%|          | 0/3 [00:00<?, ?it/s]
+[0;36m(APIServer pid=1922365)[0;0m [31mERROR[0m [90m10-19 18:05:51[0m [90m[repo_utils.py:124][0m Error retrieving safetensors: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1010)
+[0;36m(APIServer pid=1922365)[0;0m [33mWARNING[0m [90m10-19 18:05:52[0m [90m[vllm.py:1706][0m Enforce eager set, disabling torch.compile, CUDAGraphs, and JIT kernel warmup. This is equivalent to setting -cc.mode=none -cc.cudagraph_mode=none and --kernel_config.enable_jit_warmup=False
+[0;36m(APIServer pid=1922365)[0;0m [33mWARNING[0m [90m10-19 18:05:52[0m [90m[vllm.py:1750][0m Inductor compilation was disabled by user settings, optimizations settings that are only active during inductor compilation will be ignored.
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:52[0m [90m[kernel.py:408][0m Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['vllm_c', 'native'], fused_add_rms_norm=['vllm_c', 'native'], gelu_and_mul_sparse=['triton', 'native'])
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:52[0m [90m[vllm.py:1968][0m Cudagraph is disabled under eager mode
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:52[0m [90m[compilation.py:331][0m Enabled custom fusions: norm_quant, act_quant
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:52[0m [90m[stage_utils.py:178][0m Stage 0 logical-to-physical device mapping: 0->4
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:05:52[0m [90m[stage_utils.py:178][0m Stage 0 logical-to-physical device mapping: 0->4
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:06:37[0m [90m[core.py:129][0m Initializing a V1 LLM engine (v0.31.0) with config: model='vibevoice/VibeVoice-1.5B-hf', speculative_config=None, tokenizer='vibevoice/VibeVoice-1.5B-hf', skip_tokenizer_init=False, tokenizer_mode=auto, revision=main, tokenizer_revision=main, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=16384, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=False, quantization=None, quantization_config=None, enforce_eager=True, aux_output_config=AuxOutputConfig(enable_return_routed_experts=False, max_bytes=None), kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, per_request_spec_decode_metrics='none', kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False, jit_monitor_mode='warn', jit_monitor_verbose=False), seed=0, served_model_name=vibevoice/VibeVoice-1.5B-hf, enable_prefix_caching=False, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.NONE: 0>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['all'], 'ir_enable_torch_wrap': False, 'splitting_ops': [], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': [], 'compile_ranges_endpoints': [1024], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.NONE: 0>, 'cudagraph_num_of_warmups': 0, 'cudagraph_capture_sizes': [], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': True, 'fuse_act_quant': True, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': False, 'enable_qk_norm_rope_fusion': False, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False, 'fuse_qk_norm_rope_kvcache': False}, 'max_cudagraph_capture_size': 0, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['vllm_c', 'native'], fused_add_rms_norm=['vllm_c', 'native'], gelu_and_mul_sparse=['triton', 'native']), enable_flashinfer_autotune=True, enable_cutedsl_warmup=True, enable_jit_warmup=False, moe_backend='auto', sparse_indexer_topk_backend='auto', linear_backend='auto', linear_backend_per_quant=None)
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:06:37[0m [90m[parallel_state.py:1825][0m world_size=1 rank=0 local_rank=0 distributed_init_method=file:///SharedData/youhf/tmp/vllm_dist_bf742c561979478ca28afc6c0a29dfd0 backend=nccl
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:06:37[0m [90m[parallel_state.py:2269][0m rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, ETP rank 0, EP rank N/A, EPLB rank N/A
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:06:38[0m [90m[topk_topp_sampler.py:96][0m FlashInfer top-p/top-k sampling disabled via VLLM_USE_FLASHINFER_SAMPLER=0.
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [33mWARNING[0m [90m10-19 18:06:40[0m [90m[base.py:324][0m [LLM Worker 0] Sleep Mode DISABLED.
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [33mWARNING[0m [90m10-19 18:06:40[0m [90m[base.py:324][0m [LLM Worker 0] Sleep Mode DISABLED.
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:06:40[0m [90m[gpu_model_runner.py:5255][0m Starting to load model vibevoice/VibeVoice-1.5B-hf...
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:06:40[0m [90m[cuda.py:466][0m Using AttentionBackendEnum.FLASH_ATTN backend.
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:06:40[0m [90m[flash_attn.py:1167][0m Using FlashAttention version 3
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:06:41[0m [90m[interfaces.py:255][0m Contains out of vocabulary multimodal tokens? False
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:06:41[0m [90m[weight_utils.py:1063][0m Filesystem type for checkpoints: GPFS. Checkpoint size: 5.04 GiB. Available RAM: 1784.17 GiB.
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:06:41[0m [90m[weight_utils.py:1086][0m Auto-prefetch is disabled because the filesystem (GPFS) is not a recognized network FS (NFS/Lustre). If you want to force prefetching, start vLLM with --safetensors-load-strategy=prefetch.
+Loading safetensors checkpoint shards:   0% Completed | 0/3 [00:00<?, ?it/s]
+Loading safetensors checkpoint shards:  33% Completed | 1/3 [00:01<00:03,  1.91s/it]
+Loading safetensors checkpoint shards:  67% Completed | 2/3 [00:03<00:01,  1.92s/it]
+Loading safetensors checkpoint shards: 100% Completed | 3/3 [00:05<00:00,  1.71s/it]
+Loading safetensors checkpoint shards: 100% Completed | 3/3 [00:05<00:00,  1.77s/it]
+
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:06:47[0m [90m[negative_kv.py:121][0m Allocated VibeVoice negative KV pool: layers=28 slots=4 blocks_per_slot=1024 block_size=16 bytes=1.75 GiB
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:06:47[0m [90m[default_loader.py:484][0m Loading weights took 5.48 seconds
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:06:47[0m [90m[gpu_model_runner.py:5354][0m Model loading took 6.91 GiB memory and 6.307761 seconds
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:06:47[0m [90m[gpu_model_runner.py:226][0m Model-local KV (outside the paged manager): 1792.00 MiB across 1 declaration(s) at max_num_seqs=4
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:06:47[0m [90m[gpu_model_runner.py:233][0m   VibeVoiceForConditionalGeneration.vibevoice_negative_kv_pool: 1792.00 MiB (4 rows from max_num_seqs x 448.00 MiB/row, scope=model, 16384 positions from fixed per-request slot: ceil(max_model_len / block_size) pages)
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [33mWARNING[0m [90m10-19 18:06:47[0m [90m[torch_utils.py:274][0m OMP_NUM_THREADS=2 is set; leaving Torch threads at 2 for serving. Multi-threaded torch CPU ops during serving can degrade performance through spin-wait contention and cgroup CPU-quota throttling.
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:06:48[0m [90m[utils.py:343][0m Using LBNHC KV cache layout.
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:06:48[0m [90m[gpu_model_runner.py:6441][0m Encoder cache will be initialized with a budget of 1024 tokens, and profiled with 2 audio items of the maximum feature size.
+HTTP Error 429 thrown while requesting HEAD https://hf-mirror.com/vibevoice/VibeVoice-1.5B-hf/resolve/d4cd82eb4371bf3e3d088e1ea7fa4eefb60449bf/preprocessor_config.json
+Rate limited. Waiting 28.0s before retry [Retry 1/5].
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:07:19[0m [90m[kv_cache_utils.py:2464][0m GPU KV cache size: 74,896 tokens, Maximum concurrency for 16,384 tokens per request: 4.57x
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [33mWARNING[0m [90m10-19 18:07:19[0m [90m[base.py:324][0m [LLM Worker 0] Sleep Mode DISABLED.
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:07:21[0m [90m[kernel_warmup.py:437][0m Using FlashInfer autotune cache file: /SharedData/youhf/.cache/vllm/flashinfer_autotune_cache/0.7.0.post1/90a/1c4dc039cbccee4325cfb9702cb7435199c0ca58c4d6bd51271c3a2130d1f224/autotune_configs.json
+2026-10-19 18:07:21,661 - INFO - autotuner.py:3691 - flashinfer.jit: [Autotuner]: Loaded 0 configs from /SharedData/youhf/.cache/vllm/flashinfer_autotune_cache/0.7.0.post1/90a/1c4dc039cbccee4325cfb9702cb7435199c0ca58c4d6bd51271c3a2130d1f224/autotune_configs.json
+2026-10-19 18:07:21,662 - INFO - autotuner.py:1046 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:07:21[0m [90m[kernel_warmup.py:359][0m Running FlashInfer autotune with 1024 tokens and token buckets (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 768, 1024).
+2026-10-19 18:07:21,675 - INFO - autotuner.py:1069 - flashinfer.jit: [Autotuner]: Autotuning process ends
+2026-10-19 18:07:21,676 - INFO - autotuner.py:3554 - flashinfer.jit: [Autotuner]: Saved 0 configs to /SharedData/youhf/.cache/vllm/flashinfer_autotune_cache/0.7.0.post1/90a/1c4dc039cbccee4325cfb9702cb7435199c0ca58c4d6bd51271c3a2130d1f224/autotune_configs.json (0 new, 0 from previous config)
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:07:22[0m [90m[core.py:380][0m init engine (profile, create kv cache, warmup model) took 33.90 s
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [33mWARNING[0m [90m10-19 18:07:22[0m [90m[scheduler.py:245][0m Using custom scheduler class vllm_omni.core.sched.omni_ar_scheduler.OmniARScheduler. This scheduler interface is not public and compatibility may not be maintained. If you have subclassed Scheduler instead of AsyncScheduler, you will see degraded performance due to async scheduling being disabled.
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:07:22[0m [90m[fast_allocate.py:93][0m Decode allocate_slots fast path enabled (block_size=16)
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:22[0m [90m[stage_engine_core_client.py:169][0m [StageEngineCoreClient] stage-0 [rep-0] initializing EngineCore
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:22[0m [90m[stage_engine_core_client.py:229][0m [StageEngineCoreClient] stage-0 [rep-0] EngineCore running
+Parse safetensors files:   0%|          | 0/3 [00:00<?, ?it/s][0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:23[0m [90m[orchestrator.py:492][0m [Orchestrator] Starting event loop
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:23[0m [90m[orchestrator.py:1298][0m [Orchestrator] Event-driven orchestration loop enabled (VLLM_OMNI_EVENT_DRIVEN_ORCH): 1 LLM replica readers, 0 diffusion pollers
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:23[0m [90m[omni_engine_base.py:356][0m [OmniEngine] Orchestrator ready with 1 stages
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:23[0m [90m[omni_base.py:230][0m [AsyncOmni] AsyncOmniEngine initialized in 99.06 seconds
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:23[0m [90m[omni_base.py:249][0m [AsyncOmni] Initialized with 1 stages for model vibevoice/VibeVoice-1.5B-hf
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:24[0m [90m[factories.py:76][0m Scale-out endpoints are disabled. Set --enable-scale-out to enable them.
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:24[0m [90m[api_server.py:989][0m Supported tasks: {'speech', 'generate'}
+[0;36m(APIServer pid=1922365)[0;0m [33mWARNING[0m [90m10-19 18:07:24[0m [90m[model.py:1850][0m Default vLLM sampling parameters have been overridden by the model's `generation_config.json`: `{'max_tokens': 40500}`. If this is not intended, please relaunch vLLM instance with `--generation-config vllm`.
+Parse safetensors files:   0%|          | 0/3 [00:01<?, ?it/s]
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [31mERROR[0m [90m10-19 18:07:24[0m [90m[repo_utils.py:126][0m Error retrieving safetensors: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1010), retrying 1 of 2
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:26[0m [90m[hf.py:646][0m Detected the chat template content format to be 'string'. You can set `--chat-template-content-format` to override this.
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:26[0m [90m[base.py:255][0m Multi-modal warmup completed in 0.327s
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:26[0m [90m[serving_speech.py:362][0m Speech cache configuration: SpeechCacheConfig(resolve_max_bytes=4294967296, resolve_max_entries=2048, speaker_max_bytes=536870912)
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:26[0m [90m[speaker_cache.py:245][0m Speaker cache ready (max_bytes=536870912)
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:26[0m [90m[serving_speech.py:378][0m Speaker storage: dir=/SharedData/youhf/.cache/vllm-omni/speakers, max_speakers=1000, restored=0
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:26[0m [90m[serving_speech.py:650][0m Resolved TTS serving adapter: VibeVoiceTTSAdapter
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:26[0m [90m[serving_speech.py:657][0m Loaded 0 supported speakers: []
+[0;36m(APIServer pid=1922365)[0;0m [33mWARNING[0m [90m10-19 18:07:26[0m [90m[input_processor.py:375][0m Passing raw prompts to InputProcessor is deprecated and will be removed in the future. You should instead pass the outputs of Renderer.render_cmpl() or Renderer.render_chat().
+Parse safetensors files:   0%|          | 0/3 [00:00<?, ?it/s]Parse safetensors files:   0%|          | 0/3 [00:00<?, ?it/s]
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [31mERROR[0m [90m10-19 18:07:27[0m [90m[repo_utils.py:124][0m Error retrieving safetensors: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1010)
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [33mWARNING[0m [90m10-19 18:07:27[0m [90m[vllm.py:1706][0m Enforce eager set, disabling torch.compile, CUDAGraphs, and JIT kernel warmup. This is equivalent to setting -cc.mode=none -cc.cudagraph_mode=none and --kernel_config.enable_jit_warmup=False
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [33mWARNING[0m [90m10-19 18:07:27[0m [90m[vllm.py:1750][0m Inductor compilation was disabled by user settings, optimizations settings that are only active during inductor compilation will be ignored.
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:07:27[0m [90m[kernel.py:408][0m Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['vllm_c', 'native'], fused_add_rms_norm=['vllm_c', 'native'], gelu_and_mul_sparse=['triton', 'native'])
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:07:27[0m [90m[vllm.py:1968][0m Cudagraph is disabled under eager mode
+[0;36m(StageEngineCoreProc_stage0_replica0 pid=1924917)[0;0m [32mINFO[0m [90m10-19 18:07:27[0m [90m[compilation.py:331][0m Enabled custom fusions: norm_quant, act_quant
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[vibevoice.py:153][0m VibeVoice speech warmup complete in 1.4s
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[serving_video.py:178][0m Video response frame conversion pool configured: workers=8
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[api_server.py:457][0m Starting vLLM API server 0 on http://127.0.0.1:34819
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:60][0m Available routes are:
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /openapi.json, Methods: GET, HEAD
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /docs, Methods: GET, HEAD
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /docs/oauth2-redirect, Methods: GET, HEAD
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /redoc, Methods: GET, HEAD
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /load, Methods: GET
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /version, Methods: GET
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /kv_event_sources, Methods: GET
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /metrics, Methods: GET
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /tokenize, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /detokenize, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /ping, Methods: GET
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /ping, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /invocations, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/responses, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/responses/{response_id}, Methods: GET
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/responses/{response_id}/cancel, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/completions, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/messages, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/messages/count_tokens, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /generative_scoring, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /scale_elastic_ep, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /is_scaling_elastic_ep, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/chat/completions, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/chat/completions/batch, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/audio/speech, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/audio/speech/batch, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/audio/generate, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/audio/voices, Methods: GET
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/audio/voices, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/audio/voices/{name}, Methods: DELETE
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/realtime/sessions, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/realtime/sessions/{session_id}/step, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/realtime/sessions/{session_id}/reset, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/realtime/sessions/{session_id}/close, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/realtime/sessions/{session_id}/status, Methods: GET
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /health, Methods: GET
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/models, Methods: GET
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/images/generations, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/images/edits, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/videos, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/videos/sync, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/videos, Methods: GET
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/videos/{video_id}, Methods: GET
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/videos/{video_id}, Methods: DELETE
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/videos/{video_id}/content, Methods: GET
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/omni/sleep, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:69][0m Route: /v1/omni/wakeup, Methods: POST
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:80][0m Route: /v1/audio/speech/stream, Endpoint: streaming_speech
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:80][0m Route: /v1/video/chat/stream, Endpoint: streaming_video_chat
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:80][0m Route: /v1/realtime/video, Endpoint: streaming_video_output
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:80][0m Route: /v1/realtime, Endpoint: realtime_websocket
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:80][0m Route: /v1/duplex, Endpoint: duplex_websocket
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:07:28[0m [90m[launcher.py:80][0m Route: /v1/realtime/robot/openpi, Endpoint: realtime_robot_openpi
+INFO:     Started server process [1922365]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+Pre-test device status:
+[Device Memory Monitor] Waiting for device(s) 4 to free memory, Condition: Memory usage ratio ≤ 5.0% (excl. Whisper worker)
+[Device Memory Status] Current usage (engine view excludes Whisper worker):
+  Device 4: 0.5GiB/79.2GiB (0.6%)
+[Device Memory Freed] Device(s) 4 meet memory condition
+   Condition: Memory usage ratio ≤ 5.0% (excl. Whisper worker)
+   Wait time: 0.9 seconds (0.0 minutes)
+Post-test device status:
+
+================================================================================
+NVIDIA GPU Information (nvidia-smi)
+================================================================================
+Mon Oct 19 18:04:57 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.65.06              Driver Version: 580.65.06      CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA H100 80GB HBM3          On  |   00000000:1B:00.0 Off |                    0 |
+| N/A   64C    P0            508W /  700W |   29727MiB /  81559MiB |    100%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+|   1  NVIDIA H100 80GB HBM3          On  |   00000000:29:00.0 Off |                    0 |
+| N/A   47C    P0            487W /  700W |   29729MiB /  81559MiB |    100%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+|   2  NVIDIA H100 80GB HBM3          On  |   00000000:45:00.0 Off |                    0 |
+| N/A   48C    P0            497W /  700W |   29729MiB /  81559MiB |    100%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+... (showing first 20 of 56 lines)
+
+================================================================================
+Detailed GPU Processes (nvidia-smi pmon)
+================================================================================
+# gpu         pid   type     sm    mem    enc    dec    jpg    ofa    command 
+# Idx           #    C/G      %      %      %      %      %      %    name 
+    0    3950377     C     99     48      -      -      -      -    python         
+    1    1839830     C     99     46      -      -      -      -    python         
+    2    1839831     C     99     48      -      -      -      -    python         
+    3    2539522     C     98     48      -      -      -      -    python         
+    4    1919965     C      0      0      -      -      -      -    python         
+    5    1862506     C      -      -      -      -      -      -    vLLM-Omni::Diff
+    6    1862507     C      -      -      -      -      -      -    vLLM-Omni::Diff
+    7    3373539     C      -      -      -      -      -      -    python3.12     
+    7    3375454     C      -      -      -      -      -      -    VLLM::EngineCor
+Launching OmniServer with: /SharedData/youhf/omni_tts/vllm-omni/.venv-test/bin/python -m vllm_omni.entrypoints.cli.main serve vibevoice/VibeVoice-1.5B-hf --host 127.0.0.1 --port 34819 --omni --deploy-config /SharedData/youhf/omni_tts/vllm-omni/vllm_omni/deploy/vibevoice.yaml --disable-log-stats --stage-init-timeout 600
+warmup 3 items ...
+INFO:     127.0.0.1:45582 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45582 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45582 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45592 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45592 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45592 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+
+=== run nonstreaming (1088 items) ===
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45602 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+
+=== run streaming (1088 items) ===
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57478 - "POST /v1/audio/speech HTTP/1.1" 200 OK
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:58:56[0m [90m[launcher.py:128][0m [shutdown] API server: shutdown triggered
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:58:56[0m [90m[launcher.py:144][0m [shutdown] API server: stopping engine client mode=abort timeout=0s
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:58:56[0m [90m[omni_base.py:776][0m [AsyncOmni] Shutting down
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:58:56[0m [90m[omni_engine_base.py:1166][0m [OmniEngine] Shutting down Orchestrator
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:58:56[0m [90m[orchestrator.py:588][0m [Orchestrator] Received shutdown signal
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:58:56[0m [90m[orchestrator.py:3368][0m [Orchestrator] Shutting down all 1 client(s)
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:58:56[0m [90m[core_client.py:762][0m [shutdown] MPClient: start timeout=default
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:58:56[0m [90m[core_client.py:764][0m [shutdown] MPClient: stopping engine manager
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:58:56[0m [90m[utils.py:638][0m [shutdown] Process manager: send sigterm to process StageEngineCoreProc_stage0_replica0
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:58:59[0m [90m[core_client.py:766][0m [shutdown] MPClient: engine manager stopped
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:58:59[0m [90m[core_client.py:767][0m [shutdown] MPClient: cleaning up background resources
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:58:59[0m [90m[core_client.py:769][0m [shutdown] MPClient: complete
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:58:59[0m [90m[stage_pool.py:1527][0m [StagePool] Stage 0 replica 0 shut down
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:58:59[0m [90m[launcher.py:153][0m [shutdown] API server: engine client stopped
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:58:59[0m [90m[launcher.py:156][0m [shutdown] API server: signalling HTTP server shutdown
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:58:59[0m [90m[launcher.py:178][0m [shutdown] API server: shutting down FastAPI HTTP server
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+[0;36m(APIServer pid=1922365)[0;0m [32mINFO[0m [90m10-19 18:59:00[0m [90m[omni_base.py:776][0m [AsyncOmni] Shutting down
+Pre-test device status:
+[Device Memory Monitor] Waiting for device(s) 4 to free memory, Condition: Memory usage ratio ≤ 5.0% (excl. Whisper worker)
+[Device Memory Status] Current usage (engine view excludes Whisper worker):
+  Device 4: 0.5GiB/79.2GiB (0.6%)
+[Device Memory Freed] Device(s) 4 meet memory condition
+   Condition: Memory usage ratio ≤ 5.0% (excl. Whisper worker)
+   Wait time: 0.0 seconds (0.0 minutes)
+Post-test device status:
+
+================================================================================
+NVIDIA GPU Information (nvidia-smi)
+================================================================================
+Mon Oct 19 18:59:02 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.65.06              Driver Version: 580.65.06      CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA H100 80GB HBM3          On  |   00000000:1B:00.0 Off |                    0 |
+| N/A   62C    P0            508W /  700W |   29727MiB /  81559MiB |    100%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+|   1  NVIDIA H100 80GB HBM3          On  |   00000000:29:00.0 Off |                    0 |
+| N/A   45C    P0            483W /  700W |   29729MiB /  81559MiB |    100%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+|   2  NVIDIA H100 80GB HBM3          On  |   00000000:45:00.0 Off |                    0 |
+| N/A   48C    P0            499W /  700W |   29729MiB /  81559MiB |    100%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+... (showing first 20 of 56 lines)
+
+================================================================================
+Detailed GPU Processes (nvidia-smi pmon)
+================================================================================
+# gpu         pid   type     sm    mem    enc    dec    jpg    ofa    command 
+# Idx           #    C/G      %      %      %      %      %      %    name 
+    0    3950377     C     98     48      -      -      -      -    python         
+    1    1839830     C     98     47      -      -      -      -    python         
+    2    1839831     C     98     47      -      -      -      -    python         
+    3    2539522     C     98     47      -      -      -      -    python         
+    4    1919965     C      -      -      -      -      -      -    python         
+    5    1862506     C      -      -      -      -      -      -    vLLM-Omni::Diff
+    6    1862507     C      -      -      -      -      -      -    vLLM-Omni::Diff
+    7    3373539     C      -      -      -      -      -      -    python3.12     
+    7    3375454     C      -      -      -      -      -      -    VLLM::EngineCor
+
+=== eval nonstreaming (1088 items) ===
+Loading Seed-TTS eval Whisper HF model 'openai/whisper-large-v3' on cuda:0 (one-time, seed-tts-eval protocol)...
+Loading weights:   0%|          | 0/1259 [00:00<?, ?it/s]Loading weights:   0%|          | 2/1259 [00:00<02:55,  7.17it/s]Loading weights:   8%|▊         | 105/1259 [00:00<00:03, 353.38it/s]Loading weights:  13%|█▎        | 166/1259 [00:00<00:03, 359.75it/s]Loading weights:  17%|█▋        | 216/1259 [00:00<00:02, 352.08it/s]Loading weights:  21%|██        | 260/1259 [00:00<00:02, 341.30it/s]Loading weights:  24%|██▍       | 300/1259 [00:00<00:02, 341.11it/s]Loading weights:  27%|██▋       | 338/1259 [00:01<00:02, 326.49it/s]Loading weights:  30%|██▉       | 375/1259 [00:01<00:02, 321.41it/s]Loading weights:  33%|███▎      | 413/1259 [00:01<00:02, 327.98it/s]Loading weights:  36%|███▌      | 449/1259 [00:01<00:02, 327.61it/s]Loading weights:  39%|███▉      | 489/1259 [00:01<00:02, 345.82it/s]Loading weights:  42%|████▏     | 525/1259 [00:01<00:02, 332.30it/s]Loading weights:  45%|████▌     | 567/1259 [00:01<00:02, 326.63it/s]Loading weights:  48%|████▊     | 609/1259 [00:01<00:01, 345.37it/s]Loading weights:  51%|█████     | 645/1259 [00:01<00:01, 343.77it/s]Loading weights:  54%|█████▍    | 683/1259 [00:02<00:01, 338.06it/s]Loading weights:  57%|█████▋    | 718/1259 [00:02<00:01, 338.00it/s]Loading weights:  60%|██████    | 759/1259 [00:02<00:01, 316.12it/s]Loading weights:  63%|██████▎   | 796/1259 [00:02<00:01, 318.50it/s]Loading weights:  66%|██████▌   | 829/1259 [00:02<00:01, 313.49it/s]Loading weights:  69%|██████▊   | 863/1259 [00:02<00:01, 319.76it/s]Loading weights:  72%|███████▏  | 901/1259 [00:02<00:01, 303.07it/s]Loading weights:  74%|███████▍  | 933/1259 [00:02<00:01, 300.78it/s]Loading weights:  78%|███████▊  | 976/1259 [00:03<00:00, 301.60it/s]Loading weights:  80%|████████  | 1008/1259 [00:03<00:00, 287.22it/s]Loading weights:  83%|████████▎ | 1051/1259 [00:03<00:00, 307.20it/s]Loading weights:  86%|████████▌ | 1082/1259 [00:03<00:00, 301.84it/s]Loading weights:  88%|████████▊ | 1113/1259 [00:03<00:00, 296.36it/s]Loading weights:  91%|█████████ | 1143/1259 [00:03<00:00, 278.89it/s]Loading weights:  94%|█████████▍| 1186/1259 [00:03<00:00, 306.03it/s]Loading weights:  97%|█████████▋| 1217/1259 [00:03<00:00, 285.27it/s]Loading weights: 100%|██████████| 1259/1259 [00:03<00:00, 315.73it/s]
+[transformers] Using custom `forced_decoder_ids` from the (generation) config. This is deprecated in favor of the `task` and `language` flags/config options.
+[transformers] A custom logits processor of type <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> has been passed to `.generate()`, but it was also created in `.generate()`, given its parameterization. The custom <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> will take precedence. Please check the docstring of <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> to see related `.generate()` flags.
+[transformers] A custom logits processor of type <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> has been passed to `.generate()`, but it was also created in `.generate()`, given its parameterization. The custom <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> will take precedence. Please check the docstring of <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> to see related `.generate()` flags.
+[transformers] Ignoring clean_up_tokenization_spaces=True for BPE tokenizer WhisperTokenizer. The clean_up_tokenization post-processing step is designed for WordPiece tokenizers and is destructive for BPE (it strips spaces before punctuation). Set clean_up_tokenization_spaces=False to suppress this warning, or set clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output=True to force cleanup anyway.
+Loading WavLM 'microsoft/wavlm-base-plus' on cpu for Seed-TTS SIM (embedding cosine; not identical to seed-tts-eval UniSpeech SV checkpoint).
+Loading weights:   0%|          | 0/248 [00:00<?, ?it/s]Loading weights: 100%|██████████| 248/248 [00:00<00:00, 46867.95it/s]
+/SharedData/youhf/omni_tts/vllm-omni/.venv-test/lib/python3.12/site-packages/torch/nn/functional.py:6802: UserWarning: Support for mismatched key_padding_mask and attn_mask is deprecated. Use same type for both instead.
+  key_padding_mask = _canonical_mask(
+===== Seed-TTS eval (seed-tts-eval protocol) =====
+Evaluated (WER, lower is better):        1088      
+Mean WER:                                0.0571    
+Median WER:                              0.0000    
+Request failed:                          0         
+No PCM captured:                         0         
+ASR / WER failed:                        0         
+SIM evaluated (higher ~ closer):         1088      
+Mean SIM:                                0.8617    
+Median SIM:                              0.8729    
+SIM skipped (no ref path):               0         
+SIM embedding errors:                    0         
+==================================================
+{
+  "n": 1088,
+  "mean_rtf": 0.3103299656578911,
+  "mean_wall_s": 1.4202898883325843,
+  "total_audio_s": 4993.2,
+  "aggregate_rtf": 0.3094759670163125
+}
+
+=== eval streaming (1088 items) ===
+===== Seed-TTS eval (seed-tts-eval protocol) =====
+Evaluated (WER, lower is better):        1088      
+Mean WER:                                0.0869    
+Median WER:                              0.0000    
+Request failed:                          0         
+No PCM captured:                         0         
+ASR / WER failed:                        0         
+SIM evaluated (higher ~ closer):         1088      
+Mean SIM:                                0.8623    
+Median SIM:                              0.8745    
+SIM skipped (no ref path):               0         
+SIM embedding errors:                    0         
+==================================================
+{
+  "n": 1088,
+  "mean_rtf": 0.30644146143035433,
+  "mean_wall_s": 1.3984858451534392,
+  "total_audio_s": 4977.866666666667,
+  "aggregate_rtf": 0.30566359073370286,
+  "mean_ttfp_ms": 55.533672699204864,
+  "p50_ttfp_ms": 55.10906130075455,
+  "p99_ttfp_ms": 62.45771888643503
+}
+
+-> local_tests/vibevoice_pr2/results/vv-online-gpu4-20261019-180405/en_1088_online/report.json

@@ -1,0 +1,5 @@
+[20:36:29] zh_2020_online start
+[23:40:32] zh_2020_online done rc=0
+[23:40:32] zh_2020_hf start (gen+eval)
+[01:40:21] zh_2020_hf done rc=0 gen_rc=0 eval_rc=0
+[01:40:21] ALL DONE gpu4 items=2020 -> local_tests/vibevoice_pr2/results/vv-online-gpu4-20261019-203627
