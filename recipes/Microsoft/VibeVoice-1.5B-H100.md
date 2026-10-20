@@ -124,7 +124,10 @@ have no reference; no reference audio is inserted implicitly.
 
 For a reusable single-speaker voice, upload audio via
 [`POST /v1/audio/voices`](../../docs/serving/speech_api.md), then send its name
-as `voice`. Uploads with only a speaker embedding are not supported.
+as `voice`. Uploads have a 20 MiB size limit in addition to the 60 s duration
+cap; use mono or compressed audio for long references that exceed the size
+limit (e.g. 60 s of 96 kHz stereo PCM16). Uploads with only a speaker embedding
+are not supported.
 `voice` and `ref_audio` are mutually exclusive. The shared API treats
 `voice="default"` as omitted unless an uploaded voice has that name; it does
 not insert reference audio. Other unregistered voice names are rejected.

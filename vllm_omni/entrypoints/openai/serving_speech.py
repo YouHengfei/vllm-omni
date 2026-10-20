@@ -1143,14 +1143,17 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
             ref_text = ref_text.strip() or None
         if speaker_description is not None:
             speaker_description = speaker_description.strip() or None
-        # Validate file size (max 10MB)
-        MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+        # Scale the pre-decode size limit with the reference-duration cap:
+        # 60s of 48kHz stereo PCM16 exceeds the default 10 MiB limit.
+        max_file_size = int(10 * 1024 * 1024 * self._ref_audio_max_duration() / 30.0)
         audio_file.file.seek(0, 2)  # Seek to end
         file_size = audio_file.file.tell()
         audio_file.file.seek(0)  # Reset to beginning
 
-        if file_size > MAX_FILE_SIZE:
-            raise ValueError(f"File size exceeds maximum limit of 10MB. Got {file_size} bytes.")
+        if file_size > max_file_size:
+            raise ValueError(
+                f"File size exceeds maximum limit of {max_file_size / (1024 * 1024):g} MiB. Got {file_size} bytes."
+            )
 
         # Detect MIME type from filename if content_type is generic
         mime_type = audio_file.content_type
@@ -1217,7 +1220,7 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
             except Exception as e:
                 raise ValueError(f"Could not decode audio file: {e}")
             duration = len(wav_np) / sr if sr > 0 else 0.0
-            _check_ref_audio_duration(duration)
+            _check_ref_audio_duration(duration, max_duration=self._ref_audio_max_duration())
 
             speaker_data: dict[str, Any] = {
                 "name": name,
@@ -1534,15 +1537,18 @@ class OmniOpenAIServingSpeech(OpenAIServing, AudioMixin):
             allowed_local_media_path,
         )
 
+    def _ref_audio_max_duration(self) -> float:
+        """Effective per-request/upload reference-audio cap for this server."""
+        adapter = getattr(self, "_adapter", None)
+        return getattr(adapter, "max_reference_duration", None) or _REF_AUDIO_MAX_DURATION
+
     def _finalize_fetched_ref_audio(self, wav_np: np.ndarray, sr: int) -> tuple[np.ndarray, int, str, float]:
         wav_np = np.asarray(wav_np, dtype=np.float32)
         if wav_np.ndim > 1:
             wav_np = np.mean(wav_np, axis=-1)
         sr = int(sr)
         duration = len(wav_np) / sr if sr > 0 else 0.0
-        adapter = getattr(self, "_adapter", None)
-        max_ref = getattr(adapter, "max_reference_duration", None)
-        _check_ref_audio_duration(duration, max_duration=max_ref or _REF_AUDIO_MAX_DURATION)
+        _check_ref_audio_duration(duration, max_duration=self._ref_audio_max_duration())
         # Own the buffer: a view could retain a much larger decoded allocation.
         waveform = np.array(wav_np, dtype=np.float32, order="C", copy=True)
         artifact_key = self._make_ref_audio_artifact_cache_key(waveform, sr)

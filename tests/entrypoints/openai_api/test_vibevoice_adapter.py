@@ -2,6 +2,8 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
 """VibeVoice API conditioning, validation and sampling ownership (CPU)."""
 
+import asyncio
+import io
 from types import SimpleNamespace
 
 import numpy as np
@@ -180,6 +182,7 @@ def test_reference_duration_uses_adapter_cap(seconds, ok, adapter):
     # The shared resolver calls _finalize_fetched_ref_audio before the adapter;
     # the adapter's max_reference_duration=60 must override the shared 30s cap.
     server = SimpleNamespace(_adapter=adapter, _make_ref_audio_artifact_cache_key=lambda *_: "key")
+    server._ref_audio_max_duration = lambda: OmniOpenAIServingSpeech._ref_audio_max_duration(server)
     sr = 24000
     wav = np.zeros(int(seconds * sr), dtype=np.float32)
     if ok:
@@ -192,6 +195,89 @@ def test_reference_duration_uses_adapter_cap(seconds, ok, adapter):
 def test_default_adapter_keeps_shared_30s_cap():
     # No adapter (or None max_reference_duration) keeps the shared 30s default.
     server = SimpleNamespace(_adapter=None, _make_ref_audio_artifact_cache_key=lambda *_: "key")
+    server._ref_audio_max_duration = lambda: OmniOpenAIServingSpeech._ref_audio_max_duration(server)
     sr = 24000
     with pytest.raises(ValueError, match="too long"):
         OmniOpenAIServingSpeech._finalize_fetched_ref_audio(server, np.zeros(31 * sr, dtype=np.float32), sr)
+
+
+class _FakeUploadFile:
+    """Minimal UploadFile stand-in for upload_voice (file seek/tell + async read)."""
+
+    def __init__(self, data: bytes, filename: str = "voice.wav"):
+        self.file = io.BytesIO(data)
+        self.filename = filename
+        self.content_type = "audio/wav"
+
+    async def read(self) -> bytes:
+        return self.file.getvalue()
+
+
+def _upload_server(tmp_path, adapter):
+    """Bare-bones server namespace for upload_voice with the real duration helper."""
+    server = SimpleNamespace(
+        _adapter=adapter,
+        uploaded_speakers={},
+        uploaded_speakers_dir=tmp_path,
+        _voice_registry_lock=asyncio.Lock,
+        _check_registration_allowed=lambda *_: None,
+        _check_upload_cap=lambda: None,
+        _next_upload_timestamp=lambda: "ts",
+        _save_voice_file=lambda *a, **k: None,
+        _speaker_metadata_to_header=lambda d: {},
+        _evict_existing_upload=lambda *a: None,
+        _remember_written_voice=lambda *a: None,
+    )
+    server._ref_audio_max_duration = lambda: OmniOpenAIServingSpeech._ref_audio_max_duration(server)
+    return server
+
+
+@pytest.mark.parametrize(("seconds", "ok"), [(45.0, True), (61.0, False)])
+def test_upload_voice_uses_adapter_cap(tmp_path, adapter, mocker, seconds, ok):
+    """POST /v1/audio/voices must honor the same per-adapter cap as ref_audio."""
+    sr = 24000
+    mocker.patch("soundfile.read", return_value=(np.zeros(int(seconds * sr), dtype=np.float32), sr))
+    server = _upload_server(tmp_path, adapter)
+    if ok:
+        result = asyncio.run(OmniOpenAIServingSpeech.upload_voice(server, _FakeUploadFile(b"x"), "c", "voice_up"))
+        assert result["name"] == "voice_up"
+    else:
+        with pytest.raises(ValueError, match="too long"):
+            asyncio.run(OmniOpenAIServingSpeech.upload_voice(server, _FakeUploadFile(b"x"), "c", "voice_up"))
+
+
+def test_upload_voice_default_cap_without_adapter(tmp_path, mocker):
+    """No adapter (or None max_reference_duration) keeps the shared 30s upload cap."""
+    sr = 24000
+    mocker.patch("soundfile.read", return_value=(np.zeros(31 * sr, dtype=np.float32), sr))
+    server = _upload_server(tmp_path, None)
+    with pytest.raises(ValueError, match="too long"):
+        asyncio.run(OmniOpenAIServingSpeech.upload_voice(server, _FakeUploadFile(b"x"), "c", "voice_up"))
+
+
+def test_upload_voice_size_cap_scales_with_adapter(tmp_path, adapter, mocker):
+    """The 10MB/30s upload-size pre-filter scales with the per-adapter duration cap."""
+    sr = 24000
+    mocker.patch("soundfile.read", return_value=(np.zeros(45 * sr, dtype=np.float32), sr))
+    server = _upload_server(tmp_path, adapter)
+    big = _FakeUploadFile(b"\0" * (11 * 1024 * 1024))  # > 10MB, < 20MB
+    result = asyncio.run(OmniOpenAIServingSpeech.upload_voice(server, big, "c", "voice_big"))
+    assert result["name"] == "voice_big"
+    assert result["file_size"] == 11 * 1024 * 1024
+
+
+@pytest.mark.parametrize(
+    ("duration_cap", "size_mib", "limit_text"), [(None, 11, "10 MiB"), (60, 21, "20 MiB"), (40, 14, "13.3333 MiB")]
+)
+def test_upload_voice_size_cap_rejects_before_decode(tmp_path, adapter, mocker, duration_cap, size_mib, limit_text):
+    """Default and scaled limits reject before decoding, with accurate MiB messages."""
+    if duration_cap is not None:
+        mocker.patch.object(adapter, "max_reference_duration", duration_cap)
+    server = _upload_server(tmp_path, adapter if duration_cap is not None else None)
+    decode = mocker.patch("soundfile.read")
+    file_size = size_mib * 1024 * 1024
+    big = _FakeUploadFile(b"\0" * file_size)
+    with pytest.raises(ValueError) as exc_info:
+        asyncio.run(OmniOpenAIServingSpeech.upload_voice(server, big, "c", "voice_big"))
+    assert str(exc_info.value) == f"File size exceeds maximum limit of {limit_text}. Got {file_size} bytes."
+    decode.assert_not_called()
