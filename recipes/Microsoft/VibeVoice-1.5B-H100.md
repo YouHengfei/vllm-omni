@@ -216,7 +216,7 @@ means; SIM is a proxy, not a perceptual-quality or speaker-verification guarante
 
 Head `93166c21b`, Seed-TTS-Eval, single-speaker reference cloning (B1, serial).
 vLLM-Omni online on GPU4 (H100 80GB, BF16, eager, FA3, seed=0, CFG 1.3,
-10 diffusion steps, max_new_tokens=512). HF reference in a separate env
+10 diffusion steps, `max_new_tokens=2048`). HF reference in a separate env
 (Transformers 5.19, torch 2.13.0, same checkpoint). WER uses Whisper-large-v3
 (EN) / Paraformer (ZH); SIM uses WavLM-base-plus embedding cosine (proxy,
 not speaker verification). RTF = per-request wall time / generated audio
@@ -234,14 +234,17 @@ snapshot before/after and env freeze.
 
 - All backends produced natural stops for all items. 0 request failures;
   2 ASR failures in ZH non-streaming (ASR noise, not generation failure).
-- Online WER/SIM align with HF within noise (EN ΔWER −0.003, ZH ΔWER −0.0006);
-  no regression.
+- WER/SIM are single-pass observations; statistical equivalence and absence
+  of regression have not been established. Noise attribution would require
+  controlled paired/repeated measurements with an explicit acceptance tolerance.
 - Omni online RTF (~0.31) is well below 1.0 (real-time capable); HF serial
   RTF is ~0.43. Timer boundaries differ (Omni includes HTTP overhead; HF is
   serial `generate`), so the ~1.4× ratio is not a matched-boundary speedup
   claim.
-- Streaming preserves quality (WER/SIM/RTF within noise of non-streaming)
-  and adds sub-60 ms TTFP p50.
+- EN streaming mean WER is 0.0869 versus 0.0571 non-streaming (+2.98 percentage
+  points), despite both medians being zero. The cause is unestablished; this
+  difference alone does not establish a runtime regression. Observed streaming
+  TTFP p50 is 55 ms (EN) and 57 ms (ZH).
 
 ## Notes
 
